@@ -148,12 +148,36 @@ a ~5.6 (rondas 16+). Quien abre la partida gana el 50%, así que no hay ventaja 
 
 Elegir bien del centro pesa: la heurística de la CPU le gana el 86% a elegir al azar.
 
-**Los poderes no movieron el balance.** Medido sobre 300 partidas con las dos partes usando
-la misma cabeza, antes y después: 38-55 sin poderes contra 44-54 con los seis. Lo que sí
-cambió es el largo — de ~17 rondas a ~14, porque hay más daño dando vueltas. La brecha que
-queda a favor de quien juega segundo es previa a los poderes y sale de conocer el puntaje
-del otro antes de decidir. Ninguno de los seis domina el reparto: sobre ~2000 cartas con
-poder elegidas, fuerza 446, veneno 418, pulpo 391, maceta 293, huevo 250, caracol 220.
+**Los poderes no rompieron la simetría.** Con las dos partes usando la misma cabeza, 300
+partidas antes y después: 38-55 sin poderes contra 44-54 con los seis. Ningún asiento ganó
+ventaja. Lo que sí cambió es el largo — de ~17 rondas a ~14, porque hay más daño dando
+vueltas.
+
+**Pero pesan muchísimo.** Una medición simétrica es ciega a esto: si los dos lados agarran
+poderes por igual, no dice nada sobre cuánto valen. Atando al jugador a un solo poder contra
+la CPU normal, 400 partidas por poder, contra un control que nunca agarra ninguno:
+
+| | gana | vs. control |
+|---|---|---|
+| control (nunca agarra poderes) | 3.5% | — |
+| veneno | 16.8% | +13.3 |
+| fuerza | 15.8% | +12.3 |
+| maceta | 12.3% | +8.8 |
+| huevo | 9.0% | +5.5 |
+| caracol | 7.3% | +3.8 |
+| pulpo | 6.5% | +3.0 |
+
+**Ignorar los poderes gana el 3.5%**, así que "una carta con poder o dos sin poder" hoy no es
+una decisión: el poder es casi siempre correcto. La fuerza suma +2 permanente por carta y en
+14 rondas se juntan 4 o 5 — +8 o +10 en cada ataque, sobre cadenas que valen 5 a 10.
+
+Con ±1.5 puntos de error a ese tamaño de muestra, veneno y fuerza están empatados arriba y
+huevo, caracol y pulpo empatados abajo. De ahí salen los tres escalones de
+[`POWER_WORTH`](src/ai.js), que antes eran números de oficio y le erraban al pulpo por tres
+puestos.
+
+*Contar cuántas veces la CPU elige cada poder no mide nada de esto*: sale ordenado igual que
+`POWER_WORTH`, porque es un reflejo de esos pesos y no del juego.
 
 **El pulpo tiene fase propia.** Es el único poder que no espera al ataque: corre apenas la
 carta sale del mazo, y para eso la máquina de estados suma una fase `grab` entre `turn` y

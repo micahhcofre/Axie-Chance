@@ -150,17 +150,28 @@ export function pickGrab(options, chain, deck) {
 
 /**
  * Cuánto vale cada poder para la CPU, medido en cartas: 1 es "tanto como sumar una
- * carta más al mazo". La fuerza y el veneno cambian el marcador ronda tras ronda y
- * valen más que una carta; el huevo y el caracol son de un solo uso y valen menos.
- * Son números de oficio, no medidos: el gancho para ajustarlos está acá.
+ * carta más al mazo".
+ *
+ * Salen de atar al jugador a un solo poder contra la CPU normal y contar partidas
+ * ganadas, 400 por poder, contra un control que nunca agarra ninguno. Los puntos que
+ * cada poder le suma a ese control, normalizados con la maceta en 1:
+ *
+ *   veneno +13.3 · fuerza +12.3 · maceta +8.8 · huevo +5.5 · caracol +3.8 · pulpo +3.0
+ *
+ * Con ese tamaño de muestra el error ronda ±1.5 puntos, así que veneno y fuerza están
+ * empatados arriba y los tres últimos están empatados abajo: los pesos se agrupan en
+ * tres escalones en vez de copiar los decimales, que serían ruido.
+ *
+ * La versión anterior era de oficio y le erraba feo al pulpo —tercero puesto a mano,
+ * último medido—. Si cambian los números de los poderes, hay que volver a correrlo.
  */
 const POWER_WORTH = {
-  strength: 1.6,
-  poison: 1.4,
-  octopus: 1.2,
+  poison: 1.5,
+  strength: 1.5,
   pot: 1.0,
-  egg: 0.9,
-  snail: 0.9,
+  egg: 0.7,
+  snail: 0.6,
+  octopus: 0.5,
 };
 
 /**
