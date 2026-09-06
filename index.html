@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axie Chance</title>
+<link rel="icon" href="Icons/bird-crest.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◈</span>
+      <span class="brand-name">Axie&nbsp;Chance</span>
+    </div>
+    <div class="scoreboard" id="scoreboard"></div>
+    <div class="topbar-actions">
+      <div class="picker">
+        <span class="picker-label">Tu Axie</span>
+        <div class="crest-row" id="axie-picker"></div>
+      </div>
+      <label class="select">
+        <span>CPU</span>
+        <select id="difficulty">
+          <option value="facil">Fácil</option>
+          <option value="normal" selected>Normal</option>
+          <option value="duro">Duro</option>
+        </select>
+      </label>
+      <button class="btn btn-ghost" id="rules-btn">Reglas</button>
+      <button class="btn btn-ghost" id="new-match">Nueva partida</button>
+    </div>
+  </header>
+
+  <!-- El combate ocupa la pantalla: los dos Axies enfrentados sobre el terreno de tu
+       clase, con su barrita de vida encima, y una sola mesa abajo —la usa el que está
+       jugando—. El centro no vive acá: aparece por encima cuando termina un turno. -->
+  <main class="table">
+    <section class="arena" id="arena">
+      <div class="fighter fighter--human" id="fighter-human">
+        <div class="plate" id="plate-human"></div>
+        <div class="board-axie" id="axie-human"></div>
+      </div>
+      <div class="fighter fighter--cpu" id="fighter-cpu">
+        <div class="plate" id="plate-cpu"></div>
+        <div class="board-axie" id="axie-cpu"></div>
+      </div>
+      <div class="field" id="field"></div>
+      <div class="controls" id="controls"></div>
+      <canvas class="vfx" id="vfx" aria-hidden="true"></canvas>
+      <div class="overlay" id="market" hidden></div>
+    </section>
+  </main>
+
+  <aside class="sidebar">
+    <div class="odds" id="odds"></div>
+    <p class="aside-label">Historial</p>
+    <ol class="log" id="log"></ol>
+  </aside>
+</div>
+
+<dialog class="modal" id="rules-modal">
+  <h2>Cómo se juega</h2>
+  <p>Es un combate. Elegís uno de los <b>seis Axies</b> —uno por clase— y peleás con su
+     <b>mazo personal</b> contra la CPU, que usa otro. Los dos arrancan con <b>100 de vida</b>.</p>
+  <p>Se turnan. En tu turno te reparten una carta y vas <b>cargando el ataque</b>: cada carta que
+     robás lo hace más fuerte, pero si la cadena se corta el golpe falla. Cuando te plantás,
+     <b>atacás</b>: los puntos de tu cadena son el <b>daño</b> que le sacás al rival. Ahí mismo
+     te llevás cartas del centro para tu mazo, y recién entonces ataca la CPU, que hace lo
+     mismo. Cuando los dos atacaron, el intercambio cierra.
+     Gana el que deja al otro <b>sin vida</b>; el rival alcanza a devolver el golpe.</p>
+
+  <h3>La cadena</h3>
+  <p>Las cadenas arrancan en la <b>primera carta</b> de tu ronda: cada símbolo que tiene abre una
+     cadena. Cada carta que robás tiene que compartir al menos un símbolo con las cadenas que
+     siguen <b>vivas</b>. Las cadenas que la carta nueva no contiene se cierran ahí, pero conservan
+     su largo.</p>
+  <p class="warn">Si la carta nueva no comparte <b>ningún</b> símbolo vivo, se corta todo:
+     el ataque se desarma y hace <b>0</b> de daño.</p>
+
+  <h3>El daño</h3>
+  <p>Cada cadena golpea por su largo <b>al cuadrado</b>. Solo cuentan los símbolos de la
+     primera carta.</p>
+  <div class="example">
+    <div><span class="tag">1ª</span> <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""></div>
+    <div><span class="tag">2ª</span> <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""></div>
+    <div><span class="tag">3ª</span> <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> <img class="crest crest--sm" src="Icons/plant-crest.png" alt=""></div>
+    <hr>
+    <div><img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> en 3 cartas → 3² = <b>9</b></div>
+    <div><img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> en 2 cartas → 2² = <b>4</b></div>
+    <div class="muted"><img class="crest crest--sm" src="Icons/beast-crest.png" alt=""> y <img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> no estaban en la primera carta: no puntúan.</div>
+    <div class="total">Daño del ataque: <b>13</b></div>
+  </div>
+
+  <h3>Tu mazo</h3>
+  <p>Cada jugador roba de su <b>propio mazo de 10 cartas</b>, armado alrededor de su símbolo.
+     Si jugás <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> Pez:</p>
+  <div class="example">
+    <div><b>5</b> pares de <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> con cada otro símbolo</div>
+    <div><b>1</b> carta con <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> solo</div>
+    <div><b>4</b> cartas ajenas, sin <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt="">: <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""><img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> · <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""><img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> ·
+      <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""><img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> · <img class="crest crest--sm" src="Icons/bug-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""></div>
+    <hr>
+    <div class="muted">Las ajenas salen de seis pares fijos —
+      <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""><img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""><img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""><img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> y
+      <img class="crest crest--sm" src="Icons/bug-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> <img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""><img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""><img class="crest crest--sm" src="Icons/bug-crest.png" alt=""> —
+      de los que te tocan los cuatro que no llevan tu símbolo.</div>
+  </div>
+  <p><b>No hay descarte:</b> al empezar cada intercambio se rebaraja el mazo entero, como una
+     tragamonedas. Dentro del turno las cartas que ya salieron no vuelven, así que
+     acordarte de lo que salió sirve mientras dura la tirada — el panel de la derecha te
+     muestra qué porcentaje de tu mazo restante continúa la cadena. De una ronda a la otra
+     no se arrastra nada.</p>
+
+  <h3>El centro</h3>
+  <p>En el centro hay siempre <b>5 cartas boca arriba</b>, sacadas de una reserva de 35: las 15
+     combinaciones de 2 símbolos y las 20 de 3, una por combinación. Cuando alguien se lleva
+     una, se repone en el acto desde la reserva. Apenas terminás tu ataque —antes de que
+     juegue el rival— te llevás cartas del centro según cómo te fue:</p>
+  <div class="example">
+    <div><b>Soltaste el ataque</b> → 1 carta de 3 símbolos <b>o</b> 2 cartas de 2 símbolos</div>
+    <div><b>Se te desarmó</b> → 1 carta de 2 símbolos</div>
+    <hr>
+    <div>No se pregunta nada antes: <b>la carta que tocás decide</b>. Tocás una de 3 y ahí
+      termina tu reparto; tocás una de 2 y te queda una segunda.</div>
+    <div><b>No agarrar</b> cierra tu reparto sin sumar nada —o con lo que ya llevabas.</div>
+    <hr>
+    <div><b>Ninguna de las que podés agarrar lleva tu símbolo</b> → renovás el centro, una vez</div>
+    <hr>
+    <div class="muted">Si ninguna de las 5 es del tamaño que te toca, sirve cualquiera.
+      Las cartas nuevas entran al mazo y ya pueden salir en la ronda siguiente. Cuando la
+      reserva se agota, se sigue jugando con el mazo que armaste.</div>
+  </div>
+  <p>Cuando entre las cartas que te podés llevar <b>no hay ninguna con tu símbolo</b>, el centro
+     no te ofrece nada que enlace con tu mazo: podés <b>renovarlo entero</b>. Las 5 se van al
+     fondo de la reserva, salen 5 nuevas y elegís de esas. Una sola renovación por reparto,
+     y la CPU tiene la suya.</p>
+  <p class="warn">Medido sobre 600 partidas: llevarse <b>el trío gana el 82%</b> de las veces
+     contra llevarse los dos pares. Cada carta extra diluye tu mazo, así que sumar de a dos
+     rinde menos de lo que parece —y a veces lo mejor es <b>no agarrar nada</b>.</p>
+
+  <form method="dialog"><button class="btn btn-primary">Entendido</button></form>
+</dialog>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

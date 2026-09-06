@@ -1,0 +1,224 @@
+// Smoke test de la capa de render con un DOM mínimo simulado: verifica que
+// mount() pinte cada fase de la partida sin romperse y con el contenido esperado.
+import assert from 'node:assert/strict';
+
+const IDS = [
+  'scoreboard', 'arena', 'fighter-human', 'fighter-cpu', 'plate-human', 'plate-cpu',
+  'axie-human', 'axie-cpu', 'field', 'controls', 'odds', 'log',
+  'new-match', 'difficulty', 'rules-btn', 'rules-modal', 'axie-picker', 'market', 'vfx',
+];
+
+const nodes = Object.fromEntries(
+  IDS.map((id) => [id, {
+    id, innerHTML: '', dataset: {}, value: 'normal', hidden: false, handlers: {},
+    addEventListener(type, fn) { this.handlers[type] = fn; },
+    showModal() { this.open = true; },
+    // Lo mínimo que necesita el número de daño flotante (ver `playHit` en ui.js).
+    insertAdjacentHTML(_pos, html) { this.innerHTML += html; },
+    querySelector() { return null; },
+  }]),
+);
+
+globalThis.document = { getElementById: (id) => nodes[id] ?? null, addEventListener() {} };
+
+const { createGame } = await import('../src/game.js');
+const { mount } = await import('../src/ui.js');
+const { scoreChain } = await import('../src/rules.js');
+const { hpOf } = await import('../src/game.js');
+
+const idle = () => new Promise((r) => setTimeout(r, 0));
+const game = createGame({ pace: 0 });
+mount(game);
+
+// Antes de que se reparta la primera carta no hay decisión que ofrecer.
+assert.match(nodes.controls.innerHTML, /Repartiendo/);
+assert.doesNotMatch(nodes.controls.innerHTML, /data-action="hit"/);
+await idle();
+
+assert.match(nodes.scoreboard.innerHTML, /Ronda 1/);
+assert.match(nodes.scoreboard.innerHTML, /35 cartas en la reserva/);
+// La vida vive sobre cada Axie, no en el marcador: al abrir, los dos enteros.
+for (const side of ['human', 'cpu']) {
+  assert.match(nodes[`plate-${side}`].innerHTML, /class="hpbar"/, `${side}: falta la barrita`);
+  assert.match(nodes[`plate-${side}`].innerHTML, /<b>100<\/b>/, `${side}: falta la vida`);
+  assert.match(nodes[`plate-${side}`].innerHTML, /class="crest crest--sm"/, `${side}: falta la clase`);
+}
+// El centro no está puesto mientras se juega: aparece recién al cerrar un turno.
+assert.equal(nodes.market.hidden, true, 'el centro está fuera de pantalla');
+assert.equal(nodes.market.innerHTML, '');
+assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'turno del jugador');
+assert.match(nodes.odds.innerHTML, /La próxima carta continúa/);
+assert.match(nodes.odds.innerHTML, /cartas sirven/);
+assert.match(nodes.odds.innerHTML, /Tu mazo/);
+assert.match(nodes['axie-picker'].innerHTML, /data-axie="bird"/);
+assert.equal((nodes['axie-picker'].innerHTML.match(/data-on="true"/g) ?? []).length, 1,
+  'exactamente un Axie elegido');
+assert.match(nodes['axie-picker'].innerHTML, /data-taken="true"/, 'la CPU ocupa otro Axie');
+// Cada Axie se pinta una vez, aparte del tablero: capas del CDN y el crest de reserva.
+for (const side of ['human', 'cpu']) {
+  assert.match(nodes[`axie-${side}`].innerHTML, /class="axie/, `${side}: falta el Axie`);
+  assert.match(nodes[`axie-${side}`].innerHTML, /axie-fallback/, `${side}: falta el crest`);
+  // Las capas van etiquetadas por parte: de ahí cuelga el CSS que las mueve por
+  // separado —la cola, las orejas, el parpadeo—.
+  const art = nodes[`axie-${side}`].innerHTML;
+  assert.match(art, /class="axie-rig"/, `${side}: falta la capa de la postura`);
+  for (const part of ['body', 'tail', 'eyes', 'ear-left']) {
+    assert.match(art, new RegExp(`data-part="${part}"`), `${side}: falta la capa ${part}`);
+  }
+}
+// La postura sale del estado, no de un pulso: al que le toca está cargando.
+assert.equal(nodes['axie-human'].dataset.stance, 'charging');
+assert.equal(nodes['axie-cpu'].dataset.stance, 'idle');
+// La mesa es una sola y la usa el que está jugando.
+assert.match(nodes.field.innerHTML, /class="card"/);
+assert.match(nodes.field.innerHTML, /class="field-dmg"/, 'se ven los puntos de daño');
+assert.equal(nodes.field.dataset.owner, 'human', 'la mesa es del que tiene el turno');
+assert.equal(nodes['fighter-human'].dataset.active, 'true');
+// El terreno sale de la clase del Axie que jugás.
+assert.equal(nodes.arena.dataset.arena, game.state.symbols.human,
+  'el arena toma el terreno de tu clase');
+
+// Se guarda el render de una cadena cortada apenas ocurra, jugando a robar siempre.
+let bustHtml = '';
+game.subscribe(() => {
+  if (game.state.chains.human.busted && !bustHtml && game.state.chains.human.bustCard) {
+    bustHtml = nodes.field.innerHTML;
+  }
+});
+
+/**
+ * Cambia por cartas de la reserva las del centro que lleven el símbolo del jugador,
+ * para forzar el caso en que no queda nada que agarrar de su color.
+ */
+function dropOwnSymbol(s) {
+  const own = s.symbols.human;
+  for (let i = 0; i < s.market.length; i++) {
+    if (!s.market[i].symbols.includes(own)) continue;
+    const at = s.pool.findIndex((c) => !c.symbols.includes(own));
+    if (at < 0) return false;
+    s.pool.push(s.market[i]);
+    s.market[i] = s.pool.splice(at, 1)[0];
+  }
+  return s.pool.length > 0;
+}
+
+const phases = new Set();
+let sawDraw = false;
+let sawFreePick = false;
+let sawSkip = false;
+let sawPoolPick = false;
+let sawRenew = false;
+let guard = 0;
+while (game.state.phase !== 'matchEnd') {
+  assert.ok(guard++ < 4000, 'la partida no termina');
+  const s = game.state;
+  phases.add(s.phase);
+
+  if (s.phase === 'draft') {
+    assert.equal(nodes.market.hidden, false, 'el centro se abre encima al cerrar el turno');
+    if (game.drafting() === 'cpu') {
+      assert.match(nodes.market.innerHTML, /La CPU está eligiendo/);
+      await idle();
+      continue;
+    }
+    // El centro nunca pregunta el modo: siempre hay cartas tocables y un "no agarrar".
+    assert.doesNotMatch(nodes.market.innerHTML, /data-mode=/, 'ya no se elige modo');
+    assert.match(nodes.market.innerHTML, /data-action="skip"/, 'se ofrece no agarrar');
+    const options = game.pickable();
+    assert.ok(options.length > 0 && options.length <= 5, 'se elige entre las 5 del centro');
+    assert.match(nodes.market.innerHTML, new RegExp(`data-uid="${options[0].uid}"`));
+
+    if (!s.draft.mode) {
+      // Sin cadena cortada se puede tocar cualquiera de los dos tamaños.
+      if (!s.chains.human.busted) sawFreePick = true;
+      // Una vez en la partida se fuerza el centro sin el símbolo propio: ahí aparece
+      // el botón para renovarlo, y después de usarlo no vuelve a ofrecerse.
+      if (!sawRenew && dropOwnSymbol(s)) {
+        sawRenew = true;
+        game.refresh(); // dropOwnSymbol toca el estado por afuera: hay que repintar
+        assert.match(nodes.market.innerHTML, /data-action="renew"/, 'se ofrece renovar');
+        game.renewMarket();
+        assert.doesNotMatch(nodes.market.innerHTML, /data-action="renew"/, 'una sola vez');
+        continue;
+      }
+      // Una vez se prueba pasar sin llevarse nada.
+      if (!sawSkip) {
+        sawSkip = true;
+        const had = s.decks.human.length;
+        await game.skipDraft();
+        assert.equal(game.state.decks.human.length, had, 'pasar no suma cartas');
+        continue;
+      }
+    }
+    sawPoolPick = true;
+    await game.takeCard(options[0].uid);
+    continue;
+  }
+
+  if (s.phase === 'roundEnd') {
+    assert.match(nodes.controls.innerHTML, /data-action="next"/);
+    assert.match(nodes.controls.innerHTML, /class="banner"/);
+    await game.nextRound();
+  } else if (s.turn === 'human' && !s.busy) {
+    // Igual que en match.test.js: plantarse en las rondas pares asegura que se pinte
+    // la elección de trío o pares aunque las cadenas se corten muchas veces seguidas.
+    if (s.round % 2 === 0 || scoreChain(s.chains.human).total >= 6) {
+      await game.stand();
+    } else {
+      await game.hit();
+      // Robar se siente en el cuerpo: el tirón se marca en el mismo repintado, así
+      // que apenas vuelve `hit()` ya tiene que estar puesto. (Lo contrario no se
+      // puede afirmar: el pulso dura 420 ms y acá las cartas salen mucho más rápido,
+      // así que una carta que corta la cadena encuentra el tirón anterior todavía
+      // puesto.)
+      if (!game.state.chains.human.busted) {
+        sawDraw = true;
+        assert.equal(nodes['axie-human'].dataset.act, 'draw', 'el tirón de robar');
+      }
+    }
+  } else {
+    await idle();
+  }
+  for (const id of ['scoreboard', 'plate-human', 'plate-cpu', 'field', 'controls', 'odds']) {
+    assert.ok(nodes[id].innerHTML.length > 0, `${id} quedó vacío`);
+    assert.ok(!nodes[id].innerHTML.includes('undefined'), `undefined en ${id}`);
+  }
+}
+
+assert.ok(phases.has('roundEnd'), 'se pintó el cierre de ronda');
+assert.ok(phases.has('draft'), 'se pintó el reparto de la reserva');
+assert.ok(sawFreePick, 'se pudo tocar cualquier carta sin elegir modo antes');
+assert.ok(sawSkip, 'se pudo cerrar el reparto sin agarrar');
+assert.ok(sawPoolPick, 'se pudo tomar una carta del centro');
+assert.ok(sawRenew, 'se pintó la renovación del centro');
+assert.ok(sawDraw, 'se marcó el tirón de robar una carta');
+// Terminada la partida el que se quedó sin vida se desploma y el otro festeja.
+const down = hpOf(game.state, 'human') <= 0 ? 'human' : 'cpu';
+assert.equal(nodes[`axie-${down}`].dataset.stance, 'ko', 'el que cae queda tirado');
+assert.equal(nodes.market.hidden, true, 'el centro se va al terminar');
+assert.match(nodes.controls.innerHTML, /data-action="restart"/);
+assert.match(nodes.controls.innerHTML, /Vida final/);
+assert.match(nodes.log.innerHTML, /<li data-kind="round">/);
+
+assert.ok(bustHtml, 'robando hasta 20 pts alguna cadena tiene que cortarse');
+assert.match(bustHtml, /card--bust/, 'se muestra la carta que rompió la cadena');
+assert.match(bustHtml, /Cadena cortada/);
+assert.match(bustHtml, /data-busted="true"/);
+assert.match(bustHtml, /class="field-dmg" data-busted="true">0</, 'una cadena cortada no hace daño');
+
+// El golpe no es inmediato: el que pega sale disparado antes (~100-250 ms) y el que
+// lo recibe se sacude cuando el efecto conecta (~370-520 ms). Se comprueban los dos
+// después de terminada la partida, sobre el último golpe, esperando cada momento.
+const last = game.state.lastHit;
+assert.ok(last, 'la partida terminó con un golpe');
+await new Promise((r) => setTimeout(r, 450));
+// Un ataque que se desarma no cruza a ningún lado: no hay salto que mirar.
+if (last.amount > 0) {
+  assert.equal(nodes[`axie-${last.by}`].dataset.act, 'attack', 'el que pega va hacia el otro');
+}
+await new Promise((r) => setTimeout(r, 500));
+const hitNode = nodes[`axie-${last.target}`];
+assert.match(hitNode.dataset.react, /^(hit|whiff)$/, 'el que recibe el golpe se sacude');
+assert.match(hitNode.innerHTML, /class="dmg"/, 'sale el número del golpe');
+
+console.log('✓ render ok');

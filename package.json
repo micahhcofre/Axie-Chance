@@ -1,0 +1,14 @@
+{
+  "name": "axie-chance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Juego de cartas push-your-luck de cadenas de símbolos.",
+  "scripts": {
+    "start": "node scripts/dev.mjs",
+    "axies": "node scripts/axies.mjs",
+    "vfx": "node scripts/vfx.mjs",
+    "test": "node test/rules.test.js && node test/match.test.js && node test/ui.test.js",
+    "build": "node scripts/build.mjs"
+  }
+}
