@@ -684,6 +684,11 @@ body {
 }
 
 .overlay-head { text-align: center; }
+/* El poder que abrió el panel, en grande: dice de un vistazo por qué estás eligiendo. */
+.overlay-mark {
+  width: 44px; height: 44px; display: block; margin: 0 auto 6px;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .7));
+}
 .overlay-title {
   display: block;
   font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--accent-2);

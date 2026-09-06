@@ -5,7 +5,7 @@
 // queda puesto, no el registro: lo que importa es que el próximo golpe cuente bien.
 import assert from 'node:assert/strict';
 import { createGame, TARGET, POWER_NUMBERS, hpOf, swingOf } from '../src/game.js';
-import { emptyChain, playCard, scoreChain } from '../src/rules.js';
+import { activeSymbols, emptyChain, playCard, scoreChain } from '../src/rules.js';
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
 
@@ -207,6 +207,107 @@ async function atPlayerTurn(chain) {
   assert.equal(s.status.cpu.poison, 0, 'el veneno se mide contra el daño: nada');
   assert.equal(s.status.human.egg, 0, 'el huevo también: nada');
   console.log('  ✓ cadena cortada');
+}
+
+// --- pulpo: una carta del centro directo a la cadena, a mitad de turno --------
+
+/** Deja `card` como próxima carta a salir del mazo del jugador: `draw` hace `pop`. */
+const nextDraw = (game, card) => game.state.decks.human.push(card);
+
+/**
+ * Pone en el centro una carta sin poder que lleve `symbol`, para que el pulpo tenga
+ * algo que ofrecer. Sin esto el centro es sorteado y la prueba sale distinta cada vez.
+ */
+function seedGrabbable(game, symbol) {
+  const s = game.state;
+  const at = s.pool.findIndex((c) => !c.power && c.symbols.includes(symbol));
+  assert.ok(at >= 0, 'queda alguna carta sin poder del símbolo en la reserva');
+  s.pool.push(s.market[0]);
+  s.market[0] = s.pool.splice(at, 1)[0];
+}
+
+{
+  // El pulpo sale, el centro se abre y el turno queda esperando al jugador.
+  const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
+  seedGrabbable(game, 'aquatic');
+  nextDraw(game, card(['aquatic', 'plant'], 'octopus'));
+  await game.hit();
+  await idle();
+
+  assert.equal(game.state.phase, 'grab', 'el centro se abre a mitad de turno');
+  assert.equal(game.state.grab.player, 'human');
+  assert.equal(game.state.busy, false, 'el jugador puede actuar');
+
+  const options = game.grabOptions();
+  assert.ok(options.length > 0, 'con aquatic vivo algo tiene que servir');
+  assert.ok(options.every((c) => !c.power), 'el pulpo no encadena poderes');
+  assert.ok(options.every((c) => game.state.market.includes(c)), 'salen del centro');
+  // Todas las opciones continúan la cadena: colocar una que la corte no es colocar.
+  const alive = activeSymbols(game.state.chains.human);
+  assert.ok(options.every((c) => c.symbols.some((sym) => alive.includes(sym))),
+    'ninguna opción corta la cadena');
+
+  // Colocarla: entra en la cadena, sale del centro y el centro se repone.
+  const chosen = options[0];
+  const before = game.state.chains.human.cards.length;
+  const market = game.state.market.length;
+  game.grabCard(chosen.uid);
+
+  assert.equal(game.state.phase, 'turn', 'el turno sigue');
+  assert.equal(game.state.chains.human.cards.length, before + 1, 'la carta entró a la cadena');
+  assert.equal(game.state.chains.human.cards.at(-1).uid, chosen.uid);
+  assert.ok(!game.state.market.includes(chosen), 'salió del centro');
+  assert.equal(game.state.market.length, market, 'el centro se repuso');
+  assert.ok(!game.state.decks.human.some((c) => c.uid === chosen.uid),
+    'todavía no está en el mazo: está en la mesa');
+
+  // Y al cerrar el turno se la queda, como el resto de la cadena.
+  await game.stand();
+  await idle();
+  assert.ok(game.state.decks.human.some((c) => c.uid === chosen.uid),
+    'la carta agarrada queda en el mazo');
+  console.log('  ✓ pulpo (colocar)');
+}
+
+{
+  // No colocar es una decisión: el turno sigue igual y la cadena queda intacta.
+  const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
+  seedGrabbable(game, 'aquatic');
+  nextDraw(game, card(['aquatic', 'plant'], 'octopus'));
+  await game.hit();
+  await idle();
+  assert.equal(game.state.phase, 'grab');
+
+  const cards = game.state.chains.human.cards.length;
+  const market = game.state.market.map((c) => c.uid);
+  game.skipGrab();
+
+  assert.equal(game.state.phase, 'turn', 'vuelve al turno');
+  assert.equal(game.state.chains.human.cards.length, cards, 'la cadena queda igual');
+  assert.deepEqual(game.state.market.map((c) => c.uid), market, 'el centro queda igual');
+  // Y se puede seguir robando o plantarse, que es el punto de poder pasar.
+  await game.hit();
+  await idle();
+  assert.ok(['turn', 'draft', 'grab'].includes(game.state.phase), 'el turno sigue jugable');
+  console.log('  ✓ pulpo (pasar)');
+}
+
+{
+  // Con las cinco del centro trayendo poder no hay nada que colocar: el pulpo se
+  // pierde y el turno no se interrumpe.
+  const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
+  const s = game.state;
+  for (let i = 0; i < s.market.length; i++) {
+    const at = s.pool.findIndex((c) => c.power);
+    assert.ok(at >= 0, 'quedan cartas con poder en la reserva');
+    s.pool.push(s.market[i]);
+    s.market[i] = s.pool.splice(at, 1)[0];
+  }
+  nextDraw(game, card(['aquatic', 'plant'], 'octopus'));
+  await game.hit();
+  await idle();
+  assert.equal(game.state.phase, 'turn', 'sin nada que colocar el turno no se frena');
+  console.log('  ✓ pulpo (centro sin nada)');
 }
 
 console.log('✓ poderes ok');

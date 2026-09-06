@@ -1,7 +1,7 @@
 import { buildPool, shuffle, cardLabel, crest, powerIcon, POWERS } from './data.js';
 import { AXIES, AXIE_IDS, axie, deckFor } from './axies.js';
 import { emptyChain, playCard, scoreChain } from './rules.js';
-import { decideDraw, planDraft, pickBest } from './ai.js';
+import { decideDraw, planDraft, pickBest, pickGrab } from './ai.js';
 
 export const PLAYERS = ['human', 'cpu'];
 /**
@@ -157,8 +157,10 @@ export function createGame({ pace = 1 } = {}) {
       roundScores: { human: null, cpu: null },
       order: ['human', 'cpu'],
       turn: null,
-      phase: 'turn', // 'turn' | 'draft' | 'roundEnd' | 'matchEnd'
+      phase: 'turn', // 'turn' | 'grab' | 'draft' | 'roundEnd' | 'matchEnd'
       draft: null,
+      // El pulpo abierto: quién está eligiendo del centro a mitad de su turno.
+      grab: null,
       busy: false,
       roundWinner: null,
       // Último golpe resuelto. La UI compara `id` con el que ya animó: mientras no
@@ -187,6 +189,7 @@ export function createGame({ pace = 1 } = {}) {
     state.roundScores = { human: null, cpu: null };
     state.roundWinner = null;
     state.draft = null;
+    state.grab = null;
     state.phase = 'turn';
     // Se alterna quién abre: el segundo juega sabiendo el puntaje del primero.
     state.order = state.round % 2 === 1 ? ['human', 'cpu'] : ['cpu', 'human'];
@@ -202,10 +205,15 @@ export function createGame({ pace = 1 } = {}) {
     state.chains[player] = playCard(state.chains[player], card);
     log(`${who(player)} abre con ${cardLabel(card)}`, player === 'cpu' ? 'cpu' : 'info');
     emit();
+    // El pulpo sale apenas la carta sale del mazo, y la de apertura también cuenta.
+    const octopus = card.power === 'octopus';
     if (player === 'cpu') {
       if (!(await tick(800, era))) return;
+      if (octopus && !(await cpuGrab(era))) return;
       await cpuTurn(era);
+      return;
     }
+    if (octopus) openGrab('human');
   }
 
   /**
@@ -246,7 +254,8 @@ export function createGame({ pace = 1 } = {}) {
         await finishTurn('cpu', 0, era);
         return;
       }
-      log(`La CPU saca ${cardLabel(card)} → ataque de ${scoreChain(next).total}`, 'cpu');
+      log(`La CPU saca ${cardLabel(card)} → ataque de ${swingOf(state, 'cpu')}`, 'cpu');
+      if (card.power === 'octopus' && !(await cpuGrab(era))) return;
     }
   }
 
@@ -310,6 +319,67 @@ export function createGame({ pace = 1 } = {}) {
         log(`${mark('poison')} ${who(foe)} queda con ${theirs.poison} de veneno.`, kind);
       }
     }
+  }
+
+  // ---- el pulpo ---------------------------------------------------------------
+
+  /**
+   * Lo que el pulpo le deja agarrar a `player`: cartas del centro **sin poder** que
+   * además no le corten la cadena. Encadenar poderes gratis sería demasiado, y una
+   * carta que rompe la cadena no es una carta que se pueda colocar.
+   */
+  function grabbable(player) {
+    return state.market.filter((c) => !c.power && !playCard(state.chains[player], c).busted);
+  }
+
+  /**
+   * Suma una carta del centro directo a la cadena. A diferencia del reparto, acá la
+   * carta **no** va al mazo: entra en juego ya puesta, y llega al mazo recién al
+   * cerrar el turno, con el resto de la cadena (ver `finishTurn`).
+   */
+  function takeGrab(player, card) {
+    const at = state.market.indexOf(card);
+    if (at < 0) return;
+    state.market.splice(at, 1);
+    state.chains[player] = playCard(state.chains[player], card);
+    log(`${powerIcon('octopus', 'sm')} ${who(player)} suma ${cardLabel(card)} del centro ` +
+      `a la cadena: ataque de ${swingOf(state, player)}.`, player === 'cpu' ? 'cpu' : 'good');
+    // Se repone en el mismo hueco, como en el reparto: las cartas no saltan de lugar.
+    if (state.pool.length) state.market.splice(at, 0, state.pool.pop());
+  }
+
+  /**
+   * El pulpo del jugador: frena el turno y abre el centro. Devuelve false si no había
+   * nada que colocar, y entonces el turno sigue de largo sin interrumpir nada.
+   */
+  function openGrab(player) {
+    if (grabbable(player).length === 0) {
+      log(`${powerIcon('octopus', 'sm')} El centro no tiene nada que ${whom(player)} pueda ` +
+        'colocar: el pulpo se pierde.', 'muted');
+      return false;
+    }
+    state.grab = { player };
+    state.phase = 'grab';
+    state.busy = false;
+    emit();
+    return true;
+  }
+
+  /**
+   * El pulpo de la CPU: elige sola, con una pausa para que se vea. Devuelve false si
+   * la partida se reinició mientras tanto y esta corrutina quedó obsoleta.
+   */
+  async function cpuGrab(era) {
+    const options = grabbable('cpu');
+    if (options.length === 0) {
+      log(`${powerIcon('octopus', 'sm')} El centro no tiene nada que la CPU pueda ` +
+        'colocar: el pulpo se pierde.', 'muted');
+      return true;
+    }
+    emit();
+    if (!(await tick(700, era))) return false;
+    takeGrab('cpu', pickGrab(options, state.chains.cpu, ownedBy('cpu')));
+    return true;
   }
 
   async function finishTurn(player, points, era) {
@@ -629,9 +699,43 @@ export function createGame({ pace = 1 } = {}) {
       await finishTurn('human', 0, era);
       return;
     }
-    log(`Sacaste ${cardLabel(card)} → ataque de ${scoreChain(next).total}`, 'good');
+    log(`Sacaste ${cardLabel(card)} → ataque de ${swingOf(state, 'human')}`, 'good');
+    // El pulpo abre el centro acá mismo: es el único poder que no espera al ataque.
+    if (card.power === 'octopus' && openGrab('human')) return;
     state.busy = false;
     emit();
+  }
+
+  /** Cierra el pulpo y devuelve al jugador a su turno, con los botones vivos. */
+  function closeGrab() {
+    state.grab = null;
+    state.phase = 'turn';
+    state.busy = false;
+    emit();
+  }
+
+  /** Lo que el jugador puede tocar ahora mismo con el pulpo abierto. */
+  function grabOptions() {
+    if (!state || state.phase !== 'grab' || state.grab.player !== 'human') return [];
+    return grabbable('human');
+  }
+
+  function grabCard(uid) {
+    const card = grabOptions().find((c) => c.uid === uid);
+    if (!card) return;
+    takeGrab('human', card);
+    closeGrab();
+  }
+
+  /**
+   * No colocar nada. Es una decisión real y no solo el caso degenerado: una carta que
+   * encadena igual puede matar cadenas vivas y dejarte peor. Después de pasar, el
+   * turno sigue como si nada — se puede robar de nuevo o plantarse.
+   */
+  function skipGrab() {
+    if (state.phase !== 'grab' || state.grab.player !== 'human') return;
+    log('No colocás nada del centro.', 'muted');
+    closeGrab();
   }
 
   async function stand() {
@@ -654,6 +758,7 @@ export function createGame({ pace = 1 } = {}) {
     },
     unseenPool,
     pickable,
+    grabOptions,
     drafting,
     canRenew,
     /** Vuelve a pintar el estado actual sin tocarlo. */
@@ -668,6 +773,8 @@ export function createGame({ pace = 1 } = {}) {
     stand,
     nextRound,
     takeCard,
+    grabCard,
+    skipGrab,
     skipDraft,
     renewMarket,
   };

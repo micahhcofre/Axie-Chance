@@ -149,10 +149,16 @@ a ~5.6 (rondas 16+). Quien abre la partida gana el 50%, así que no hay ventaja 
 Elegir bien del centro pesa: la heurística de la CPU le gana el 86% a elegir al azar.
 
 **Los poderes no movieron el balance.** Medido sobre 300 partidas con las dos partes usando
-la misma cabeza, antes y después: 38-55 sin poderes contra 42-56 con poderes. Lo que sí
+la misma cabeza, antes y después: 38-55 sin poderes contra 44-54 con los seis. Lo que sí
 cambió es el largo — de ~17 rondas a ~14, porque hay más daño dando vueltas. La brecha que
 queda a favor de quien juega segundo es previa a los poderes y sale de conocer el puntaje
-del otro antes de decidir.
+del otro antes de decidir. Ninguno de los seis domina el reparto: sobre ~2000 cartas con
+poder elegidas, fuerza 446, veneno 418, pulpo 391, maceta 293, huevo 250, caracol 220.
+
+**El pulpo tiene fase propia.** Es el único poder que no espera al ataque: corre apenas la
+carta sale del mazo, y para eso la máquina de estados suma una fase `grab` entre `turn` y
+`draft`. El centro se abre con la cadena a la vista, se coloca (o no) y el turno sigue con
+los botones vivos.
 
 Atajos: `R` robar, `P` plantarse, `Enter` continuar.
 
@@ -233,7 +239,7 @@ tiene que valer más para ganarles.
 | `src/axie-avatars.js` | generado — capas de cada Axie y catálogo de partes |
 | `src/rules.js` | cadenas, cortes, puntaje y probabilidades — funciones puras |
 | `src/ai.js` | decisión de la CPU |
-| `src/game.js` | máquina de estados: turnos, daño, centro y reparto, sin DOM |
+| `src/game.js` | máquina de estados: turnos, daño, poderes, centro y reparto, sin DOM |
 | `src/ui.js` | render y eventos |
 | `scripts/axies.mjs` | corre el mixer offline y regenera `src/axie-avatars.js` |
 | `scripts/build.mjs` | empaqueta todo en un solo `.html` |

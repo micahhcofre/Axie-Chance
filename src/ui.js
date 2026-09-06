@@ -113,6 +113,9 @@ function plateHtml(state, player) {
  * puestas hasta que abre el siguiente.
  */
 function focusOf(state, picking) {
+  // Con el pulpo abierto la mesa es del que está eligiendo: hay que ver la cadena
+  // para saber qué carta colocarle.
+  if (state.phase === 'grab') return state.grab.player;
   if (state.phase === 'draft') return picking ?? state.order[0];
   if (state.turn) return state.turn;
   const played = state.order.filter((p) => state.roundScores[p] !== null);
@@ -223,7 +226,44 @@ function marketHtml(state, { picking, pickable, canRenew }) {
   </div>`;
 }
 
+/**
+ * El centro abierto por el pulpo, a mitad de turno. Es el mismo panel del reparto
+ * pero con otra pregunta: acá la carta no va al mazo, va a la cadena en curso, y
+ * pasar es una decisión real —una carta que encadena puede matar cadenas vivas y
+ * dejarte peor para seguir robando—.
+ */
+function grabHtml(state, options) {
+  const open = new Set(options.map((c) => c.uid));
+  const slots = state.market
+    .map((c) => marketCardHtml(c, open.has(c.uid)))
+    .join('');
+  const empty = '<div class="market-slot"></div>'.repeat(
+    Math.max(MARKET_SIZE - state.market.length, 0),
+  );
+  return `<div class="overlay-panel">
+    <div class="overlay-head">
+      <img class="overlay-mark" src="${POWERS.octopus.icon}" alt="">
+      <span class="overlay-title">El pulpo</span>
+      <p class="overlay-note">Sumá <b>gratis</b> una carta a tu cadena. Solo las que no
+        llevan poder y no te la cortan.</p>
+    </div>
+    <div class="market-row">${slots}${empty}</div>
+    <div class="overlay-actions">
+      <button class="btn" data-action="skip-grab"
+        title="Seguí tu turno sin colocar nada">No colocar</button>
+    </div>
+  </div>`;
+}
+
 function controlsHtml(state, picking) {
+  if (state.phase === 'grab') {
+    return `<span class="controls-msg">${
+      state.grab.player === 'human'
+        ? 'El pulpo: elegí una carta del centro para tu cadena, o seguí sin colocar.'
+        : 'La CPU está colocando una carta del centro…'
+    }</span>`;
+  }
+
   if (state.phase === 'draft') {
     const msg = picking === 'cpu' ? 'La CPU elige del centro…' : 'Elegí tu carta del centro.';
     return `<span class="controls-msg">${msg}</span>`;
@@ -446,12 +486,17 @@ export function mount(game) {
     field.dataset.owner = focus;
     field.dataset.busted = String(state.chains[focus].busted);
 
-    // El centro solo existe mientras haya que elegir; el resto del tiempo no está.
+    // El centro solo existe mientras haya que elegir: al cerrar un turno (el reparto)
+    // o a mitad de turno si salió el pulpo. El resto del tiempo no está.
+    const grabbing = state.phase === 'grab' && state.grab.player === 'human';
     const drafting = state.phase === 'draft';
-    market.hidden = !drafting;
-    market.innerHTML = drafting
-      ? marketHtml(state, { picking, pickable: game.pickable(), canRenew: game.canRenew('human') })
-      : '';
+    market.hidden = !drafting && !grabbing;
+    if (grabbing) market.innerHTML = grabHtml(state, game.grabOptions());
+    else if (drafting) {
+      market.innerHTML = marketHtml(state, {
+        picking, pickable: game.pickable(), canRenew: game.canRenew('human'),
+      });
+    } else market.innerHTML = '';
 
     $('controls').innerHTML = controlsHtml(state, picking);
     const roster = `${state.axies.human}|${state.axies.cpu}`;
@@ -484,8 +529,12 @@ export function mount(game) {
   market.addEventListener('click', (e) => {
     if (e.target.closest('[data-action="renew"]')) return game.renewMarket();
     if (e.target.closest('[data-action="skip"]')) return game.skipDraft();
+    if (e.target.closest('[data-action="skip-grab"]')) return game.skipGrab();
     const uid = e.target.closest('.market-card:not([disabled])')?.dataset.uid;
-    if (uid) game.takeCard(Number(uid));
+    if (!uid) return;
+    // El mismo panel sirve para las dos cosas: la fase dice a dónde va la carta.
+    if (game.state.phase === 'grab') game.grabCard(Number(uid));
+    else game.takeCard(Number(uid));
   });
 
   $('axie-picker').addEventListener('click', (e) => {
@@ -501,7 +550,7 @@ export function mount(game) {
     if (e.target.matches('input, select, textarea')) return;
     const state = game.state;
     if (!state) return;
-    if (state.phase === 'draft') return;
+    if (state.phase === 'draft' || state.phase === 'grab') return;
     if (e.key === 'r' || e.key === 'R') game.hit();
     if (e.key === 'p' || e.key === 'P') game.stand();
     if (e.key === 'Enter') {

@@ -13,6 +13,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   const game = createGame({ pace: 0 });
   const openers = [];
   const gains = [];
+  let grabs = 0;
   game.newMatch({ difficulty, axie: 'aquatic' });
   assert.equal(game.state.axies.human, 'aquatic');
   assert.equal(game.state.symbols.human, 'aquatic', 'la clase del Axie es su símbolo');
@@ -70,6 +71,19 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       Math.min(MARKET_SIZE, s.market.length + s.pool.length),
       'el centro se repone en el acto',
     );
+
+    // El pulpo abre el centro a mitad de turno. Se alterna colocar y pasar: las dos
+    // ramas devuelven el turno al jugador con los botones vivos.
+    if (s.phase === 'grab') {
+      const options = game.grabOptions();
+      assert.ok(options.every((c) => !c.power), 'el pulpo no agarra poderes');
+      assert.ok(options.every((c) => s.market.includes(c)), 'las opciones salen del centro');
+      grabs++;
+      if (options.length && grabs % 2 === 1) game.grabCard(options[0].uid);
+      else game.skipGrab();
+      assert.equal(game.state.phase, 'turn', 'después del pulpo sigue el turno');
+      continue;
+    }
 
     if (s.phase === 'draft') {
       const picking = game.drafting();
@@ -177,9 +191,12 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   while (game.state.phase !== 'roundEnd') {
     assert.ok(guard++ < 4000, 'la ronda no cierra');
     const s = game.state;
+    if (s.phase === 'grab') { game.skipGrab(); continue; }
     if (s.phase === 'draft') {
       if (game.drafting() !== 'human') { await idle(); continue; }
-      await game.takeCard(game.pickable()[0].uid);
+      const options = game.pickable();
+      if (!options.length) { await game.skipDraft(); continue; }
+      await game.takeCard(options[0].uid);
       continue;
     }
     if (s.turn === 'human' && !s.busy) await game.stand();
@@ -208,7 +225,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   while (!(game.state.phase === 'draft' && game.drafting() === 'human')) {
     assert.ok(guard++ < 4000, 'no se llegó al reparto del jugador');
     const s = game.state;
-    if (s.phase === 'draft' || s.busy || s.turn !== 'human') await idle();
+    if (s.phase === 'grab') game.skipGrab();
+    else if (s.phase === 'draft' || s.busy || s.turn !== 'human') await idle();
     else await game.stand();
   }
 

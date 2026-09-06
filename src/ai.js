@@ -1,4 +1,4 @@
-import { playCard, scoreChain, survivalOdds } from './rules.js';
+import { activeSymbols, playCard, scoreChain, survivalOdds } from './rules.js';
 
 // El mazo tiene 96 cartas pero solo 41 combinaciones distintas de símbolos.
 // Agrupando por combinación, un lookahead de 3 niveles cuesta ~70k evaluaciones.
@@ -116,6 +116,36 @@ function bestCards(options, deck, n) {
     value += best;
   }
   return { cards: picked, value };
+}
+
+/**
+ * Qué carta del centro coloca la CPU con el pulpo, entre las que ya sabemos que
+ * encadenan. Ordena por el ataque que deja armado; a igualdad, por cuántas cadenas
+ * quedan vivas —que es cuánto puede seguir robando— y recién después por lo bien que
+ * la carta se enlaza con su mazo, porque al cerrar el turno se la queda.
+ *
+ * Una carta más nunca baja el puntaje: las rachas que no continúa mueren pero
+ * conservan su largo. Lo que sí puede es dejarla con menos por dónde seguir, y de eso
+ * se ocupa el segundo criterio.
+ */
+export function pickGrab(options, chain, deck) {
+  // Gana el primer criterio que los separe, en orden.
+  const better = (a, b) => {
+    const at = a.findIndex((v, i) => v !== b[i]);
+    return at >= 0 && a[at] > b[at];
+  };
+
+  let best = null;
+  let bestRank = [-1, -1, -1];
+  for (const card of options) {
+    const next = playCard(chain, card);
+    const rank = [scoreChain(next).total, activeSymbols(next).length, connectivity(card, deck)];
+    if (better(rank, bestRank)) {
+      best = card;
+      bestRank = rank;
+    }
+  }
+  return best;
 }
 
 /**
