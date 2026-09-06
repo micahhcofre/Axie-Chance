@@ -1,8 +1,8 @@
-import { SYMBOLS, crest } from './data.js';
+import { SYMBOLS, POWERS, crest, iconUrl, powerIcon } from './data.js';
 import { AXIES, AXIE_IDS, axie, axieArt } from './axies.js';
 import { activeSymbols, isScoringCell, scoreChain, survivalOdds } from './rules.js';
 import { createVfx, hitDelay, preloadVfx } from './vfx.js';
-import { TARGET, PLAYERS, MARKET_SIZE, hpOf, onTable } from './game.js';
+import { TARGET, PLAYERS, MARKET_SIZE, POWER_NUMBERS, hpOf, onTable, swingOf } from './game.js';
 
 const $ = (id) => document.getElementById(id);
 const settled = new Set();
@@ -14,18 +14,28 @@ function symChip(symbol, on) {
     ${crest(symbol)}</span>`;
 }
 
+/**
+ * El poder de una carta, colgado abajo y separado por una línea: la cadena no lo
+ * mira, así que tampoco se lee como un eslabón más.
+ */
+function powerChip(card) {
+  if (!card.power) return '';
+  return `<span class="card-power" style="--c:${SYMBOLS[POWERS[card.power].symbol].color}"
+    >${powerIcon(card.power)}</span>`;
+}
+
 function cardHtml(chain, card, index) {
   const cls = settled.has(card.uid) ? 'card is-settled' : 'card';
   settled.add(card.uid);
   const syms = card.symbols.map((s) => symChip(s, isScoringCell(chain, index, s))).join('');
-  return `<div class="${cls}"><span class="card-no">${index + 1}</span>${syms}</div>`;
+  return `<div class="${cls}"><span class="card-no">${index + 1}</span>${syms}${powerChip(card)}</div>`;
 }
 
 function bustCardHtml(card) {
   const cls = settled.has(card.uid) ? 'card card--bust is-settled' : 'card card--bust';
   settled.add(card.uid);
   const syms = card.symbols.map((s) => symChip(s, false)).join('');
-  return `<div class="card-gap"></div><div class="${cls}">${syms}</div>`;
+  return `<div class="card-gap"></div><div class="${cls}">${syms}${powerChip(card)}</div>`;
 }
 
 function runsHtml(chain) {
@@ -37,6 +47,31 @@ function runsHtml(chain) {
         ${crest(run.symbol, 'sm')} ×${run.length} <b>${run.points}</b></span>`;
     })
     .join('');
+}
+
+/**
+ * Lo que le quedó puesto encima: el huevo que le protege, el veneno que lo carcome,
+ * el caracol que lo debilita y la fuerza que juntó. Solo aparece lo que está activo,
+ * con el número al lado — sin esto los poderes serían invisibles después de la carta.
+ */
+function statusHtml(state, player) {
+  const st = state.status[player];
+  const pip = (id, value, title) =>
+    `<span class="pip-status" title="${title}"
+      ><img src="${iconUrl(`status-${id}.png`)}" alt=""><b>${value}</b></span>`;
+
+  const chips = [];
+  if (st.egg) chips.push(pip('egg', st.egg, `Huevo: se come ${st.egg} del próximo golpe y se rompe`));
+  if (st.poison) {
+    chips.push(pip('poison', st.poison,
+      `Veneno: ${st.poison} de daño al cerrar la ronda, después baja ${POWER_NUMBERS.poisonDecay}`));
+  }
+  if (st.weak) {
+    chips.push(pip('weak', st.weak,
+      `Debilitado: sus próximos ${st.weak} ataques pegan ${POWER_NUMBERS.snailBite} menos`));
+  }
+  if (st.strength) chips.push(pip('strength', `+${st.strength}`, `Fuerza: +${st.strength} de daño en cada ataque`));
+  return chips.length ? `<span class="plate-status">${chips.join('')}</span>` : '';
 }
 
 /**
@@ -68,7 +103,8 @@ function plateHtml(state, player) {
     <span class="plate-hp" data-low="${hp <= TARGET / 4}">
       <span class="hpbar"><i style="width:${(100 * hp) / TARGET}%"></i></span>
       <b>${hp}</b>
-    </span>`;
+    </span>
+    ${statusHtml(state, player)}`;
 }
 
 /**
@@ -86,7 +122,11 @@ function focusOf(state, picking) {
 function fieldHtml(state, player) {
   const chain = state.chains[player];
   const own = axie(state.axies[player]);
-  const points = chain.busted ? 0 : scoreChain(chain).total;
+  // El número grande es el daño que se va a aplicar de verdad, no el de la cadena
+  // pelada: si la fuerza o el caracol lo mueven, el desglose va abajo.
+  const points = swingOf(state, player);
+  const raw = chain.busted ? 0 : scoreChain(chain).total;
+  const st = state.status[player];
   const locked = state.roundScores[player] !== null;
 
   let note;
@@ -95,12 +135,23 @@ function fieldHtml(state, player) {
   else if (locked) note = 'soltó el ataque';
   else note = 'abre el intercambio';
 
+  // Solo se muestra el desglose cuando hay algo que explicar: si la cadena vale lo
+  // mismo que el golpe, el número solo alcanza.
+  const mods = [];
+  if (points !== raw) {
+    mods.push(`${raw} de cadena`);
+    if (st.strength) mods.push(`+${st.strength} de fuerza`);
+    if (st.weak) mods.push(`−${POWER_NUMBERS.snailBite} por el caracol`);
+  }
+  const breakdown = mods.length ? `<span class="field-mods">${mods.join(' · ')}</span>` : '';
+
   const cards = chain.cards.map((c, i) => cardHtml(chain, c, i)).join('');
   const bust = chain.bustCard ? bustCardHtml(chain.bustCard) : '';
   return `
     <div class="field-head" style="--c:${SYMBOLS[own.class].color}">
       <span class="field-who">${crest(own.class, 'sm')}<b>${NAMES[player]}</b> ${note}</span>
       <span class="field-dmg" data-busted="${chain.busted}">${points}<small>DAÑO</small></span>
+      ${breakdown}
     </div>
     <div class="strip">${cards}${bust}</div>
     <div class="runs">${runsHtml(chain)}</div>`;
@@ -118,8 +169,10 @@ function marketCardHtml(card, pickable) {
     .join('');
   const cls = settled.has(card.uid) ? 'market-card is-settled' : 'market-card';
   settled.add(card.uid);
+  const label = card.symbols.map((s) => SYMBOLS[s].name).join(' y ')
+    + (card.power ? `, con ${POWERS[card.power].name}` : '');
   return `<button class="${cls}" data-uid="${card.uid}"${pickable ? '' : ' disabled'}
-    aria-label="${card.symbols.map((s) => SYMBOLS[s].name).join(' y ')}">${syms}</button>`;
+    data-power="${card.power ?? ''}" aria-label="${label}">${syms}${powerChip(card)}</button>`;
 }
 
 /**
@@ -139,11 +192,12 @@ function marketHtml(state, { picking, pickable, canRenew }) {
     // No se pregunta el modo: la carta que toques ya dice qué te llevás.
     let note;
     if (state.chains.human.busted) {
-      note = 'Se te cortó la cadena: llevate <b>un par</b>.';
+      note = 'Se te cortó la cadena: llevate <b>una carta sin poder</b>.';
     } else if (!mode) {
-      note = 'Llevate <b>un trío</b> (y listo) <b>o un par</b> (y va otro).';
+      note = 'Llevate <b>una con poder</b> (y listo) <b>o dos sin poder</b>.';
     } else {
-      note = `Vas por pares: te ${remaining === 1 ? 'queda 1 carta' : `quedan ${remaining} cartas`}.`;
+      note = `Vas por cartas sin poder: te ${
+        remaining === 1 ? 'queda 1' : `quedan ${remaining}`}.`;
     }
     head = `<span class="overlay-title">Elegí del centro</span><p class="overlay-note">${note}</p>`;
     // Nada de lo que podés llevarte lleva tu símbolo: te queda una renovación del centro.
@@ -176,9 +230,10 @@ function controlsHtml(state, picking) {
   }
 
   if (state.phase === 'matchEnd') {
-    const r = state.totals.human === state.totals.cpu
-      ? 'tie'
-      : state.totals.human > state.totals.cpu ? 'human' : 'cpu';
+    // Gana el que deja al otro sin vida. Con la maceta curando y el veneno mordiendo
+    // fuera del ataque, el daño repartido dejó de ser un buen sustituto de la vida.
+    const down = { human: hpOf(state, 'human') <= 0, cpu: hpOf(state, 'cpu') <= 0 };
+    const r = down.human && down.cpu ? 'tie' : down.cpu ? 'human' : 'cpu';
     const text = { human: '¡Ganaste el combate!', cpu: 'Te noquea la CPU.', tie: 'Doble KO.' }[r];
     return `<div class="banner" data-result="${r}">${text}</div>
       <span class="controls-msg">Vida final ${hpOf(state, 'human')} — ${hpOf(state, 'cpu')}

@@ -118,26 +118,51 @@ function bestCards(options, deck, n) {
   return { cards: picked, value };
 }
 
-const bySize = (pool, size) => {
-  const match = pool.filter((c) => c.symbols.length === size);
-  // Si no queda ninguna del tamaño pedido, sirve cualquiera: así la reserva
-  // siempre se vacía y la partida termina.
-  return match.length ? match : pool;
+/**
+ * Cuánto vale cada poder para la CPU, medido en cartas: 1 es "tanto como sumar una
+ * carta más al mazo". La fuerza y el veneno cambian el marcador ronda tras ronda y
+ * valen más que una carta; el huevo y el caracol son de un solo uso y valen menos.
+ * Son números de oficio, no medidos: el gancho para ajustarlos está acá.
+ */
+const POWER_WORTH = {
+  strength: 1.6,
+  poison: 1.4,
+  octopus: 1.2,
+  pot: 1.0,
+  egg: 0.9,
+  snail: 0.9,
 };
 
 /**
- * Qué se lleva la CPU de la reserva.
- * @param {'stand'|'bust'} kind  se plantó (1 trío o 2 pares) o se cortó (1 par)
+ * Qué se lleva la CPU del centro.
+ *
+ * La elección es poder contra cantidad: dos cartas sin poder, o una con poder. Se
+ * miden en la misma unidad —conectividad con el mazo— sumándole al poder lo que
+ * vale su efecto, convertido a conectividad con el promedio de las dos cartas que
+ * estaría resignando. Así la comparación se adapta al mazo: cuando las cartas sin
+ * poder enlazan muy bien, el efecto tiene que valer más para ganarles.
+ *
+ * @param {'stand'|'bust'} kind  se plantó (2 sin poder o 1 con poder) o se cortó (1 sin poder)
  */
 export function planDraft(pool, deck, { kind }) {
   if (pool.length === 0) return { mode: null, cards: [] };
-  if (kind === 'bust') return { mode: 'pair', ...bestCards(bySize(pool, 2), deck, 1) };
+  const plain = pool.filter((c) => !c.power);
+  const powered = pool.filter((c) => c.power);
 
-  const trio = bestCards(bySize(pool, 3), deck, 1);
-  const pairs = bestCards(bySize(pool, 2), deck, 2);
-  // Se compara por carta, no por total: cada carta extra diluye el mazo, así que
-  // dos pares solo convienen si cada uno por separado se enlaza mejor que el trío.
-  // Medido, comparar totales le hace perder 68-32 contra llevarse siempre el trío.
-  const perCard = pairs.cards.length ? pairs.value / pairs.cards.length : -1;
-  return perCard > trio.value ? { mode: 'pair', ...pairs } : { mode: 'trio', ...trio };
+  if (kind === 'bust') {
+    return plain.length ? { mode: 'plain', ...bestCards(plain, deck, 1) } : { mode: null, cards: [] };
+  }
+
+  const two = bestCards(plain, deck, 2);
+  const perCard = two.cards.length ? two.value / two.cards.length : 0;
+
+  let best = null;
+  let bestValue = -1;
+  for (const card of powered) {
+    const value = connectivity(card, deck) + POWER_WORTH[card.power] * perCard;
+    if (value > bestValue) { bestValue = value; best = card; }
+  }
+
+  if (best && bestValue > two.value) return { mode: 'power', cards: [best], value: bestValue };
+  return two.cards.length ? { mode: 'plain', ...two } : { mode: null, cards: [] };
 }

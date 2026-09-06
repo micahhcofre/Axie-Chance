@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { buildPool, buildPersonalDeck, UNFAVORABLE, SYMBOL_IDS } from '../src/data.js';
+import {
+  buildPool, buildPersonalDeck, UNFAVORABLE, SYMBOL_IDS, POWER_IDS, POWERS, POWER_TRIOS,
+} from '../src/data.js';
 import { emptyChain, playCard, scoreChain, activeSymbols, survivalOdds } from '../src/rules.js';
 import { decideDraw } from '../src/ai.js';
 
@@ -53,10 +55,52 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 {
   assert.equal(SYMBOL_IDS.length, 6);
   const pool = buildPool();
-  assert.equal(pool.length, 35, '15 pares + 20 tríos');
+  assert.equal(pool.length, 71, '35 sin poder + 36 con poder');
   assert.ok(pool.every((c) => c.symbols.length === 2 || c.symbols.length === 3));
-  assert.equal(new Set(pool.map((c) => c.key)).size, 35, 'ninguna combinación repetida');
-  assert.equal(pool.filter((c) => c.symbols.includes('bird')).length, 15);
+  assert.equal(new Set(pool.map((c) => c.key)).size, 71, 'ninguna carta repetida');
+
+  const plain = pool.filter((c) => !c.power);
+  assert.equal(plain.length, 35, '15 pares + 20 tríos, una por combinación');
+  assert.equal(new Set(plain.map((c) => c.key)).size, 35, 'ninguna combinación repetida');
+  assert.equal(plain.filter((c) => c.symbols.includes('bird')).length, 15);
+}
+
+// --- las cartas con poder ----------------------------------------------------
+{
+  const pool = buildPool();
+  const powered = pool.filter((c) => c.power);
+  assert.equal(powered.length, 36, 'seis cartas por poder');
+  assert.equal(POWER_IDS.length, 6);
+
+  // Todas son tríos y todas llevan la clase de su propio poder: el efecto de tu
+  // color tiene que encadenar con tu mazo mejor que con ningún otro.
+  for (const id of POWER_IDS) {
+    const cards = powered.filter((c) => c.power === id);
+    assert.equal(cards.length, 6, `${id}: seis cartas`);
+    assert.equal(POWER_TRIOS[id].length, 6, `${id}: seis pares de acompañantes`);
+    for (const c of cards) {
+      assert.equal(c.symbols.length, 3, `${id}: son tríos`);
+      assert.ok(c.symbols.includes(POWERS[id].symbol), `${id}: falta su propia clase`);
+    }
+    assert.equal(new Set(cards.map((c) => c.key)).size, 6, `${id}: sin tríos repetidos`);
+  }
+
+  // El reparto está equilibrado: cada clase aparece 18 veces entre las 36 cartas,
+  // 6 como dueña de su poder y 12 como acompañante.
+  for (const id of SYMBOL_IDS) {
+    const seen = powered.filter((c) => c.symbols.includes(id)).length;
+    assert.equal(seen, 18, `${id}: aparece ${seen} veces y no 18`);
+    assert.equal(powered.filter((c) => c.power === id).length, 0, `${id} no es un poder`);
+  }
+
+  // Los mazos iniciales no traen poderes: los seis solo salen del centro.
+  for (const id of SYMBOL_IDS) {
+    assert.ok(buildPersonalDeck(id).every((c) => !c.power), `${id}: mazo base sin poderes`);
+  }
+
+  // Dos cartas con los mismos símbolos y poderes distintos son cartas distintas.
+  const trios = powered.map((c) => c.symbols.join('+'));
+  assert.ok(new Set(trios).size < trios.length, '36 cartas sobre 20 tríos: alguno se repite');
 }
 
 // --- mazo personal -----------------------------------------------------------

@@ -36,7 +36,7 @@ assert.doesNotMatch(nodes.controls.innerHTML, /data-action="hit"/);
 await idle();
 
 assert.match(nodes.scoreboard.innerHTML, /Ronda 1/);
-assert.match(nodes.scoreboard.innerHTML, /35 cartas en la reserva/);
+assert.match(nodes.scoreboard.innerHTML, /71 cartas en la reserva/);
 // La vida vive sobre cada Axie, no en el marcador: al abrir, los dos enteros.
 for (const side of ['human', 'cpu']) {
   assert.match(nodes[`plate-${side}`].innerHTML, /class="hpbar"/, `${side}: falta la barrita`);
@@ -121,16 +121,27 @@ while (game.state.phase !== 'matchEnd') {
       await idle();
       continue;
     }
-    // El centro nunca pregunta el modo: siempre hay cartas tocables y un "no agarrar".
+    // El centro nunca pregunta el modo: la carta que tocás decide, y siempre hay un
+    // "no agarrar" —que es la única salida cuando las cinco traen poder y vas por
+    // cartas sin poder—.
     assert.doesNotMatch(nodes.market.innerHTML, /data-mode=/, 'ya no se elige modo');
     assert.match(nodes.market.innerHTML, /data-action="skip"/, 'se ofrece no agarrar');
     const options = game.pickable();
-    assert.ok(options.length > 0 && options.length <= 5, 'se elige entre las 5 del centro');
+    assert.ok(options.length <= 5, 'se elige entre las 5 del centro');
+    if (options.length === 0) {
+      if (game.canRenew('human')) game.renewMarket();
+      else await game.skipDraft();
+      continue;
+    }
     assert.match(nodes.market.innerHTML, new RegExp(`data-uid="${options[0].uid}"`));
 
     if (!s.draft.mode) {
-      // Sin cadena cortada se puede tocar cualquiera de los dos tamaños.
-      if (!s.chains.human.busted) sawFreePick = true;
+      // Sin cadena cortada el centro entero está a mano: con poder o sin poder.
+      if (!s.chains.human.busted) {
+        sawFreePick = true;
+        assert.deepEqual(options.map((c) => c.uid).sort(), s.market.map((c) => c.uid).sort(),
+          'plantado se puede tocar cualquiera de las 5');
+      }
       // Una vez en la partida se fuerza el centro sin el símbolo propio: ahí aparece
       // el botón para renovarlo, y después de usarlo no vuelve a ofrecerse.
       if (!sawRenew && dropOwnSymbol(s)) {

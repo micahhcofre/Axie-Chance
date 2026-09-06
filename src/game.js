@@ -1,4 +1,4 @@
-import { buildPool, shuffle, cardLabel, crest } from './data.js';
+import { buildPool, shuffle, cardLabel, crest, powerIcon, POWERS } from './data.js';
 import { AXIES, AXIE_IDS, axie, deckFor } from './axies.js';
 import { emptyChain, playCard, scoreChain } from './rules.js';
 import { decideDraw, planDraft, pickBest } from './ai.js';
@@ -14,6 +14,32 @@ export const TARGET = 100;
 /** Cartas boca arriba en el centro. Se repone en el acto al llevarse una. */
 export const MARKET_SIZE = 5;
 
+// Los números de los poderes, todos juntos para poder moverlos de a uno.
+/** Cuánto suma cada carta de fuerza, en este ataque y en todos los siguientes. */
+const STRENGTH_STEP = 2;
+/** Cuánto le saca el caracol a cada ataque del debilitado, y cuántos ataques dura. */
+const SNAIL_BITE = 2;
+const SNAIL_ATTACKS = 2;
+/** Cuánto baja el veneno al cerrar la ronda, después de haber mordido. */
+const POISON_DECAY = 2;
+
+/**
+ * Lo que le queda puesto a un jugador de una ronda a la otra:
+ *   `egg`      vida del escudo; se come el próximo golpe y se rompe
+ *   `poison`   cuánto muerde al cerrar cada ronda, bajando de a POISON_DECAY
+ *   `weak`     cuántos ataques suyos todavía pegan SNAIL_BITE menos
+ *   `strength` daño extra acumulado, para siempre
+ */
+const emptyStatus = () => ({ egg: 0, poison: 0, weak: 0, strength: 0 });
+
+/** Los números de los poderes, para que la UI los cuente igual que el juego. */
+export const POWER_NUMBERS = {
+  strength: STRENGTH_STEP,
+  snailBite: SNAIL_BITE,
+  snailAttacks: SNAIL_ATTACKS,
+  poisonDecay: POISON_DECAY,
+};
+
 // Cada jugador roba de su propio mazo y no hay descarte: cada ronda arranca con el
 // mazo entero barajado de nuevo, como una tragamonedas. Contar lo que salió sigue
 // valiendo dentro de la ronda —las cartas jugadas no vuelven hasta que cierre—, pero
@@ -24,8 +50,29 @@ const who = (p) => (p === 'human' ? 'Vos' : 'La CPU');
 const whom = (p) => (p === 'human' ? 'vos' : 'la CPU');
 const other = (p) => (p === 'human' ? 'cpu' : 'human');
 
-/** Vida que le queda a `player`: la vida inicial menos el daño que le hizo el otro. */
-export const hpOf = (state, player) => Math.max(TARGET - state.totals[other(player)], 0);
+/**
+ * Vida que le queda a `player`: la inicial, menos el daño que le hizo el otro, más
+ * lo que se curó con la maceta. `healed` solo acumula lo que efectivamente curó
+ * (ver `heal`), así que nunca hace falta recortar por arriba.
+ */
+export const hpOf = (state, player) =>
+  Math.max(TARGET - state.totals[other(player)] + state.healed[player], 0);
+
+/**
+ * Lo que pegaría `player` si soltara el ataque ahora: los puntos de su cadena, más
+ * la fuerza que acumuló, menos el mordisco del caracol si lo tiene puesto. Una
+ * cadena cortada hace 0 y no la levanta ningún modificador.
+ *
+ * Vive acá y no en la UI porque es la cuenta con la que se reparte el daño: el
+ * número grande de la pantalla tiene que ser exactamente el que se va a aplicar.
+ */
+export function swingOf(state, player) {
+  const chain = state.chains[player];
+  const points = chain.busted ? 0 : scoreChain(chain).total;
+  if (points <= 0) return 0;
+  const st = state.status[player];
+  return Math.max(points + st.strength - (st.weak > 0 ? SNAIL_BITE : 0), 0);
+}
 
 /**
  * Cartas de `player` que están en la mesa y todavía no volvieron a su mazo. Apenas
@@ -101,6 +148,11 @@ export function createGame({ pace = 1 } = {}) {
       // Si la cadena entera ya volvió al mazo, al terminar el turno de ese jugador.
       returned: { human: false, cpu: false },
       totals: { human: 0, cpu: 0 },
+      // Vida recuperada con la maceta. Va aparte de `totals` porque `totals` es
+      // "daño repartido" y se usa para juzgar el intercambio, no para la vida.
+      healed: { human: 0, cpu: 0 },
+      // Huevo, veneno, caracol y fuerza: lo que dejan puesto las cartas con poder.
+      status: { human: emptyStatus(), cpu: emptyStatus() },
       chains: { human: emptyChain(), cpu: emptyChain() },
       roundScores: { human: null, cpu: null },
       order: ['human', 'cpu'],
@@ -163,7 +215,7 @@ export function createGame({ pace = 1 } = {}) {
    */
   function cpuNeeds() {
     if (state.roundScores.human === null) return null;
-    if (state.totals.human < TARGET) return null;
+    if (hpOf(state, 'cpu') > 0) return null;
     return state.totals.human - state.totals.cpu + 1;
   }
 
@@ -198,22 +250,108 @@ export function createGame({ pace = 1 } = {}) {
     }
   }
 
+  /**
+   * Los poderes de las cartas que salieron este turno, incluida la que cortó la
+   * cadena: el poder es de la carta, no del ataque. El pulpo no aparece acá —ya
+   * corrió al salir del mazo—.
+   */
+  function powersPlayed(player) {
+    const chain = state.chains[player];
+    const cards = chain.bustCard ? [...chain.cards, chain.bustCard] : chain.cards;
+    return cards.map((c) => c.power).filter(Boolean);
+  }
+
+  /**
+   * Cura a `player` sin pasarse de la vida inicial y devuelve cuánto curó de verdad.
+   * Recortar acá y no en `hpOf` es lo que mantiene la cuenta honesta: si `healed`
+   * guardara curación desperdiciada, después amortiguaría golpes que sí tendrían
+   * que entrar.
+   */
+  function heal(player, amount) {
+    const room = TARGET - hpOf(state, player);
+    const got = Math.min(amount, room);
+    state.healed[player] += got;
+    return got;
+  }
+
+  /**
+   * Los poderes jugados en el turno, todos juntos al soltar el ataque. El huevo, la
+   * maceta y el veneno se miden contra el daño del golpe, así que una cadena cortada
+   * los deja en nada; la fuerza y el caracol no dependen del daño y salen igual.
+   */
+  function applyPowers(player, swing) {
+    const foe = other(player);
+    const mine = state.status[player];
+    const theirs = state.status[foe];
+    const kind = player === 'cpu' ? 'cpu' : 'good';
+    const mark = (id) => powerIcon(id, 'sm');
+
+    for (const power of powersPlayed(player)) {
+      if (power === 'strength') {
+        mine.strength += STRENGTH_STEP;
+        log(`${mark('strength')} ${who(player)} afila: +${mine.strength} de daño de acá en más.`, kind);
+      } else if (power === 'snail') {
+        theirs.weak += SNAIL_ATTACKS;
+        log(`${mark('snail')} ${who(foe)} queda debilitado: ${theirs.weak} ataques con ` +
+          `${SNAIL_BITE} menos.`, kind);
+      } else if (swing <= 0) {
+        // Sin daño no hay nada que medir: el huevo, la cura y el veneno se pierden.
+        log(`${mark(power)} ${POWERS[power].name} sin efecto: el ataque hizo 0.`, 'muted');
+      } else if (power === 'egg') {
+        mine.egg += Math.floor(swing / 2);
+        log(`${mark('egg')} ${who(player)} pone un huevo de ${mine.egg}.`, kind);
+      } else if (power === 'pot') {
+        const got = heal(player, swing);
+        log(got > 0
+          ? `${mark('pot')} ${who(player)} se cura ${got} y queda en ${hpOf(state, player)}.`
+          : `${mark('pot')} ${who(player)} ya está entero: la maceta no cura nada.`, got > 0 ? kind : 'muted');
+      } else if (power === 'poison') {
+        theirs.poison += Math.floor(swing / 2);
+        log(`${mark('poison')} ${who(foe)} queda con ${theirs.poison} de veneno.`, kind);
+      }
+    }
+  }
+
   async function finishTurn(player, points, era) {
-    state.roundScores[player] = points;
+    const foe = other(player);
+    const mine = state.status[player];
+    const theirs = state.status[foe];
+
+    const swing = swingOf(state, player);
+    // El caracol se gasta por ataque y no por ronda: así dura siempre lo mismo, sin
+    // depender de si le tocaba abrir o cerrar el intercambio.
+    if (mine.weak > 0) mine.weak--;
+    if (swing !== points) {
+      log(`${who(player)} ataca por ${swing}: ${points} de cadena` +
+        `${mine.strength ? ` +${mine.strength} de fuerza` : ''}` +
+        `${swing < points + mine.strength ? ` −${SNAIL_BITE} por el caracol` : ''}.`, 'muted');
+    }
+
+    // El huevo del rival se come lo que puede y se rompe igual, le sobre vida o no.
+    const blocked = Math.min(theirs.egg, swing);
+    if (swing > 0 && theirs.egg > 0) {
+      theirs.egg = 0;
+      log(`${powerIcon('egg', 'sm')} El huevo de ${whom(foe)} aguanta ${blocked} y se rompe.`,
+        'muted');
+    }
+    const landed = swing - blocked;
+
+    state.roundScores[player] = swing;
     // El turno se cierra acá mismo. Si no, entre el golpe y el turno del otro queda
     // una ventana con `turn` todavía puesto y los botones vivos: alcanzaba para
     // plantarse dos veces y aplicar el daño dos veces.
     state.turn = null;
     // El daño entra acá y no al cerrar la ronda: el golpe tiene que verse cuando el
     // jugador lo suelta, no dos turnos después. Los totales terminan iguales.
-    state.totals[player] += points;
+    state.totals[player] += landed;
     state.busy = false;
-    const target = points > 0 ? other(player) : player;
-    state.lastHit = { id: ++state.hitId, by: player, target, amount: points };
-    if (points > 0) {
-      log(`${who(player)} pega por ${points}. ${who(target)} queda en ${hpOf(state, target)}.`,
+    const target = swing > 0 ? foe : player;
+    state.lastHit = { id: ++state.hitId, by: player, target, amount: landed, blocked };
+    if (landed > 0) {
+      log(`${who(player)} pega por ${landed}. ${who(target)} queda en ${hpOf(state, target)}.`,
         player === 'cpu' ? 'cpu' : 'good');
     }
+    applyPowers(player, swing);
     emit();
 
     // Sus cartas vuelven al mazo antes de repartirle: lo que se lleve del centro entra
@@ -224,14 +362,16 @@ export function createGame({ pace = 1 } = {}) {
     state.returned[player] = true;
 
     // Un golpe que conecta se mira: el centro no se enciende encima del efecto.
-    if (!(await tick(points > 0 ? 900 : 500, era))) return;
+    if (!(await tick(swing > 0 ? 900 : 500, era))) return;
     // Con alguien sin vida la partida ya está resuelta: no hay mazo que armar, solo
     // queda que el otro devuelva el golpe.
     if (matchOver()) return afterDraft(era);
     await startDraft(player, era);
   }
 
-  const matchOver = () => Math.max(state.totals.human, state.totals.cpu) >= TARGET;
+  // Con la maceta curando y el veneno mordiendo fuera del ataque, "llegó a 100 de
+  // daño" ya no equivale a "lo dejó sin vida": la partida se cierra por vida.
+  const matchOver = () => PLAYERS.some((p) => hpOf(state, p) <= 0);
 
   /** Terminado el reparto de un jugador: juega el que falta, o cierra el intercambio. */
   async function afterDraft(era) {
@@ -246,11 +386,28 @@ export function createGame({ pace = 1 } = {}) {
     }
   }
 
+  /**
+   * El veneno se cobra al cerrar el intercambio, cuando los dos ya pegaron: muerde
+   * por su cuenta entera y recién después baja de a POISON_DECAY. Cuenta como daño
+   * de quien lo puso, así que suma a su total como cualquier golpe.
+   */
+  function tickPoison() {
+    for (const player of PLAYERS) {
+      const st = state.status[player];
+      if (st.poison <= 0) continue;
+      state.totals[other(player)] += st.poison;
+      log(`${powerIcon('poison', 'sm')} El veneno le saca ${st.poison} a ${whom(player)}: ` +
+        `queda en ${hpOf(state, player)}.`, player === 'human' ? 'bad' : 'good');
+      st.poison = Math.max(st.poison - POISON_DECAY, 0);
+    }
+  }
+
   async function endRound(era) {
     const { human, cpu } = state.roundScores;
     // El daño ya está aplicado (ver `finishTurn`); acá solo se juzga el intercambio.
     state.roundWinner = human === cpu ? 'tie' : human > cpu ? 'human' : 'cpu';
     state.turn = null;
+    tickPoison();
 
     const verdict =
       state.roundWinner === 'tie'
@@ -270,8 +427,14 @@ export function createGame({ pace = 1 } = {}) {
 
   // ---- reparto de la reserva --------------------------------------------------
 
-  /** Qué le corresponde a `player` según cómo terminó su ronda. */
+  /**
+   * Qué le corresponde a `player` según cómo terminó su ronda. Plantado elige entre
+   * dos cartas sin poder o una con poder; cortado, una sin poder y nada más — los
+   * poderes son el premio de haber soltado el ataque.
+   */
   const awardKind = (player) => (state.chains[player].busted ? 'bust' : 'stand');
+
+  const plainCards = () => state.market.filter((c) => !c.power);
 
   function refillMarket() {
     while (state.market.length < MARKET_SIZE && state.pool.length) {
@@ -279,17 +442,6 @@ export function createGame({ pace = 1 } = {}) {
     }
   }
 
-  /**
-   * Cartas del centro que puede tomar quien está eligiendo. Si ninguna de las 5 es
-   * del tamaño pedido sirve cualquiera: con un centro tan chico el tipo pedido puede
-   * no estar, y quedarse sin nada sería peor.
-   */
-  function eligible(mode) {
-    if (!mode) return [];
-    const size = mode === 'trio' ? 3 : 2;
-    const match = state.market.filter((c) => c.symbols.length === size);
-    return match.length ? match : state.market;
-  }
 
   function takeFromMarket(player, card) {
     const at = state.market.indexOf(card);
@@ -302,14 +454,16 @@ export function createGame({ pace = 1 } = {}) {
   }
 
   /**
-   * Todo lo que `player` podría llegar a llevarse. Plantado y antes de elegir modo
-   * las dos opciones siguen abiertas, así que cuentan los dos tamaños.
+   * Todo lo que `player` podría llegar a llevarse ahora mismo. Plantado y sin haber
+   * tocado nada las dos ramas siguen abiertas, así que sirve el centro entero; una
+   * vez que agarró una carta sin poder ya se comprometió, y la segunda tampoco puede
+   * llevar poder. El tamaño de la carta dejó de importar.
    */
   function draftable(player) {
     const mode = state.draft?.mode;
-    if (mode) return eligible(mode);
-    if (awardKind(player) === 'bust') return eligible('pair');
-    return [...new Set([...eligible('trio'), ...eligible('pair')])];
+    if (mode === 'power') return []; // la carta con poder cierra el reparto
+    if (mode === 'plain' || awardKind(player) === 'bust') return plainCards();
+    return state.market.slice();
   }
 
   /**
@@ -367,12 +521,17 @@ export function createGame({ pace = 1 } = {}) {
           emit();
           if (!(await tick(700, era))) return;
         }
-        // Decide el modo una vez y después vuelve a mirar el centro entre carta y
-        // carta: la reposición puede ofrecerle algo mejor que lo que había al empezar.
+        // Decide la rama una vez —poder, o cartas sin poder— y después vuelve a
+        // mirar el centro entre carta y carta: la reposición puede ofrecerle algo
+        // mejor que lo que había al empezar.
         const plan = planDraft(state.market, ownedBy('cpu'), { kind });
         state.draft.mode = plan.mode;
-        for (let n = 0; n < plan.cards.length && state.market.length; n++) {
-          takeFromMarket('cpu', pickBest(eligible(plan.mode), ownedBy('cpu')));
+        if (plan.mode === 'power') {
+          takeFromMarket('cpu', plan.cards[0]);
+        } else {
+          for (let n = 0; n < plan.cards.length && plainCards().length; n++) {
+            takeFromMarket('cpu', pickBest(plainCards(), ownedBy('cpu')));
+          }
         }
         state.draft.mode = null;
         state.draft.index++;
@@ -382,7 +541,7 @@ export function createGame({ pace = 1 } = {}) {
       // Al jugador se le prepara la elección y se espera a que actúe desde la UI.
       state.draft.took = 0;
       if (kind === 'bust') {
-        state.draft.mode = 'pair';
+        state.draft.mode = 'plain';
         state.draft.remaining = 1;
       } else {
         // Sin modo: la carta que toque lo decide (ver `takeCard`).
@@ -410,15 +569,11 @@ export function createGame({ pace = 1 } = {}) {
   }
 
   /**
-   * Qué se lleva el jugador según la carta que tocó, sin preguntarle nada antes:
-   * un trío cierra el reparto, un par deja pendiente la segunda carta.
-   * Si el centro no tiene ningún par, "dos pares" se cobra con cualquier carta y
-   * domina al trío, así que tocar un trío cuenta como par.
+   * Qué se lleva el jugador según la carta que tocó, sin preguntarle nada antes: una
+   * carta con poder cierra el reparto ahí mismo; una sin poder deja pendiente una
+   * segunda, que tampoco va a poder llevar poder.
    */
-  function inferMode(card) {
-    const hasPairs = state.market.some((c) => c.symbols.length === 2);
-    return card.symbols.length === 3 && hasPairs ? 'trio' : 'pair';
-  }
+  const inferMode = (card) => (card.power ? 'power' : 'plain');
 
   async function takeCard(uid) {
     if (state.phase !== 'draft' || drafting() !== 'human') return;
@@ -427,7 +582,7 @@ export function createGame({ pace = 1 } = {}) {
     const era = epoch;
     if (!state.draft.mode) {
       state.draft.mode = inferMode(card);
-      state.draft.remaining = state.draft.mode === 'trio' ? 1 : 2;
+      state.draft.remaining = state.draft.mode === 'power' ? 1 : 2;
     }
     takeFromMarket('human', card);
     state.draft.took++;
@@ -498,7 +653,6 @@ export function createGame({ pace = 1 } = {}) {
       return state;
     },
     unseenPool,
-    eligible,
     pickable,
     drafting,
     canRenew,

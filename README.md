@@ -88,23 +88,50 @@ ronda pasada y lo que se sumó del centro—, como una tragamonedas. Dentro de l
 cartas que ya salieron no vuelven, así que contar sirve mientras dura la tirada; de una
 ronda a la otra no se arrastra nada.
 
-**El centro.** Hay siempre **5 cartas boca arriba**, sacadas de una reserva de 35
-([`buildPool`](src/data.js)): las 15 combinaciones de 2 símbolos y las 20 de 3, una por
-combinación. Al llevarse una, se repone en el acto desde la reserva. Apenas termina su
-turno —antes de que juegue el otro— cada jugador se lleva cartas del centro según cómo le
-fue, y sus cartas jugadas vuelven a su mazo primero:
+**El centro.** Hay siempre **5 cartas boca arriba**, sacadas de una reserva de 71
+([`buildPool`](src/data.js)): **35 sin poder** —las 15 combinaciones de 2 símbolos y las 20
+de 3, una por combinación— y **36 con poder**. Al llevarse una, se repone en el acto desde
+la reserva. Apenas termina su turno —antes de que juegue el otro— cada jugador se lleva
+cartas del centro según cómo le fue, y sus cartas jugadas vuelven a su mazo primero:
 
 | resultado del turno | se lleva |
 |---|---|
-| soltaste el ataque | 1 carta de 3 símbolos **o** 2 cartas de 2 símbolos |
-| se te desarmó | 1 carta de 2 símbolos |
+| soltaste el ataque | 1 carta **con poder** **o** 2 cartas **sin poder** |
+| se te desarmó | 1 carta sin poder |
 
-Si ninguna de las 5 es del tamaño que corresponde, sirve cualquiera. Y si entre las que
-podés llevarte **ninguna tiene tu símbolo**, el centro no ofrece nada que enlace con tu
-mazo: se **renueva entero** —las 5 al fondo de la reserva, 5 nuevas a la vista— una sola
-vez por reparto y por jugador. Las cartas nuevas
-entran al mazo y ya pueden salir en el intercambio siguiente. Si la reserva se agota antes
-de que alguien caiga, se sigue jugando con el mazo armado.
+No se pregunta el modo: **la carta que tocás decide**. El tamaño de la carta no entra en el
+reparto —lo que se elige es poder contra cantidad—. Si entre las que podés llevarte
+**ninguna tiene tu símbolo**, el centro no ofrece nada que enlace con tu mazo: se **renueva
+entero** —las 5 al fondo de la reserva, 5 nuevas a la vista— una sola vez por reparto y por
+jugador. Eso cubre también el caso en que las cinco traen poder y te toca una sin poder: no
+hay nada elegible, y después de renovar solo queda pasar. Las cartas nuevas entran al mazo y
+ya pueden salir en el intercambio siguiente. Si la reserva se agota antes de que alguien
+caiga, se sigue jugando con el mazo armado.
+
+**Los poderes.** Las 36 cartas con poder llevan, además de sus 3 símbolos, un **séptimo
+símbolo** que la cadena no ve: no la abre, no la continúa, no la corta y no puntúa
+—[`rules.js`](src/rules.js) ni se entera de que existe—. Solo dispara su efecto **al soltar
+el ataque**, con el daño del turno ya contado.
+
+| | poder | efecto |
+|---|---|---|
+| ⚔️ | fuerza | +2 de daño en este ataque y en todos los que siguen. Acumulable |
+| ☠️ | veneno | la mitad de tu daño; muerde al cerrar cada intercambio y después baja 2. Acumulable |
+| 🥚 | huevo | escudo de la mitad de tu daño; se come el próximo golpe y se rompe, le sobre o no |
+| 🪴 | maceta | te curás lo que pegaste, sin pasar de 100 |
+| 🐌 | caracol | los próximos 2 ataques del rival pegan 2 menos. Acumula ataques, nunca daño |
+| 🐙 | pulpo | al salir del mazo, sumás gratis a la cadena una carta **sin poder** del centro |
+
+Cada poder viaja siempre con **su propia clase** entre los 3 símbolos, así que el efecto de
+tu color encadena con tu mazo mejor que ningún otro. Los pares que lo acompañan
+([`POWER_TRIOS`](src/data.js)) están elegidos para que las seis clases aparezcan exactamente
+18 veces entre las 36 cartas: 6 como dueña de su poder y 12 como acompañante. Son 36 cartas
+sobre 20 tríos posibles, así que el mismo trío aparece con poderes distintos — encadenan
+igual y se eligen por el efecto.
+
+Si **se corta la cadena** el ataque hace 0, y con él se pierden el huevo, la maceta y el
+veneno, que se miden contra el daño. La fuerza y el caracol salen igual. Los mazos iniciales
+de 10 **no traen poderes**: los seis salen del centro y hay que ganárselos.
 
 **Balance del mazo base.** Medido sobre 4000 rondas: media ~3.1 puntos, 32% de cortes,
 cadenas de 1-2 cartas, y los seis símbolos rinden casi igual (3.04 a 3.21), o sea que
@@ -119,10 +146,13 @@ con cuánta vida quedó.
 ~19 rondas, el mazo crece de 10 a ~27 cartas, y el puntaje por ronda sube de 3.2 (rondas 1-5)
 a ~5.6 (rondas 16+). Quien abre la partida gana el 50%, así que no hay ventaja de orden.
 
-Elegir bien del centro pesa: la heurística de la CPU le gana el 86% a elegir al azar. Pero
-la elección **trío vs. pares está desbalanceada** — llevarse el trío gana el 82% contra
-llevarse los dos pares, y subir la oferta a 3 o 4 pares no lo arregla (74-79%), porque cada
-carta extra diluye el mazo en vez de mejorarlo.
+Elegir bien del centro pesa: la heurística de la CPU le gana el 86% a elegir al azar.
+
+**Los poderes no movieron el balance.** Medido sobre 300 partidas con las dos partes usando
+la misma cabeza, antes y después: 38-55 sin poderes contra 42-56 con poderes. Lo que sí
+cambió es el largo — de ~17 rondas a ~14, porque hay más daño dando vueltas. La brecha que
+queda a favor de quien juega segundo es previa a los poderes y sale de conocer el puntaje
+del otro antes de decidir.
 
 Atajos: `R` robar, `P` plantarse, `Enter` continuar.
 
@@ -188,14 +218,17 @@ aunque el valor esperado diga lo contrario.
 Para elegir del centro usa **conectividad** ([`connectivity`](src/ai.js)): por cada símbolo
 de la carta, cuántas cartas de su mazo lo llevan. Es la medida directa de lo que puntúa el
 juego — una carta sirve en la medida en que puede continuar cadenas que ya podés abrir.
-Compara trío contra pares **por carta, no por total**: comparar totales la hacía tomar dos
-pares demasiado seguido y le costaba un 68-32 contra llevarse siempre el trío.
+Para el reparto compara las dos ramas en la misma unidad: la conectividad de las dos cartas
+sin poder contra la de la carta con poder **más lo que vale su efecto**, convertido a
+conectividad con el promedio de lo que estaría resignando ([`POWER_WORTH`](src/ai.js)). Así
+la comparación se adapta al mazo — cuando las cartas sin poder enlazan muy bien, el efecto
+tiene que valer más para ganarles.
 
 ## Estructura
 
 | archivo | |
 |---|---|
-| `src/data.js` | símbolos, crests, mazo personal y reserva común |
+| `src/data.js` | símbolos, iconos, poderes, mazo personal y reserva común |
 | `src/axies.js` | el roster: seis Axies, sus partes, su mazo y su dibujo |
 | `src/axie-avatars.js` | generado — capas de cada Axie y catálogo de partes |
 | `src/rules.js` | cadenas, cortes, puntaje y probabilidades — funciones puras |

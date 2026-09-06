@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 
-const SYMBOLS = ['beast', 'aquatic', 'bird', 'plant', 'bug', 'reptile'];
 const MODULES = [
   'data', 'axie-avatars', 'axies', 'rules', 'ai', 'game', 'vfx-clips', 'vfx', 'ui', 'main',
 ];
@@ -15,11 +14,16 @@ const FONTS =
   'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800' +
   '&family=IBM+Plex+Mono:wght@500;600&display=swap';
 
-const crests = Object.fromEntries(
-  SYMBOLS.map((id) => [
-    id,
-    `data:image/png;base64,${readFileSync(join(root, 'Icons', `${id}-crest.png`)).toString('base64')}`,
-  ]),
+// Todos los PNG de Icons/ —crests, poderes y estados— en un solo mapa por nombre de
+// archivo. `data.js` los pide con `iconUrl()`, y el HTML del modal de reglas los
+// nombra por ruta: las dos formas se resuelven abajo.
+const icons = Object.fromEntries(
+  readdirSync(join(root, 'Icons'))
+    .filter((f) => f.endsWith('.png'))
+    .map((f) => [
+      f,
+      `data:image/png;base64,${readFileSync(join(root, 'Icons', f)).toString('base64')}`,
+    ]),
 );
 
 // Los fondos del arena se piden desde el CSS por ruta relativa, que en un archivo
@@ -44,8 +48,8 @@ const body = html
   .trim();
 
 // Las rutas a Icons/ del modal de reglas también se reemplazan por el data URI.
-const inlined = SYMBOLS.reduce(
-  (out, id) => out.replaceAll(`Icons/${id}-crest.png`, crests[id]),
+const inlined = Object.entries(icons).reduce(
+  (out, [file, url]) => out.replaceAll(`Icons/${file}`, url),
   body,
 );
 
@@ -63,7 +67,7 @@ ${css}
 ${inlined}
 
 <script>
-globalThis.CREST_URLS = ${JSON.stringify(crests)};
+globalThis.ICON_URLS = ${JSON.stringify(icons)};
 
 ${script}
 <\/script>

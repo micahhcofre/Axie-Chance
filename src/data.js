@@ -8,11 +8,13 @@ export const SYMBOLS = {
   reptile: { id: 'reptile', name: 'Reptil', color: '#a97cff' },
 };
 
-// El build de un solo archivo (`npm run build`) inyecta los crests como data URI
-// en `CREST_URLS`; servido desde el repo se usan los PNG de Icons/.
-for (const [id, sym] of Object.entries(SYMBOLS)) {
-  sym.crest = globalThis.CREST_URLS?.[id] ?? `Icons/${id}-crest.png`;
-}
+/**
+ * La URL de un PNG de `Icons/`. El build de un solo archivo (`npm run build`) mete
+ * todos como data URI en `ICON_URLS`; servido desde el repo son rutas relativas.
+ */
+export const iconUrl = (file) => globalThis.ICON_URLS?.[file] ?? `Icons/${file}`;
+
+for (const [id, sym] of Object.entries(SYMBOLS)) sym.crest = iconUrl(`${id}-crest.png`);
 
 export const SYMBOL_IDS = Object.keys(SYMBOLS);
 
@@ -23,14 +25,106 @@ export function crest(symbol, size = '') {
   return `<img class="${cls}" src="${s.crest}" alt="${s.name}" title="${s.name}">`;
 }
 
+// ---- poderes ----------------------------------------------------------------
+
+/**
+ * Los seis poderes. Cada uno viaja pegado a una carta como un símbolo de más que la
+ * cadena no ve: no abre cadena, no la continúa, no la corta y no puntúa —`rules.js`
+ * ni se entera de que existe—. Solo dispara su efecto cuando su dueño suelta el
+ * ataque; el pulpo es la excepción y corre a mitad de turno (ver `game.js`).
+ *
+ * `symbol` es la clase a la que pertenece: las seis cartas de un poder la llevan
+ * siempre entre sus tres símbolos, así el efecto de tu color encadena con tu mazo
+ * mejor que con ningún otro.
+ */
+export const POWERS = {
+  egg: {
+    id: 'egg', symbol: 'bird', name: 'Huevo',
+    note: 'escudo de medio golpe: se come el próximo ataque y se rompe',
+  },
+  octopus: {
+    id: 'octopus', symbol: 'aquatic', name: 'Pulpo',
+    note: 'al salir del mazo: sumás gratis una carta sin poder del centro',
+  },
+  pot: {
+    id: 'pot', symbol: 'plant', name: 'Maceta',
+    note: 'te curás lo mismo que pegaste',
+  },
+  poison: {
+    id: 'poison', symbol: 'reptile', name: 'Veneno',
+    note: 'la mitad del daño, cada ronda, bajando de a 2',
+  },
+  snail: {
+    id: 'snail', symbol: 'bug', name: 'Caracol',
+    note: 'el rival pega 2 menos durante 2 rondas',
+  },
+  strength: {
+    id: 'strength', symbol: 'beast', name: 'Fuerza',
+    note: '+2 de daño en este ataque y en todos los que siguen',
+  },
+};
+
+for (const p of Object.values(POWERS)) p.icon = iconUrl(`power-${p.id}.png`);
+
+export const POWER_IDS = Object.keys(POWERS);
+
+/** El símbolo de poder como HTML, para la carta y para el registro. */
+export function powerIcon(id, size = '') {
+  const p = POWERS[id];
+  const cls = size ? `power power--${size}` : 'power';
+  return `<img class="${cls}" src="${p.icon}" alt="${p.name}" title="${p.name}: ${p.note}">`;
+}
+
+/**
+ * Las dos clases que acompañan a cada poder en sus seis cartas —la tercera es
+ * siempre la suya—. Están elegidas para que las seis clases aparezcan exactamente
+ * 18 veces entre las 36 cartas: 6 como dueña de su propio poder y 12 como
+ * acompañante. Así ninguna queda sobrerrepresentada en la reserva.
+ *
+ * Son 36 cartas sobre 20 tríos posibles, así que el mismo trío aparece con poderes
+ * distintos. Encadenan igual y se eligen por el efecto, que es justo la decisión
+ * que el centro tiene que ofrecer.
+ */
+export const POWER_TRIOS = {
+  egg: [
+    ['beast', 'aquatic'], ['beast', 'plant'], ['aquatic', 'bug'],
+    ['plant', 'bug'], ['plant', 'reptile'], ['bug', 'reptile'],
+  ],
+  octopus: [
+    ['beast', 'bird'], ['beast', 'plant'], ['bird', 'plant'],
+    ['bird', 'bug'], ['plant', 'reptile'], ['bug', 'reptile'],
+  ],
+  pot: [
+    ['beast', 'aquatic'], ['beast', 'bug'], ['aquatic', 'reptile'],
+    ['bird', 'bug'], ['bird', 'reptile'], ['bug', 'reptile'],
+  ],
+  poison: [
+    ['beast', 'aquatic'], ['beast', 'bird'], ['beast', 'plant'],
+    ['aquatic', 'bird'], ['aquatic', 'bug'], ['plant', 'bug'],
+  ],
+  snail: [
+    ['beast', 'aquatic'], ['beast', 'bird'], ['beast', 'plant'],
+    ['aquatic', 'reptile'], ['bird', 'reptile'], ['plant', 'reptile'],
+  ],
+  strength: [
+    ['aquatic', 'bird'], ['aquatic', 'plant'], ['aquatic', 'bug'],
+    ['bird', 'plant'], ['bird', 'reptile'], ['bug', 'reptile'],
+  ],
+};
+
 // Los uid son únicos entre todos los mazos: la UI los usa para no reanimar cartas ya vistas.
 let nextUid = 0;
 const byOrder = (a, b) => SYMBOL_IDS.indexOf(a) - SYMBOL_IDS.indexOf(b);
 
-/** Los símbolos se guardan siempre en el orden de SYMBOL_IDS, así `key` es canónica. */
-function makeCard(symbols) {
+/**
+ * Los símbolos se guardan siempre en el orden de SYMBOL_IDS, así `key` es canónica.
+ * `power` entra en la clave porque dos cartas con los mismos tres símbolos y poderes
+ * distintos son cartas distintas —encadenan igual, pero no valen lo mismo—.
+ */
+function makeCard(symbols, power = null) {
   const sorted = symbols.slice().sort(byOrder);
-  return { uid: nextUid++, symbols: sorted, key: sorted.join('+') };
+  const key = sorted.join('+');
+  return { uid: nextUid++, symbols: sorted, power, key: power ? `${key}@${power}` : key };
 }
 
 function combinations(items, size) {
@@ -44,10 +138,20 @@ function combinations(items, size) {
   return out;
 }
 
-// Reserva común: 15 pares + 20 tríos = 35 cartas, todas distintas. De acá salen
-// las cartas que los jugadores suman a su mazo personal.
+/**
+ * Reserva común: 71 cartas. Las 35 sin poder —las 15 combinaciones de 2 símbolos y
+ * las 20 de 3, una por combinación— más las 36 con poder, seis por cada uno. De acá
+ * salen las cartas que los jugadores suman a su mazo personal; los mazos iniciales
+ * de 10 no llevan poderes.
+ */
 export function buildPool() {
-  return [2, 3].flatMap((size) => combinations(SYMBOL_IDS, size).map(makeCard));
+  const plain = [2, 3].flatMap((size) =>
+    combinations(SYMBOL_IDS, size).map((symbols) => makeCard(symbols)),
+  );
+  const powered = POWER_IDS.flatMap((id) =>
+    POWER_TRIOS[id].map((pair) => makeCard([POWERS[id].symbol, ...pair], id)),
+  );
+  return [...plain, ...powered];
 }
 
 // Las 6 cartas "no favorables": dos triángulos disjuntos de tres símbolos.
@@ -84,7 +188,8 @@ export function shuffle(cards) {
   return out;
 }
 
-/** Los símbolos de una carta, para intercalar en el registro de la partida. */
+/** Los símbolos de una carta —y su poder, si tiene—, para el registro de la partida. */
 export function cardLabel(card) {
-  return card.symbols.map((s) => crest(s, 'sm')).join('');
+  const syms = card.symbols.map((s) => crest(s, 'sm')).join('');
+  return card.power ? `${syms}${powerIcon(card.power, 'sm')}` : syms;
 }

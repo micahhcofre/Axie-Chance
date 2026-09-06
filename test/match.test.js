@@ -1,6 +1,6 @@
 // Smoke test del flujo completo: rondas, reparto de la reserva y final a 100 puntos.
 import assert from 'node:assert/strict';
-import { createGame, TARGET, PLAYERS, MARKET_SIZE, onTable } from '../src/game.js';
+import { createGame, TARGET, PLAYERS, MARKET_SIZE, hpOf, onTable } from '../src/game.js';
 import { scoreChain } from '../src/rules.js';
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
@@ -18,11 +18,12 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.equal(game.state.symbols.human, 'aquatic', 'la clase del Axie es su símbolo');
   assert.notEqual(game.state.symbols.cpu, 'aquatic', 'la CPU juega otra clase');
   assert.equal(game.state.market.length, MARKET_SIZE, 'el centro arranca con 5');
-  assert.equal(game.state.pool.length, 35 - MARKET_SIZE);
+  assert.equal(game.state.pool.length, 71 - MARKET_SIZE);
 
-  // Qué terminó llevándose el humano en cada draft. Ya no se elige un modo aparte:
-  // lo decide el tamaño de la carta que toca, así que se alterna qué carta tocar.
-  let humanMode = 'trio';
+  // Qué terminó llevándose el humano en cada draft. No se elige un modo aparte: lo
+  // decide la carta que toca —con poder cierra el reparto, sin poder deja una
+  // segunda—, así que se alterna qué carta tocar para probar las dos ramas.
+  let humanMode = 'power';
   let guard = 0;
 
   // Ahora reparte un solo jugador por vez, apenas termina su turno, y el turno de la
@@ -60,7 +61,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
     // Invariante: 35 comunes + 10 de cada mazo base, nunca se pierde ni se duplica nada.
     assert.equal(
       s.pool.length + s.market.length + owned(s, 'human') + owned(s, 'cpu'),
-      55,
+      91,
       'cartas totales en juego',
     );
     // El centro está siempre lleno mientras quede reserva para reponer.
@@ -74,23 +75,30 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       const picking = game.drafting();
       if (picking === 'cpu') { await idle(); continue; }
       const options = game.pickable();
-      assert.ok(options.length > 0, 'mientras haya centro siempre hay algo elegible');
       assert.ok(options.length <= MARKET_SIZE, 'se elige solo entre las cartas del centro');
       assert.ok(options.every((c) => s.market.includes(c)), 'las opciones salen del centro');
+      // El centro puede no ofrecer nada: las cinco cartas con poder y el jugador
+      // yendo por cartas sin poder. Queda la renovación —una— y después pasar.
+      if (options.length === 0) {
+        assert.ok(s.market.length > 0 && s.market.every((c) => c.power),
+          'sin nada elegible, el centro es todo poderes');
+        if (game.canRenew('human')) game.renewMarket();
+        else await game.skipDraft();
+        continue;
+      }
       if (s.draft.mode) {
         // Segunda carta del par (o el par único de una cadena cortada).
         await game.takeCard(options[0].uid);
         continue;
       }
-      // Los dos pares solo se registran con reserva de sobra, y la reserva se vacía
-      // hacia el final: se van primero hasta cubrirlos y recién ahí se alterna.
-      const want = (!gains.includes(2) ? 'pair' : humanMode === 'trio' ? 'pair' : 'trio');
-      const card = options.find((c) => c.symbols.length === (want === 'trio' ? 3 : 2))
-        ?? options[0];
-      // Espejo de la inferencia del juego: sin pares en el centro, cualquier carta
-      // paga el premio de dos pares y el trío queda descartado.
-      const hasPairs = s.market.some((c) => c.symbols.length === 2);
-      humanMode = card.symbols.length === 3 && hasPairs ? 'trio' : 'pair';
+      // Se alterna entre las dos ramas: una carta con poder cierra el reparto (suma
+      // 1) y una sin poder deja pendiente la segunda (suma 2). El caso de dos cartas
+      // solo se registra con reserva de sobra, y la reserva se vacía hacia el final,
+      // así que primero se va por ahí hasta cubrirlo.
+      const want = (!gains.includes(2) || humanMode === 'power') ? 'plain' : 'power';
+      const card = options.find((c) => (want === 'power' ? c.power : !c.power)) ?? options[0];
+      // Espejo de la inferencia del juego: la carta que tocás decide.
+      humanMode = card.power ? 'power' : 'plain';
       await game.takeCard(card.uid);
       continue;
     }
@@ -99,20 +107,19 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       const d = drafts.shift();
       // El que no repartió no toca su mazo: cada uno se lleva lo suyo en su turno.
       assert.equal(d.otherGain, 0, `${other(d.player)} sumó en el reparto ajeno`);
-      // Con reserva de sobra el reparto es exacto: cortarse da 1 par, plantarse 1 trío
-      // o 2 pares. Cuando quedan menos de 4 cartas, se lleva lo que haya.
-      if (d.pool >= 4) {
-        if (d.busted) assert.equal(d.gain, 1, `${d.player} se cortó: 1 par`);
-        else assert.ok(d.gain === 1 || d.gain === 2, `${d.player} se plantó y sumó ${d.gain}`);
-        if (d.player === 'human') {
-          if (!d.busted) {
-            assert.equal(d.gain, humanMode === 'trio' ? 1 : 2, 'el jugador recibe lo que eligió');
-          }
-          gains.push(d.gain);
+      // Nadie se lleva más de dos cartas, y una cadena cortada nunca llega a dos:
+      // le toca una sola, y sin poder.
+      assert.ok(d.gain >= 0 && d.gain <= 2, `${d.player} sumó ${d.gain}`);
+      assert.ok(d.poolAfter <= d.pool, 'la reserva nunca crece');
+      // Cortarse da una carta sin poder, nunca dos. Puede dar cero: si las cinco del
+      // centro traen poder no hay nada que llevarse.
+      if (d.busted) assert.ok(d.gain <= 1, `${d.player} se cortó y sumó ${d.gain}`);
+      if (d.player === 'human') {
+        // La carta con poder cierra el reparto ahí mismo, siempre.
+        if (!d.busted && humanMode === 'power') {
+          assert.equal(d.gain, 1, 'una carta con poder y se acabó');
         }
-      } else {
-        assert.ok(d.gain >= 0 && d.gain <= 2, `${d.player} sumó ${d.gain} con ${d.pool} de reserva`);
-        assert.ok(d.poolAfter <= d.pool, 'la reserva nunca crece');
+        gains.push(d.gain);
       }
     }
 
@@ -131,15 +138,16 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   }
 
   const s = game.state;
-  assert.ok(Math.max(s.totals.human, s.totals.cpu) >= TARGET, 'alguien llegó a la meta');
+  assert.ok(PLAYERS.some((p) => hpOf(s, p) <= 0), 'alguien se quedó sin vida');
+  assert.ok(Math.max(s.totals.human, s.totals.cpu) >= TARGET, 'hizo falta el daño de una vida');
   assert.ok(s.roundScores.human !== null && s.roundScores.cpu !== null, 'los dos jugaron la ronda');
   assert.deepEqual(
     openers,
     openers.map((_, i) => (i % 2 === 0 ? 'human' : 'cpu')),
     'se alterna quién abre',
   );
-  assert.ok(gains.includes(1) && gains.includes(2), 'se probaron trío y par');
-  assert.equal(s.pool.length + s.market.length + owned(s, 'human') + owned(s, 'cpu'), 55);
+  assert.ok(gains.includes(1) && gains.includes(2), 'se probaron poder y cantidad');
+  assert.equal(s.pool.length + s.market.length + owned(s, 'human') + owned(s, 'cpu'), 91);
   console.log(
     `  ${difficulty.padEnd(6)} ${s.totals.human} — ${s.totals.cpu} en ${s.round} rondas` +
       ` · mazos ${owned(s, 'human')}/${owned(s, 'cpu')}` +
@@ -158,7 +166,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.equal(game.state.round, 1);
   assert.equal(game.state.totals.human, 0);
   assert.equal(game.state.market.length, MARKET_SIZE, 'el centro arranca con 5');
-  assert.equal(game.state.pool.length, 35 - MARKET_SIZE);
+  assert.equal(game.state.pool.length, 71 - MARKET_SIZE);
 }
 
 // No hay descarte: cada ronda arranca con todas las cartas propias barajadas de nuevo.

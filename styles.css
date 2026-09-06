@@ -31,8 +31,8 @@ body {
 }
 
 /* Los números se leen en columna por todos lados: marcador, rachas, probabilidades. */
-.sb-round, .sb-pool, .field-dmg, .plate-hp b, .plate-tag, .odds-value, .odds-note,
-.odds-deck, .run, .card-no, .controls-msg b {
+.sb-round, .sb-pool, .field-dmg, .field-mods, .plate-hp b, .plate-tag, .pip-status,
+.odds-value, .odds-note, .odds-deck, .run, .card-no, .controls-msg b {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
@@ -291,6 +291,11 @@ body {
   font-size: 10px; font-weight: 500; letter-spacing: .14em; color: var(--ink-faint);
 }
 .field-dmg[data-busted="true"] { color: var(--danger); }
+/* De dónde sale el número grande cuando no es solo la cadena. Renglón propio. */
+.field-mods {
+  flex-basis: 100%; text-align: center;
+  font-size: 11px; color: var(--ink-faint); text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
+}
 
 /* ---------- los botones, al pie del arena ---------- */
 
@@ -319,7 +324,7 @@ body {
    larga, se desplaza sola sin empujar nada. */
 .strip {
   display: flex; gap: 8px; align-items: stretch;
-  max-width: 100%; overflow-x: auto; padding-bottom: 6px; min-height: 122px;
+  max-width: 100%; overflow-x: auto; padding-bottom: 6px; min-height: 150px;
   /* `safe` es lo que hace que una cadena larga se pueda desplazar entera: centrada a
      secas, lo que se pasa por la izquierda queda fuera del alcance del scroll. */
   justify-content: center;
@@ -587,6 +592,42 @@ body {
 /* Los eslabones muertos se apagan pero siguen legibles: la cadena se lee de un vistazo. */
 .sym[data-on="false"] { opacity: .3; filter: grayscale(1); }
 
+/* ---------- poderes ---------- */
+
+/* El poder cuelga abajo de la carta y detrás de una línea. La cadena no lo mira —no
+   abre, no continúa, no corta y no puntúa—, así que tampoco puede leerse como un
+   eslabón más: la línea es lo que dice que ese casillero juega otro juego. */
+.card-power {
+  display: flex; justify-content: center;
+  margin-top: auto; padding-top: 6px;
+  border-top: 1px dashed color-mix(in srgb, var(--c) 60%, transparent);
+}
+.power { width: 26px; height: 26px; display: block; }
+.power--sm { width: 17px; height: 17px; display: inline-block; vertical-align: -4px; }
+
+/* En el centro, las que traen poder se ven distintas de lejos: la elección del
+   reparto es justamente esa —una con poder, o dos sin—. */
+.market-card[data-power]:not([data-power=""]) {
+  background: linear-gradient(165deg, #3b2f72, #1e1a46);
+  border-color: #5b4da3;
+}
+.market-card[data-power]:not([data-power=""]):hover:not([disabled]) {
+  border-color: #a98cff; box-shadow: 0 14px 30px -12px #a98cff;
+}
+
+/* Lo que quedó puesto encima de un Axie: el huevo, el veneno, el caracol, la fuerza.
+   Van en la chapa porque son estado, no evento: duran hasta que se gastan. */
+.plate-status { display: flex; flex-wrap: wrap; gap: 5px; }
+.pip-status {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px 1px 3px; border-radius: 999px;
+  background: rgba(5, 8, 20, .6);
+  border: 1px solid rgba(255, 255, 255, .16);
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.pip-status img { width: 15px; height: 15px; display: block; }
+.pip-status b { font-weight: 600; }
+
 .card--bust { border-color: var(--danger); background: linear-gradient(165deg, #46223a, #2c1630); }
 .card--bust::after {
   content: "✕"; position: absolute; inset: 0;
@@ -654,7 +695,7 @@ body {
 .market-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
 .market-card, .market-slot {
-  flex: 0 0 auto; width: 76px; min-height: 116px; border-radius: 12px;
+  flex: 0 0 auto; width: 76px; min-height: 148px; border-radius: 12px;
 }
 .market-card {
   display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 10px 8px;
@@ -748,6 +789,7 @@ body {
 .modal p { margin: 0 0 8px; color: var(--ink-dim); }
 .modal p b { color: var(--ink); }
 .modal .warn { color: #ffb3ab; }
+.modal p.muted { color: var(--ink-faint); font-size: 13px; }
 .modal form { margin-top: 22px; text-align: right; }
 .example {
   margin: 10px 0; padding: 12px 14px;
@@ -793,8 +835,8 @@ body {
   .board-axie .axie { width: min(100%, 112px); }
   .plate-who { display: none; }
   .card { width: 54px; }
-  .strip { min-height: 108px; }
-  .market-card, .market-slot { width: 62px; min-height: 96px; }
+  .strip { min-height: 132px; }
+  .market-card, .market-slot { width: 62px; min-height: 126px; }
   .controls { min-height: 46px; gap: 8px; }
 }
 

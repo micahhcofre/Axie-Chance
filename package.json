@@ -8,7 +8,7 @@
     "start": "node scripts/dev.mjs",
     "axies": "node scripts/axies.mjs",
     "vfx": "node scripts/vfx.mjs",
-    "test": "node test/rules.test.js && node test/match.test.js && node test/ui.test.js",
+    "test": "node test/rules.test.js && node test/match.test.js && node test/powers.test.js && node test/ui.test.js",
     "build": "node scripts/build.mjs"
   }
 }

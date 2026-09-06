@@ -108,6 +108,8 @@
       <img class="crest crest--sm" src="Icons/bug-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> <img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""><img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""><img class="crest crest--sm" src="Icons/bug-crest.png" alt=""> —
       de los que te tocan los cuatro que no llevan tu símbolo.</div>
   </div>
+  <p class="muted">Los mazos iniciales <b>no traen poderes</b>: los seis salen del centro y hay
+     que ganárselos.</p>
   <p><b>No hay descarte:</b> al empezar cada intercambio se rebaraja el mazo entero, como una
      tragamonedas. Dentro del turno las cartas que ya salieron no vuelven, así que
      acordarte de lo que salió sirve mientras dura la tirada — el panel de la derecha te
@@ -115,31 +117,65 @@
      no se arrastra nada.</p>
 
   <h3>El centro</h3>
-  <p>En el centro hay siempre <b>5 cartas boca arriba</b>, sacadas de una reserva de 35: las 15
-     combinaciones de 2 símbolos y las 20 de 3, una por combinación. Cuando alguien se lleva
-     una, se repone en el acto desde la reserva. Apenas terminás tu ataque —antes de que
-     juegue el rival— te llevás cartas del centro según cómo te fue:</p>
+  <p>En el centro hay siempre <b>5 cartas boca arriba</b>, sacadas de una reserva de 71: las
+     <b>35 sin poder</b> —las 15 combinaciones de 2 símbolos y las 20 de 3, una por
+     combinación— y las <b>36 con poder</b>. Cuando alguien se lleva una, se repone en el
+     acto. Apenas terminás tu ataque —antes de que juegue el rival— te llevás cartas del
+     centro según cómo te fue:</p>
   <div class="example">
-    <div><b>Soltaste el ataque</b> → 1 carta de 3 símbolos <b>o</b> 2 cartas de 2 símbolos</div>
-    <div><b>Se te desarmó</b> → 1 carta de 2 símbolos</div>
+    <div><b>Soltaste el ataque</b> → 1 carta <b>con poder</b> <b>o</b> 2 cartas <b>sin poder</b></div>
+    <div><b>Se te desarmó</b> → 1 carta sin poder</div>
     <hr>
-    <div>No se pregunta nada antes: <b>la carta que tocás decide</b>. Tocás una de 3 y ahí
-      termina tu reparto; tocás una de 2 y te queda una segunda.</div>
+    <div>No se pregunta nada antes: <b>la carta que tocás decide</b>. Tocás una con poder y
+      ahí termina tu reparto; tocás una sin poder y te queda una segunda.</div>
     <div><b>No agarrar</b> cierra tu reparto sin sumar nada —o con lo que ya llevabas.</div>
     <hr>
     <div><b>Ninguna de las que podés agarrar lleva tu símbolo</b> → renovás el centro, una vez</div>
     <hr>
-    <div class="muted">Si ninguna de las 5 es del tamaño que te toca, sirve cualquiera.
-      Las cartas nuevas entran al mazo y ya pueden salir en la ronda siguiente. Cuando la
-      reserva se agota, se sigue jugando con el mazo que armaste.</div>
+    <div class="muted">Las cartas nuevas entran al mazo y ya pueden salir en la ronda
+      siguiente. Cuando la reserva se agota, se sigue jugando con el mazo que armaste.</div>
   </div>
   <p>Cuando entre las cartas que te podés llevar <b>no hay ninguna con tu símbolo</b>, el centro
      no te ofrece nada que enlace con tu mazo: podés <b>renovarlo entero</b>. Las 5 se van al
      fondo de la reserva, salen 5 nuevas y elegís de esas. Una sola renovación por reparto,
      y la CPU tiene la suya.</p>
-  <p class="warn">Medido sobre 600 partidas: llevarse <b>el trío gana el 82%</b> de las veces
-     contra llevarse los dos pares. Cada carta extra diluye tu mazo, así que sumar de a dos
-     rinde menos de lo que parece —y a veces lo mejor es <b>no agarrar nada</b>.</p>
+  <p class="warn">Un poder cuesta <b>una carta</b>: llevártelo es resignar la segunda. Y cada
+     carta extra diluye tu mazo, así que a veces lo mejor es <b>no agarrar nada</b>.</p>
+
+  <h3>Los poderes</h3>
+  <p>36 cartas del centro traen, además de sus 3 símbolos, un <b>séptimo símbolo</b> colgado
+     abajo detrás de una línea. Ese símbolo <b>no juega la cadena</b>: no la abre, no la
+     continúa, no la corta y no puntúa. Solo dispara su efecto <b>cuando soltás el ataque</b>,
+     con el daño del turno ya contado.</p>
+  <div class="example">
+    <div><img class="power power--sm" src="Icons/power-strength.png" alt=""> <b>Fuerza</b> —
+      +2 de daño en este ataque y en todos los que siguen. Se acumula.</div>
+    <div><img class="power power--sm" src="Icons/power-poison.png" alt=""> <b>Veneno</b> —
+      envenenás al rival por la mitad de tu daño. Al cerrar cada intercambio le saca esa
+      vida y después baja 2. Se acumula.</div>
+    <div><img class="power power--sm" src="Icons/power-egg.png" alt=""> <b>Huevo</b> —
+      un escudo con la mitad de tu daño. Se come el próximo golpe y se rompe, le sobre o no.</div>
+    <div><img class="power power--sm" src="Icons/power-pot.png" alt=""> <b>Maceta</b> —
+      te curás exactamente lo que pegaste, sin pasarte de 100.</div>
+    <div><img class="power power--sm" src="Icons/power-snail.png" alt=""> <b>Caracol</b> —
+      los próximos 2 ataques del rival pegan 2 menos. Se acumula en cantidad de ataques,
+      nunca en daño.</div>
+    <div><img class="power power--sm" src="Icons/power-octopus.png" alt=""> <b>Pulpo</b> —
+      apenas sale de tu mazo agarrás gratis una carta <b>sin poder</b> del centro y la
+      sumás a tu cadena. Si ninguna encadena, no agarrás y seguís el turno normal.</div>
+    <hr>
+    <div class="muted">Cada poder viaja siempre con su propia clase entre los 3 símbolos:
+      <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> el huevo,
+      <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> el pulpo,
+      <img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> la maceta,
+      <img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> el veneno,
+      <img class="crest crest--sm" src="Icons/bug-crest.png" alt=""> el caracol y
+      <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""> la fuerza. El efecto de
+      tu color encadena con tu mazo mejor que ningún otro.</div>
+    <div class="muted">Si <b>se te corta la cadena</b> el ataque hace 0, y con él se pierden
+      el huevo, la maceta y el veneno, que se miden contra el daño. La fuerza y el caracol
+      salen igual.</div>
+  </div>
 
   <form method="dialog"><button class="btn btn-primary">Entendido</button></form>
 </dialog>
