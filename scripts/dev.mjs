@@ -60,14 +60,35 @@ watch(ROOT, { recursive: true }, (_event, name) => {
   notify();
 });
 
-/** Resuelve la URL a un archivo dentro del repo, o null si se escapa de ROOT. */
+/**
+ * Resuelve la URL a un archivo dentro del repo, o null si se escapa de ROOT o si no
+ * se puede leer. Un pedido malformado —`//`, un `%` suelto— hacía explotar `new URL`
+ * y con eso se caía el servidor entero: acá se trata como "no existe" y listo.
+ */
 function resolve(url) {
-  const path = decodeURIComponent(new URL(url, 'http://x').pathname);
+  let path;
+  try {
+    path = decodeURIComponent(new URL(url, 'http://x').pathname);
+  } catch {
+    return null;
+  }
   const file = normalize(join(ROOT, path === '/' ? 'index.html' : path));
   return file.startsWith(ROOT) ? file : null;
 }
 
 const server = createServer(async (req, res) => {
+  // Una excepción suelta acá tumbaba el servidor y había que levantarlo a mano en
+  // mitad de una sesión de trabajo. Ningún pedido vale eso.
+  try {
+    await handle(req, res);
+  } catch (err) {
+    console.error(`  ! ${req.method} ${req.url}: ${err.message}`);
+    if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('Error del servidor de desarrollo');
+  }
+});
+
+async function handle(req, res) {
   if (req.url === '/__dev') {
     res.writeHead(200, {
       'content-type': 'text/event-stream',
@@ -96,7 +117,7 @@ const server = createServer(async (req, res) => {
   } catch {
     send(404, `No encontrado: ${req.url}`);
   }
-});
+}
 
 server.listen(PORT, () => {
   console.log(`Axie Chance en http://localhost:${PORT} · sin caché, recarga sola al guardar`);
