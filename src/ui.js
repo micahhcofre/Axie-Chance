@@ -3,6 +3,8 @@ import { AXIES, AXIE_IDS, axie, axieArt } from './axies.js';
 import { createMotion } from './axie-motion.js';
 import { activeSymbols, isScoringCell, scoreChain, survivalOdds } from './rules.js';
 import { createVfx, hitDelay, preloadVfx } from './vfx.js';
+import { createAudio } from './audio.js';
+import { createCues } from './audio-cues.js';
 import {
   TARGET, PLAYERS, MARKET_SIZE, TUNING, hpOf, ownedBy, swingOf,
 } from './game.js';
@@ -302,32 +304,40 @@ function controlsHtml(state, picking) {
     <button class="btn btn-primary" data-action="stand" ${disabled}>Atacar</button>`;
 }
 
+/**
+ * El medidor de la próxima carta, colgado en el aire entre los dos Axies.
+ *
+ * Antes era un cuadro en la barra de la derecha, y ahí el número más importante de la
+ * decisión —seguir o plantarse— quedaba fuera de la pelea: había que despegar la vista
+ * del combate para leerlo. Acá es un aro, del tamaño de una moneda, en el hueco que
+ * los dos bichos dejan libre: se lee sin mover los ojos y no tapa nada.
+ *
+ * Solo existe mientras te toca decidir. Cuando juega la CPU no hay nada que medir, y
+ * un aro apagado en el medio de la pantalla sería un adorno.
+ */
 function oddsHtml(state, pool) {
-  // No hay descarte: fuera del mazo solo están las cartas de la cadena en curso.
-  const deckInfo = `<div class="odds-deck"><span>Tu mazo ${ownedBy(state, 'human')}</span>
-    <span>Sin salir ${state.decks.human.length}</span></div>`;
+  if (state.turn !== 'human' || state.phase !== 'turn') return '';
 
-  if (state.turn !== 'human' || state.phase !== 'turn') {
-    return `<div class="odds-label">Tu mazo</div>
-      <div class="odds-note" style="margin-top:6px">
-        Las probabilidades aparecen cuando te toque decidir.</div>${deckInfo}`;
-  }
-
-  const chain = state.chains.human;
-  const { ok, total, p } = survivalOdds(chain, pool);
+  const { ok, total, p } = survivalOdds(state.chains.human, pool);
   const pct = Math.round(p * 100);
   const risk = pct >= 65 ? 'low' : pct >= 40 ? 'mid' : 'high';
-  const pips = activeSymbols(chain)
-    .map((s) => `<span class="pip" style="--c:${SYMBOLS[s].color}">${crest(s)}</span>`)
-    .join('');
 
+  // El aro se dibuja con `--p`; el texto del lector de pantalla va aparte porque
+  // "72 % 6/10" suelto no dice nada.
   return `
-    <div class="odds-label">La próxima carta continúa</div>
-    <div class="odds-value" data-risk="${risk}">${pct}%
-      <div class="odds-bar"><i style="width:${pct}%"></i></div>
+    <div class="odds-cap" aria-hidden="true">continúa la cadena</div>
+    <div class="odds-dial" data-risk="${risk}" style="--p:${pct}" aria-hidden="true">
+      <b class="odds-pct">${pct}<i>%</i></b>
+      <span class="odds-frac">${ok}/${total}</span>
     </div>
-    <div class="odds-note">${ok} de ${total} cartas sirven</div>
-    <div class="odds-alive">${pips}</div>${deckInfo}`;
+    <span class="sr-only">La próxima carta continúa la cadena: ${pct}%.
+      ${ok} de ${total} cartas sirven.</span>`;
+}
+
+/** El mazo, en un renglón: lo que juntaste y lo que todavía no salió esta ronda. */
+function deckHtml(state) {
+  return `<span>${ownedBy(state, 'human')} cartas</span>
+    <span>${state.decks.human.length} sin salir</span>`;
 }
 
 /**
@@ -395,19 +405,49 @@ const shakeOf = (amount) => (amount >= 20 ? 'hard' : amount >= 10 ? 'soft' : '')
  * tres se cuelgan del mismo instante — `hitDelay`, lo que tarda en conectar el
  * efecto de esa clase—, cada una arrancando lo suyo por adelantado.
  *
+ * El sonido va con ellas, y es el único que no sale de mirar el estado (ver
+ * `audio-cues.js`): el estado ya cambió, lo que falta es el instante.
+ *
  * Vive fuera del render normal porque es un pulso, no un estado: la pantalla se
  * repinta entera a cada carta y una animación puesta en el HTML se cortaría a la
  * mitad. El `<span>` del número se saca solo al terminar, así no se apilan.
  */
-function playHit(vfx, arena, portraits, motions, hit, klass) {
+function playHit(vfx, audio, arena, portraits, motions, hit, klass) {
   const el = portraits[hit.target];
   if (!el) return;
+
+  // La cáscara del huevo es un golpe pero no un ataque: nadie cruza la pantalla, el
+  // que pegó se corta donde está. Por eso no hay embestida ni efecto de clase —el kit
+  // no trae uno para el huevo— y todo el peso lo llevan el retroceso, el número y el
+  // sonido de rebote. El huevo ya se vio romperse en el golpe anterior; esto es la
+  // consecuencia, y llega un beat después justamente para que se lean separados.
+  if (hit.kind === 'thorns') {
+    audio.sfx('thorns');
+    pulse(el, 'react', 'hit', 900);
+    motions[hit.target].pulse('hurt');
+    const shake = shakeOf(hit.amount);
+    if (shake) pulse(arena, 'shake', shake, 500);
+    el.insertAdjacentHTML('beforeend', `<span class="dmg" data-kind="thorns">−${hit.amount}</span>`);
+    const back = el.querySelector('.dmg:last-child');
+    back?.addEventListener('animationend', () => back.remove());
+    return;
+  }
+
   const miss = hit.amount === 0;
   // Un ataque que conecta es el golpe de la clase del que pegó; uno que se desarma
   // es el efecto de "desarmado", y cae sobre el que falló.
   const key = miss ? 'bust' : klass;
   const impact = hitDelay(key);
   vfx.play(key, el, { from: hit.by === 'human' ? 'left' : 'right' });
+  // El sonido se larga **antes** que el efecto: lo que tiene que caer sobre el impacto
+  // es su punto más fuerte, y a eso tarda en llegar (ver `lead` en `audio.js`).
+  //
+  // El ataque que se desarmó no suena acá: ya sonó al romperse la cadena, que es el
+  // momento que cuenta (ver `audio-cues.js`). Lo que se ve acá es la consecuencia, y
+  // repetirle el ruido encima solo la corría de lugar.
+  if (!miss) audio.sfx(key, { delay: Math.max(impact - audio.lead(key), 0) });
+  // El huevo que aguanta suena arriba del golpe, apenas después.
+  if (hit.blocked > 0) audio.sfx('block', { delay: impact + 80 });
 
   // Un ataque que falla no es un ataque: no cruza a ningún lado, se le desarma
   // encima y trastabilla —eso ya lo cuenta el `whiff` sobre el que falló—.
@@ -474,6 +514,8 @@ export function mount(game) {
   const field = $('field');
   const market = $('market');
   const vfx = createVfx($('vfx'));
+  const audio = createAudio();
+  const cues = createCues(audio);
   let animated = 0; // id del último golpe ya animado
   // Cartas que ya se le vieron a cada uno en la cadena en curso, para que el tirón
   // de robar salga una sola vez por carta y no en cada repintado.
@@ -530,13 +572,45 @@ export function mount(game) {
       $('axie-picker').innerHTML = axiePickerHtml(state);
     }
     $('odds').innerHTML = oddsHtml(state, game.unseenPool('human'));
+    $('deck').innerHTML = deckHtml(state);
     $('log').innerHTML = logHtml(state);
 
     if (state.lastHit && state.lastHit.id !== animated) {
       animated = state.lastHit.id;
-      playHit(vfx, arena, portraits, motions, state.lastHit, state.symbols[state.lastHit.by]);
+      playHit(vfx, audio, arena, portraits, motions, state.lastHit, state.symbols[state.lastHit.by]);
     }
+    // Todo lo demás que suena sale de comparar este estado con el anterior.
+    cues.watch(state);
   });
+
+  /**
+   * El audio no puede arrancar solo: hasta que el jugador no toca algo, el navegador
+   * no deja sonar nada. Cualquier clic o tecla sirve, y se sigue llamando después de
+   * la primera vez porque el contexto se suspende al volver de otra pestaña.
+   */
+  for (const kind of ['pointerdown', 'keydown']) {
+    document.addEventListener(kind, () => audio.unlock(), { capture: true });
+  }
+  // Un combate en una pestaña que nadie está mirando sigue solo: que siga callado.
+  document.addEventListener('visibilitychange', () => audio.listen(!document.hidden));
+
+  const toggles = { sfx: $('sfx-btn'), music: $('music-btn') };
+  function paintToggles() {
+    toggles.sfx.dataset.on = String(audio.sfxOn);
+    toggles.sfx.setAttribute('aria-pressed', String(audio.sfxOn));
+    toggles.music.dataset.on = String(audio.musicOn);
+    toggles.music.setAttribute('aria-pressed', String(audio.musicOn));
+  }
+  toggles.sfx.addEventListener('click', () => {
+    audio.setSfx(!audio.sfxOn);
+    paintToggles();
+  });
+  toggles.music.addEventListener('click', () => {
+    audio.setMusic(!audio.musicOn);
+    paintToggles();
+  });
+  paintToggles();
+
 
   $('controls').addEventListener('click', (e) => {
     const action = e.target.closest('[data-action]')?.dataset.action;

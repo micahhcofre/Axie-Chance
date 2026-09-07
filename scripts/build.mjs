@@ -9,7 +9,7 @@ const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 
 const MODULES = [
   'data', 'axie-avatars', 'axie-poses', 'axies', 'rules', 'ai', 'game',
-  'vfx-clips', 'vfx', 'axie-motion', 'ui', 'main',
+  'vfx-clips', 'vfx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'ui', 'main',
 ];
 const FONTS =
   'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800' +

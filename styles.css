@@ -32,7 +32,7 @@ body {
 
 /* Los números se leen en columna por todos lados: marcador, rachas, probabilidades. */
 .sb-round, .sb-pool, .field-dmg, .field-mods, .plate-hp b, .plate-tag, .pip-status,
-.odds-value, .odds-note, .odds-deck, .run, .card-no, .controls-msg b {
+.odds-pct, .odds-frac, .deck, .run, .card-no, .controls-msg b {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
@@ -40,6 +40,13 @@ body {
 :where(button, select, [href]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Lo que solo tiene que leer un lector de pantalla: la frase completa detrás de un
+   número que en pantalla se entiende por dónde está puesto. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
 }
 
 .app {
@@ -128,6 +135,15 @@ body {
 .btn:disabled { opacity: .35; cursor: not-allowed; }
 .btn-ghost { background: transparent; font-size: 13px; padding: 7px 12px; color: var(--ink-dim); }
 .btn-ghost:hover:not(:disabled) { color: var(--ink); }
+/* Los dos interruptores de sonido. Apagados no solo se atenúan: les cruza una raya,
+   que es lo que se lee de un vistazo y lo único que funciona sin distinguir colores. */
+.btn-sound { position: relative; padding: 7px 10px; font-size: 15px; line-height: 1; }
+.btn-sound[data-on="false"] { opacity: .45; }
+.btn-sound[data-on="false"]::after {
+  content: ''; position: absolute; left: 14%; right: 14%; top: 50%;
+  border-top: 2px solid currentColor; transform: rotate(-24deg);
+}
+
 .btn-primary {
   background: linear-gradient(180deg, #5ee7c6, #33bfa0);
   border-color: #2ba98d; color: #07231d; padding: 12px 26px; font-size: 15px;
@@ -149,25 +165,85 @@ body {
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: minmax(150px, 1fr) auto auto;
+  /* La primera fila es el escenario: la chapa, el Axie y el aire que necesitan para no
+     pisarse. Va con un mínimo propio —`--escena`— y no con uno cualquiera, porque un
+     `minmax()` con mínimo fijo **no crece con su contenido**: si lo dejás corto, en una
+     ventana baja las cartas le ganan el espacio y la chapa y el bicho terminan uno
+     encima del otro. Con el mínimo puesto en lo que de verdad miden, el frente puede
+     empujar todo lo que quiera: el escenario ya no se deja apretar. */
+  grid-template-rows: minmax(var(--escena), 1fr) auto auto;
   gap: 10px 0;
   min-height: 470px;
+  /* Lo que mide el escenario sale del alto de la ventana, no de un número suelto: en
+     una pantalla baja un mínimo fijo y grande le termina empujando los botones fuera
+     del cuadro, que es peor que tener poco cielo. El Axie se achica con la misma
+     cuenta, así que la chapa y el bicho siempre entran en la fila. */
+  --escena: clamp(210px, 42vh, 320px);
   --pad: 16px;
   padding: var(--pad);
   border-radius: var(--radius);
   overflow: hidden;
-  background: var(--bg-2) var(--arena, none) center 38% / cover no-repeat;
+  /* El dibujo no va acá: va en `.arena-art`. Lo que queda es el color con el que
+     sigue el suelo cuando el dibujo se termina antes que el cuadro. */
+  background: var(--piso, var(--bg-2));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07), var(--shadow);
 }
 
 /* Un fondo por clase, del Origins Asset Kit: el terreno es el del Axie que jugás.
-   `npm run build` cambia estas rutas por data URI para el archivo suelto. */
-.arena[data-arena="beast"]   { --arena: url("Backgrounds/beast-meseta.jpg"); }
-.arena[data-arena="aquatic"] { --arena: url("Backgrounds/aquatic-laguna.jpg"); }
-.arena[data-arena="bird"]    { --arena: url("Backgrounds/bird-cielo.jpg"); }
-.arena[data-arena="plant"]   { --arena: url("Backgrounds/plant-jungla.jpg"); }
-.arena[data-arena="bug"]     { --arena: url("Backgrounds/bug-canon.jpg"); }
-.arena[data-arena="reptile"] { --arena: url("Backgrounds/reptile-caverna.jpg"); }
+   `npm run build` cambia estas rutas por data URI para el archivo suelto.
+
+   `--horizonte` es en qué altura del dibujo —de 0 arriba a 1 abajo— está su línea de
+   suelo: el borde del agua en la laguna, el filo de la meseta, el techo de las nubes.
+   `--piso`, el color promedio de su franja de abajo, que es con lo que se estira el
+   terreno más allá del dibujo. */
+.arena[data-arena="beast"]   { --arena: url("Backgrounds/beast-meseta.jpg");    --horizonte: .45; --piso: #362a12; }
+.arena[data-arena="aquatic"] { --arena: url("Backgrounds/aquatic-laguna.jpg");  --horizonte: .47; --piso: #094c41; }
+.arena[data-arena="bird"]    { --arena: url("Backgrounds/bird-cielo.jpg");      --horizonte: .66; --piso: #d69288; }
+.arena[data-arena="plant"]   { --arena: url("Backgrounds/plant-jungla.jpg");    --horizonte: .48; --piso: #07241f; }
+.arena[data-arena="bug"]     { --arena: url("Backgrounds/bug-canon.jpg");       --horizonte: .70; --piso: #7d3332; }
+.arena[data-arena="reptile"] { --arena: url("Backgrounds/reptile-caverna.jpg"); --horizonte: .75; --piso: #682a4e; }
+
+/* ---------- el terreno ---------- */
+
+/* Acá se arregla lo único que de verdad hacía flotar a los Axies.
+
+   El dibujo tiene su propia línea de suelo pintada, y los Axies apoyan en el borde de
+   abajo de la primera fila. Mientras el fondo fue `cover` del cuadro entero, esas dos
+   líneas caían donde caían: en una ventana coincidían de casualidad y los bichos
+   quedaban parados en la orilla, y en la de al lado el agua terminaba treinta píxeles
+   más abajo y quedaban suspendidos sobre ella. No se podía arreglar con un número: la
+   posición del dibujo dependía de la forma del cuadro y la de las patas, de cuánto
+   ocupaban las cartas.
+
+   La capa toma exactamente la fila del escenario, así que su borde de abajo **es** la
+   línea de piso. El dibujo cuelga de adentro con una sola cuenta: se le da el alto que
+   haga falta para que su parte de arriba del horizonte mida lo que mide el cielo
+   —`100% / --horizonte`— y se lo baja lo que sobra por debajo. Su línea de suelo cae
+   entonces sobre el borde de abajo, pase lo que pase con el resto de la pantalla. */
+.arena-art {
+  grid-area: 1 / 1 / 2 / -1;
+  position: relative; z-index: 0;
+  /* el terreno llega hasta el borde del cuadro, no hasta el padding */
+  margin: calc(var(--pad) * -1) calc(var(--pad) * -1) 0;
+}
+.arena-art i {
+  position: absolute; left: 50%; translate: -50% 0;
+  height: calc(100% / var(--horizonte, .5));
+  bottom: calc(-100% * (1 - var(--horizonte, .5)) / var(--horizonte, .5));
+  /* El ancho sale del alto: los seis dibujos son 1400×787. `min-width` es el seguro
+     para un cuadro rarísimo de ancho —antes de dejar un vacío al costado, prefiere
+     recortar el dibujo de arriba y abajo—. */
+  aspect-ratio: 1400 / 787; min-width: 100%;
+  /* Los dibujos con la línea de suelo alta —el cielo, el cañón, la caverna— tienen
+     poco terreno pintado por debajo, y en un cuadro alto se les termina antes que la
+     pantalla. El degradé apaga el dibujo contra `--piso` desde la mitad de su parte de
+     abajo, así que cuando la imagen se acaba ya venía siendo ese color y el suelo
+     sigue sin junta. */
+  background:
+    linear-gradient(180deg, transparent calc((var(--horizonte, .5) + 1) * 50%),
+      var(--piso) 100%),
+    var(--arena, none) center / cover no-repeat;
+}
 
 /* El fondo es una ilustración con luz propia: se apaga lo justo para que las cartas y
    las chapas se lean, y se deja limpio el medio, que es donde pelean. */
@@ -198,7 +274,7 @@ body {
      patas por más que el arena se achique — y cambiar de tamaño es cambiar `--air`.
      Para abajo se estira de más a propósito: sobra el `overflow: hidden` del arena y
      así el suelo llega al borde en cualquier pantalla. */
-  --air: 84px; --under: 460px;
+  --air: 84px; --under: 460px; --caida: 1; --niebla: .14;
   content: ""; grid-area: 1 / 1 / 2 / -1; align-self: end;
   height: calc(var(--air) + var(--under));
   margin: 0 calc(var(--pad) * -1) calc(var(--under) * -1);
@@ -210,8 +286,8 @@ body {
        oscuro que sea, pasa por una viñeta más. */
     linear-gradient(180deg,
       transparent 0,
-      rgba(178, 204, 255, .05) calc(var(--air) - 34px),
-      rgba(214, 230, 255, .14) calc(var(--air) - 3px),
+      rgba(178, 204, 255, calc(var(--niebla) * .36)) calc(var(--air) - 34px),
+      rgba(214, 230, 255, var(--niebla)) calc(var(--air) - 3px),
       transparent calc(var(--air) + 9px)),
     /* Un brillo tendido sobre el suelo, abajo de donde apoyan. Es lo que lo vuelve un
        plano y no un cielo oscuro: una superficie tiene luz en el medio y se apaga
@@ -223,14 +299,20 @@ body {
        línea queda casi limpio —es terreno con luz encima— y recién se hunde a medida
        que se acerca al borde de abajo. Si oscurece de golpe, las sombras que apoyan a
        los Axies caen sobre negro y no se ven, que es justo lo contrario de lo que
-       tienen que hacer. */
+       tienen que hacer.
+
+       `--caida` es cuánto tarda en hundirse. En grande el hundimiento puede ser lento
+       —hay píxeles de sobra para contarlo—; en un teléfono la misma distancia se come
+       la pantalla entera y el bicho queda parado sobre un piso que todavía está
+       iluminado, que es exactamente la sensación de estar flotando. Achicarla junta
+       todo el escalón contra las patas. */
     linear-gradient(180deg,
       rgba(6, 9, 22, 0) 0,
       rgba(6, 9, 22, .02) calc(var(--air) - 10px),
-      rgba(6, 9, 22, .20) calc(var(--air) + 8px),
-      rgba(6, 9, 22, .48) calc(var(--air) + 44px),
-      rgba(6, 9, 22, .70) calc(var(--air) + 104px),
-      rgba(6, 9, 22, .87) calc(var(--air) + 200px));
+      rgba(6, 9, 22, .20) calc(var(--air) + 8px * var(--caida)),
+      rgba(6, 9, 22, .48) calc(var(--air) + 44px * var(--caida)),
+      rgba(6, 9, 22, .70) calc(var(--air) + 104px * var(--caida)),
+      rgba(6, 9, 22, .87) calc(var(--air) + 200px * var(--caida)));
 }
 
 /* El sacudón del golpe. Se mueve el arena entero —fondo, Axies, cartas y todo— porque
@@ -330,7 +412,7 @@ body {
    la sombra que lo apoya y el charco de luz del turno salen de acá, así que achicar
    el Axie en una pantalla angosta les cambia el tamaño a los tres de una. */
 .board-axie {
-  --axie-w: min(100%, 254px);
+  --axie-w: min(100%, clamp(150px, 27vh, 254px));
   position: relative;
   flex: 1 1 auto; min-height: 130px; width: 100%;
   display: flex; align-items: flex-end; justify-content: center;
@@ -388,6 +470,70 @@ body {
 }
 
 .board-axie .axie { position: relative; z-index: 1; width: var(--axie-w); }
+
+/* ---------- el medidor de la próxima carta ---------- */
+
+/* Un aro colgado en el hueco que dejan los dos Axies, a la altura de la línea del
+   horizonte. Va como celda de la grilla —la misma fila que los peleadores, centrada—
+   y no en `position: absolute`, así queda siempre en el mismo lugar de la escena por
+   más que el arena se estire o se achique.
+
+   `pointer-events: none` porque no se toca: es un instrumento, no un control. */
+.odds {
+  grid-area: 1 / 1 / 2 / -1;
+  justify-self: center; align-self: center;
+  /* Un empujón para arriba: centrado a secas el aro le queda apoyado en la cabeza del
+     Axie, y el hueco de cielo está un poco más alto que el medio de la fila. */
+  margin-bottom: 26px;
+  position: relative; z-index: 3; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  --dial: 122px;
+}
+/* Sin turno propio no hay nada que medir y `oddsHtml` no devuelve nada: que el hueco
+   vacío tampoco empuje. */
+.odds:empty { display: none; }
+
+/* El aro es un `conic-gradient` cortado por un disco: el degradé cónico pinta la
+   vuelta hasta `--p`, y el radial de arriba tapa el centro y deja a la vista nada más
+   que el anillo. El disco no es transparente a propósito —el fondo del arena es una
+   ilustración con luz y el número tiene que caer sobre algo oscuro—. */
+.odds-dial {
+  width: var(--dial); height: var(--dial);
+  display: grid; place-content: center; justify-items: center;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, rgba(9, 12, 26, .84) 84%, transparent 85%),
+    conic-gradient(currentColor calc(var(--p) * 1%), rgba(7, 10, 24, .6) 0);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  box-shadow:
+    0 10px 28px -8px rgba(0, 0, 0, .8),
+    0 0 22px -4px color-mix(in srgb, currentColor 40%, transparent);
+}
+/* El mismo semáforo de siempre: verde mientras la cadena aguanta, rojo cuando la
+   próxima carta es una apuesta. El color lo lleva `currentColor`, así que lo toman de
+   una el anillo y el resplandor. */
+.odds-dial[data-risk="low"]  { color: var(--accent); }
+.odds-dial[data-risk="mid"]  { color: #f5c451; }
+.odds-dial[data-risk="high"] { color: var(--danger); }
+
+/* Todo lo de adentro se mide contra `--dial`: achicar el aro achica el número. */
+.odds-pct {
+  font-size: calc(var(--dial) * .27); font-weight: 600; line-height: 1;
+  color: var(--ink);
+}
+.odds-pct i {
+  font-style: normal; font-size: .45em; font-weight: 500;
+  margin-left: 1px; color: var(--ink-faint);
+}
+.odds-frac {
+  margin-top: 3px;
+  font-size: calc(var(--dial) * .098); letter-spacing: .04em; color: var(--ink-dim);
+}
+.odds-cap {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--ink-dim); text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
+}
 
 /* ---------- la mesa, que es de los dos ---------- */
 
@@ -707,6 +853,13 @@ body {
   animation: dmg-float .9s ease-out forwards;
 }
 .dmg[data-kind="whiff"] { color: var(--ink-dim); font-size: 17px; letter-spacing: .1em; }
+/* La cáscara. Más chica que un ataque porque lo es —un tercio del golpe— y con el
+   color del huevo, que es lo único que dice de dónde salió ese número: no hay
+   embestida ni efecto de clase que lo expliquen. */
+.dmg[data-kind="thorns"] {
+  color: #ffd98a; font-size: 20px;
+  text-shadow: 0 0 10px rgba(255, 190, 90, .55), 0 2px 3px rgba(0, 0, 0, .6);
+}
 @keyframes dmg-float {
   0%   { opacity: 0; transform: translateY(10px) scale(.7); }
   20%  { opacity: 1; transform: translateY(0) scale(1.15); }
@@ -870,32 +1023,14 @@ body {
   color: var(--ink-faint); margin: 2px 0 -4px 2px;
 }
 
-.odds {
-  padding: 14px 16px;
-  background: rgba(20, 26, 48, .55);
-  border: 1px solid rgba(255, 255, 255, .07); border-radius: var(--radius);
-}
-.odds-label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-faint);
-}
-.odds-value { font-size: 34px; font-weight: 600; line-height: 1.1; }
-.odds-value[data-risk="low"] { color: var(--accent); }
-.odds-value[data-risk="mid"] { color: #f5c451; }
-.odds-value[data-risk="high"] { color: var(--danger); }
-.odds-bar { height: 6px; border-radius: 3px; background: #2a3260; overflow: hidden; margin: 8px 0 10px; }
-.odds-bar i { display: block; height: 100%; background: currentColor; transition: width .3s ease; }
-.odds-note { font-size: 12px; color: var(--ink-dim); }
-.odds-alive { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
-.odds-alive .pip {
-  width: 30px; height: 30px; display: grid; place-items: center;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--c) 20%, transparent);
-  border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
-}
-.odds-deck {
+/* El mazo, en un renglón. Los números de la decisión ya no viven acá —se leen en el
+   aro del arena—: lo que queda es el inventario, que se mira entre rondas. */
+.deck {
   display: flex; justify-content: space-between;
-  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line);
-  font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums;
+  padding: 9px 12px;
+  background: rgba(20, 26, 48, .55);
+  border: 1px solid rgba(255, 255, 255, .07); border-radius: 10px;
+  font-size: 12px; color: var(--ink-dim);
 }
 
 /* El historial no compite con la mesa: alto fijo y chico, con scroll propio. */
@@ -964,9 +1099,21 @@ body {
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; }
   .table, .sidebar { grid-column: 1; grid-row: auto; }
   .log { max-height: 120px; }
-  .arena { min-height: 400px; --pad: 12px; }
+  .arena { min-height: 400px; --pad: 12px; --escena: 250px; }
   .board-axie { min-height: 100px; --axie-w: min(100%, 190px); }
-  .arena::after { --air: 62px; }
+  .arena::after { --air: 62px; --caida: .82; --niebla: .18; }
+
+  /* Se acabó el cielo: de acá para abajo, entre la chapa y la cabeza del Axie no queda
+     hueco donde colgar el aro sin taparle la cara a alguien. Baja al costado de la
+     mesa —adelante de la escena, apoyado sobre el piso, al lado de las cartas— y la
+     mesa se corre para dejarle el lugar. */
+  .odds {
+    grid-area: 2 / 1 / 3 / -1;
+    justify-self: end; align-self: center; margin-bottom: 0;
+    --dial: 84px;
+  }
+  .odds-cap { display: none; }
+  .field { padding-right: 96px; }
   .plate { padding: 6px 9px; }
   .plate-name { font-size: 14px; }
   .field-dmg { font-size: 25px; }
@@ -975,14 +1122,23 @@ body {
 }
 
 @media (max-width: 640px) {
-  .arena { min-height: 360px; grid-template-rows: minmax(110px, 1fr) auto auto; }
+  .arena { min-height: 360px; --escena: 208px; }
   .board-axie { min-height: 80px; --axie-w: min(100%, 148px); }
-  .arena::after { --air: 46px; }
+  .arena::after { --air: 46px; --caida: .62; --niebla: .24; }
   .plate-who { display: none; }
   .card { width: 54px; }
-  .strip { min-height: 132px; }
   .market-card, .market-slot { width: 62px; min-height: 126px; }
-  .controls { min-height: 46px; gap: 8px; }
+
+  /* El frente se aprieta todo lo que puede: en un teléfono cada píxel que le sobra a
+     las cartas se lo está sacando a la pelea, que es lo que se vino a ver. */
+  .field { margin-top: 12px; padding-right: 74px; }
+  .strip { min-height: 118px; }
+  .controls { min-height: 44px; gap: 8px; }
+  .controls-msg { font-size: 13px; }
+  .btn-danger, .btn-primary { padding: 10px 15px; font-size: 14px; }
+
+  .odds { --dial: 66px; }
+  .odds-frac { display: none; }
 }
 
 /* Nada de movimiento para quien lo pidió: las cartas aparecen sin repartirse. */

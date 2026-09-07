@@ -63,8 +63,18 @@ const PICKS = {
   bug: `${WEB}bug_slash_attack.wav`,
   plant: `${WEB}plant_slash_attack.wav`,
   reptile: `${WEB}reptile_slash_attack.wav`,
-  // El ataque que se desarma: el mismo nombre que el efecto que lo dibuja.
-  bust: `${UNITY}disarm.wav`,
+  // La carta que corta la cadena. Suena cuando cae, no con la animación de desarme
+  // que viene después (ver `audio-cues.js`), así que tiene que ser un impacto y no un
+  // efecto: lo que hace falta es un golpe seco, grave y corto.
+  //
+  // Se eligió midiendo el ataque y la cola de los 45 impactos del kit, no por el
+  // nombre. `disarm.wav` —el que le corresponde al efecto `disarmed`— tarda 660 ms en
+  // llegar a su punto más fuerte y dura 1,5 s: puesto después de una seguidilla de
+  // tics que suben, se leía como un swoosh más y no como un corte. `hex` era peor
+  // todavía en lo mismo (pico a los 550 ms). Este llega en 165 ms, con el 69% de la
+  // energía de su arranque por debajo de 400 Hz, y encima es de una clase que este
+  // juego no juega: no se puede confundir con el golpe de nadie.
+  bust: `${WEB}mech_throw_hit.wav`,
   // Cada carta que alarga la cadena. Se reproduce cortado y cada vez más agudo.
   draw: `${WEB}power_gain.wav`,
   // El huevo del rival aguantando, y la cáscara volviéndose contra el que pegó.
@@ -79,7 +89,14 @@ const PICKS = {
   octopus: `${WEB}bubble.wav`,
   // El centro: cuando se abre, cuando agarrás una carta y cuando lo renovás.
   open: `${UNITY}summon_on.wav`,
-  take: `${WEB}feather.wav`,
+  // La carta que entra al mazo. El primero que se probó acá fue `feather` —una pluma,
+  // que para una carta suena obvio— y era el peor error posible: 300 ms de ataque,
+  // 1,94 s audible y planitud espectral 0,014, o sea un pad tonal. El tic de robar es
+  // tonal también, y la carta se agarra medio segundo antes de que abra el turno
+  // siguiente: los dos se fundían en una sola cosa larga. Este es lo contrario en los
+  // tres ejes —75 ms de ataque, ruidoso (0,42) y una octava más arriba del tic— y
+  // cortado a 0,25 s es un clic, que es lo que una carta tiene que ser.
+  take: `${WEB}mech_projectile_hit.wav`,
   renew: `${WEB}dispel.wav`,
   // El final.
   win: `${WEB}power_awaken.wav`,

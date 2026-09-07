@@ -29,6 +29,12 @@
           <option value="duro">Duro</option>
         </select>
       </label>
+      <!-- Los efectos vienen prendidos; la música no, que son dos minutos de wav que
+           el navegador tiene que bajar y no todo el mundo la quiere. -->
+      <button class="btn btn-ghost btn-sound" id="sfx-btn" data-on="true"
+        aria-pressed="true" title="Efectos de sonido" aria-label="Efectos de sonido">🔊</button>
+      <button class="btn btn-ghost btn-sound" id="music-btn" data-on="false"
+        aria-pressed="false" title="Música" aria-label="Música">🎵</button>
       <button class="btn btn-ghost" id="rules-btn">Reglas</button>
       <button class="btn btn-ghost" id="new-match">Nueva partida</button>
     </div>
@@ -36,9 +42,14 @@
 
   <!-- El combate ocupa la pantalla: los dos Axies enfrentados sobre el terreno de tu
        clase, con su barrita de vida encima, y una sola mesa abajo —la usa el que está
-       jugando—. El centro no vive acá: aparece por encima cuando termina un turno. -->
+       jugando—. El medidor de la próxima carta va adelante de la escena: colgado entre
+       los dos si hay cielo, al costado de la mesa si no. El centro no vive acá: aparece
+       por encima cuando termina un turno. -->
   <main class="table">
     <section class="arena" id="arena">
+      <!-- El terreno. Va en su propia capa y no como fondo del arena porque tiene que
+           quedar clavado a la línea donde apoyan los Axies: ver `.arena-art`. -->
+      <div class="arena-art" aria-hidden="true"><i></i></div>
       <div class="fighter fighter--human" id="fighter-human">
         <div class="plate" id="plate-human"></div>
         <div class="board-axie" id="axie-human"></div>
@@ -47,6 +58,8 @@
         <div class="plate" id="plate-cpu"></div>
         <div class="board-axie" id="axie-cpu"></div>
       </div>
+      <!-- El medidor de la próxima carta, adelante de la escena. -->
+      <div class="odds" id="odds"></div>
       <div class="field" id="field"></div>
       <div class="controls" id="controls"></div>
       <canvas class="vfx" id="vfx" aria-hidden="true"></canvas>
@@ -55,7 +68,8 @@
   </main>
 
   <aside class="sidebar">
-    <div class="odds" id="odds"></div>
+    <p class="aside-label">Tu mazo</p>
+    <div class="deck" id="deck"></div>
     <p class="aside-label">Historial</p>
     <ol class="log" id="log"></ol>
   </aside>
@@ -113,8 +127,8 @@
      que ganárselos.</p>
   <p><b>No hay descarte:</b> al empezar cada intercambio se rebaraja el mazo entero, como una
      tragamonedas. Dentro del turno las cartas que ya salieron no vuelven, así que
-     acordarte de lo que salió sirve mientras dura la tirada — el panel de la derecha te
-     muestra qué porcentaje de tu mazo restante continúa la cadena. De una ronda a la otra
+     acordarte de lo que salió sirve mientras dura la tirada — el medidor del arena
+     te dice qué porcentaje de tu mazo restante continúa la cadena. De una ronda a la otra
      no se arrastra nada.</p>
 
   <h3>El centro</h3>

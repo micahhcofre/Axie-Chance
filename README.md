@@ -21,7 +21,7 @@ común (`python3 -m http.server`) el navegador se queda con los módulos viejos 
 los cambios no aparecen hasta un recargado forzado.
 
 ```sh
-npm test               # reglas, flujo de partida y render
+npm test               # reglas, flujo de partida, render y sonido
 ```
 
 Para tener el juego en un archivo suelto, sin servidor ni dependencias:
@@ -394,6 +394,117 @@ distintos: la escena va sobre `.axie` y `.axie-rig`, la actuación sobre `.axie-
 capas de adentro. Sin CDN, sin `animate()` o con `prefers-reduced-motion`, no se reproduce
 nada y el juego es el mismo.
 
+## El sonido
+
+El kit trae **297 wav**: los efectos que Sky Mavis preparó para web
+(`web-vfx/public/sfx/`), los mismos más unos cuantos que ahí faltan
+(`Assets/OriginsKit/Audio/`) y quince temas (`Assets/OriginsKit/PvE/Music/`). Como con
+los efectos de golpe, en el repo no queda un solo byte de audio: se baja cada archivo
+una vez para **medirlo**, se guardan los números y el navegador pide el wav al CDN
+recién cuando ese sonido hace falta.
+
+```sh
+npm run sfx            # regenera src/audio-clips.js
+```
+
+[`scripts/sfx.mjs`](scripts/sfx.mjs) lee el WAV a mano —recorriendo los chunks, porque
+varios traen metadatos antes del audio— y de cada uno saca cuatro números:
+
+- **`onset`** — los archivos arrancan con hasta 110 ms de silencio. Reproducidos tal
+  cual, el golpe suena tarde: el efecto ya explotó. Se saltea.
+- **`lead`** — cuánto tarda en llegar a su punto más fuerte (200 a 660 ms). Es lo que
+  permite que el **pico** caiga sobre el impacto y no el arranque: `playHit` larga el
+  sonido esa cantidad **antes** que el efecto.
+- **`secs`** — cuánto se oye de verdad, para soltarlo cuando terminó.
+- **`gain`** — los 41 archivos vienen normalizados al pico, así que el pico no dice
+  nada: los 41 dan 1,0. El que dice es el RMS de la parte audible, y ahí hay **7 dB**
+  entre el más flojo y el más fuerte. Sin emparejarlos el veneno tapa al huevo.
+
+Eso es la medición. La mezcla —qué manda sobre qué— es una decisión de juego y vive en
+[`src/audio.js`](src/audio.js): el golpe adelante, el tic de cada carta bien atrás
+(suena hasta seis veces por turno) y la música al fondo.
+
+| momento | archivo del kit | |
+|---|---|---|
+| cada carta de la cadena | `power_gain` | cortado a 0,5 s, y 6% más agudo por eslabón |
+| **la carta que corta la cadena** | `mech_throw_hit` | un golpe seco de medio segundo, en el momento en que cae |
+| el ataque que conecta | `<clase>_slash_attack` | el mismo golpe que dibuja el efecto |
+| el huevo que aguanta | `shield` | |
+| la cáscara que vuelve | `reflect_damage` | |
+| los seis poderes | `damage_boost`, `poison`, `buff`, `heal`, `weak`, `bubble` | en fila, después del impacto |
+| el centro que se abre | `summon_on` | |
+| una carta que entra al mazo | `mech_projectile_hit` | un clic de 0,25 s |
+| renovar el centro | `dispel` | |
+| ganar / perder | `power_awaken` / `death_mark` | |
+
+La cadena cortada costó tres intentos y los dos primeros fallaron por lo mismo:
+elegir el archivo por el nombre. El obvio era `disarm.wav`, el que le corresponde al
+efecto `disarmed` que se dibuja. Medido, es **otro swoosh**: 4644 Hz de centroide
+contra los 4575 Hz que promedian los seis golpes de clase, la misma planitud espectral
+que un `slash` (0,22) y, como ellos, subiendo. Sonando después de seis tics que también
+suben, se perdía adentro de la tirada. El segundo intento —`hex`, tonal y una octava
+más abajo— arreglaba el registro pero no el gesto: **tarda 550 ms en llegar a su punto
+más fuerte**, o sea que es un swell, y un corte que crece durante medio segundo no es
+un corte.
+
+Lo que hacía falta era un impacto, así que se midieron el ataque y la cola de los 45
+impactos del kit. `mech_throw_hit` llega a su pico en **165 ms** con el 69% de la
+energía de su arranque por debajo de 400 Hz, se corta a los 0,45 s (`CUT` en
+`audio.js`) y sale un 10% más grave (`RATE`). De paso es de una clase que este juego no
+juega, así que no se puede confundir con el golpe de nadie.
+
+Pero la mitad del problema no era el archivo sino **cuándo sonaba**. El corte se oía
+junto con la animación de desarme, que llega 700 ms después: para entonces el jugador
+ya había leído en la pantalla que se le había cortado, y el sonido no le contaba nada.
+Ahora suena en el momento en que la carta cae —la misma línea que decide el tic, en
+[`audio-cues.js`](src/audio-cues.js)— y el desarme que viene después va en silencio. Es
+lo que hace la diferencia: no es un ruido más en la escena, es la respuesta a la carta
+que acabás de robar.
+
+La carta que entra al mazo tuvo el mismo problema por el mismo motivo. El primer
+archivo fue `feather` —una pluma, que para una carta suena obvio— y medido es un pad:
+**300 ms de ataque, 1,94 s audible y planitud espectral 0,014**, o sea tonal. El tic de
+robar también es tonal, y la carta se agarra medio segundo antes de que abra el turno
+siguiente: los dos se fundían en una sola cosa larga. `mech_projectile_hit` es lo
+contrario en los tres ejes —75 ms de ataque, ruidoso (0,42), una octava más arriba— y
+cortado a 0,25 s es un clic, que es lo que una carta apoyándose tiene que ser.
+
+Las tres veces el error fue el mismo: **elegir por el nombre del archivo**. La pluma
+para la carta, el `disarm` para el desarme. Los nombres del kit describen para qué lo
+hizo Sky Mavis, no cómo suena al lado de otra cosa, y eso último es lo único que
+importa cuando hay veinte sonidos compitiendo por el mismo segundo.
+
+El tic que sube es lo único que no sale del kit tal cual: **cada carta suena un 6% más
+arriba que la anterior**, hasta una quinta justa en la cadena más larga que se vio en el
+banco de pruebas. Es la tensión de la tirada dicha con el oído — mientras sube, la cosa
+va bien.
+
+Los poderes se aplican todos en el mismo instante en que se suelta el ataque, o sea
+antes de que el golpe llegue a verse. Sonando ahí serían un acorde: esperan al impacto
+—el mismo `hitDelay` con el que se sincroniza el sacudón— y salen de a uno cada 260 ms.
+
+[`src/audio-cues.js`](src/audio-cues.js) decide todo eso **mirando el estado**, como ya
+hacía la pantalla con `lastHit`: guarda una foto y la compara con la del repintado
+siguiente. Un huevo que subió es un huevo que se acaba de poner. Así las reglas siguen
+sin saber que existe el audio: `game.js` no tiene una sola línea de sonido. Lo único
+que se cuenta con `ownedBy` y no con el mazo pelado es cuántas cartas tiene cada uno:
+el mazo también sube al cerrar el turno, cuando la cadena vuelve adentro, y eso sonaba
+a carta nueva del centro.
+
+**La música** son dos temas —`pve_1` para el combate y `boss` cuando alguien baja del
+30% de vida—, y ninguno de los dos es un bucle: terminan con un fundido. La vuelta
+siguiente se larga encima de ese fundido, así que el empalme queda tapado por la cola
+que se está yendo; cuánto solapar sale de medir el fundido de cada tema. El final la
+apaga, para que el remate suene solo.
+
+Los efectos vienen prendidos y la música no: son 3,7 MB de wav que el navegador tiene
+que bajar, y eso lo decide el que juega. Los dos interruptores están arriba a la
+derecha y quedan guardados. Un efecto pesa 250-460 KB y se baja la primera vez que
+suena —parecido a los atlas de los golpes, que son 700 KB cada uno—.
+
+Nada de esto es indispensable. Sin `AudioContext`, sin CDN o con la pestaña en segundo
+plano no suena nada y el juego es exactamente el mismo, igual que con los efectos.
+
 ## La CPU
 
 `src/ai.js` evalúa cada decisión con un *lookahead* sobre las cartas que todavía no
@@ -431,8 +542,12 @@ tiene que valer más para ganarles.
 | `src/rules.js` | cadenas, cortes, puntaje y probabilidades — funciones puras |
 | `src/ai.js` | decisión de la CPU |
 | `src/game.js` | máquina de estados: turnos, daño, poderes, centro y reparto, sin DOM |
+| `src/audio-clips.js` | generado — los sonidos del kit, medidos |
+| `src/audio.js` | el mezclador: los larga, los empareja y encadena la música |
+| `src/audio-cues.js` | qué suena en cada momento, mirando el estado |
 | `src/ui.js` | render y eventos |
 | `scripts/axies.mjs` | corre el mixer offline y regenera `src/axie-avatars.js` |
 | `scripts/poses.mjs` | hornea las animaciones del kit a `src/axie-poses.js` |
+| `scripts/sfx.mjs` | mide los sonidos del kit y escribe `src/audio-clips.js` |
 | `scripts/build.mjs` | empaqueta todo en un solo `.html` |
 | `scripts/balance.mjs` | banco de pruebas: mide cuánto vale cada poder en partidas |

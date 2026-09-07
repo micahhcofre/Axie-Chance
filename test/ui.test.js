@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 
 const IDS = [
   'scoreboard', 'arena', 'fighter-human', 'fighter-cpu', 'plate-human', 'plate-cpu',
-  'axie-human', 'axie-cpu', 'field', 'controls', 'odds', 'log',
+  'axie-human', 'axie-cpu', 'field', 'controls', 'odds', 'deck', 'log',
   'new-match', 'difficulty', 'rules-btn', 'rules-modal', 'axie-picker', 'market', 'vfx',
+  'sfx-btn', 'music-btn',
 ];
 
 const nodes = Object.fromEntries(
@@ -13,6 +14,7 @@ const nodes = Object.fromEntries(
     id, innerHTML: '', dataset: {}, value: 'normal', hidden: false, handlers: {},
     addEventListener(type, fn) { this.handlers[type] = fn; },
     showModal() { this.open = true; },
+    setAttribute(name, value) { this[name] = value; },
     // Lo mínimo que necesita el número de daño flotante (ver `playHit` en ui.js).
     insertAdjacentHTML(_pos, html) { this.innerHTML += html; },
     querySelector() { return null; },
@@ -20,6 +22,12 @@ const nodes = Object.fromEntries(
 );
 
 globalThis.document = { getElementById: (id) => nodes[id] ?? null, addEventListener() {} };
+// El mezclador se fija ahí si el jugador dejó el sonido prendido (ver `audio.js`).
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (key) => store.get(key) ?? null,
+  setItem: (key, value) => store.set(key, value),
+};
 
 /**
  * Guarda todos los valores que pasaron por el `dataset` de un nodo.
@@ -70,9 +78,11 @@ for (const side of ['human', 'cpu']) {
 assert.equal(nodes.market.hidden, true, 'el centro está fuera de pantalla');
 assert.equal(nodes.market.innerHTML, '');
 assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'turno del jugador');
-assert.match(nodes.odds.innerHTML, /La próxima carta continúa/);
-assert.match(nodes.odds.innerHTML, /cartas sirven/);
-assert.match(nodes.odds.innerHTML, /Tu mazo/);
+// El medidor cuelga en el arena y solo existe mientras te toca decidir.
+assert.match(nodes.odds.innerHTML, /class="odds-dial" data-risk="\w+" style="--p:\d+"/);
+assert.match(nodes.odds.innerHTML, /La próxima carta continúa la cadena/, 'el texto del lector');
+assert.match(nodes.deck.innerHTML, /cartas/);
+assert.match(nodes.deck.innerHTML, /sin salir/);
 assert.match(nodes['axie-picker'].innerHTML, /data-axie="bird"/);
 assert.equal((nodes['axie-picker'].innerHTML.match(/data-on="true"/g) ?? []).length, 1,
   'exactamente un Axie elegido');
@@ -221,7 +231,9 @@ while (game.state.phase !== 'matchEnd') {
   } else {
     await idle();
   }
-  for (const id of ['scoreboard', 'plate-human', 'plate-cpu', 'field', 'controls', 'odds']) {
+  // El medidor queda afuera: fuera del turno propio no muestra nada, y ese vacío es
+  // justamente lo que tiene que pasar.
+  for (const id of ['scoreboard', 'plate-human', 'plate-cpu', 'field', 'controls', 'deck']) {
     assert.ok(nodes[id].innerHTML.length > 0, `${id} quedó vacío`);
     assert.ok(!nodes[id].innerHTML.includes('undefined'), `undefined en ${id}`);
   }
@@ -262,5 +274,14 @@ const hitNode = nodes[`axie-${last.target}`];
 assert.ok(pulses[last.target].react?.some((v) => /^(hit|whiff)$/.test(v)),
   'el que recibe el golpe se sacude');
 assert.match(hitNode.innerHTML, /class="dmg"/, 'sale el número del golpe');
+
+// Los dos interruptores de sonido arrancan como corresponde y se dan vuelta al
+// tocarlos. Que suenen o no es cosa del mezclador (ver `audio.test.js`); acá lo único
+// que se mira es que el botón diga la verdad.
+assert.equal(nodes['sfx-btn'].dataset.on, 'true', 'los efectos vienen prendidos');
+assert.equal(nodes['music-btn'].dataset.on, 'false', 'la música no');
+nodes['music-btn'].handlers.click();
+assert.equal(nodes['music-btn'].dataset.on, 'true');
+assert.equal(nodes['music-btn']['aria-pressed'], 'true');
 
 console.log('✓ render ok');
