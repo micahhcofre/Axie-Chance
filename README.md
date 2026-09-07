@@ -118,7 +118,7 @@ el ataque**, con el daño del turno ya contado.
 |---|---|---|
 | ⚔️ | fuerza | +1 de daño en este ataque y en todos los que siguen. Acumulable |
 | ☠️ | veneno | la mitad de tu daño; muerde al cerrar cada intercambio y después baja 2. Acumulable |
-| 🥚 | huevo | escudo de la mitad de tu daño; aguanta golpes hasta gastarse |
+| 🥚 | huevo | escudo de la mitad de tu daño; aguanta golpes hasta gastarse. Al romperse le devuelve un tercio del golpe al que pegó |
 | 🪴 | maceta | te curás lo que pegaste, sin pasar de 100 |
 | 🐌 | caracol | los próximos 2 ataques del rival pegan la mitad de tu daño menos. Acumula ataques y se queda con el mordisco más grande |
 | 🐙 | pulpo | una carta **de más** del centro, la que quieras: no se baraja, abre tu próxima ronda. Hay que haberse plantado. Acumulable |
@@ -177,13 +177,13 @@ ninguno:
 
 | escalón | | gana | vs. control |
 |---|---|---|---|
-| | control (nunca agarra poderes) | 4.3% | — |
-| 1 | pulpo | 17.8% | +13.5 |
-| 1 | veneno | 17.8% | +13.5 |
-| 2 | fuerza | 12.9% | +8.6 |
-| 2 | maceta | 11.5% | +7.2 |
-| 2 | caracol | 11.3% | +7.0 |
-| 3 | huevo | 9.4% | +5.1 |
+| | control (nunca agarra poderes) | 4.4% | — |
+| 1 | veneno | 15.8% | +11.4 |
+| 1 | pulpo | 14.8% | +10.4 |
+| 1 | huevo | 13.4% | +8.9 |
+| 1 | fuerza | 12.8% | +8.4 |
+| 2 | caracol | 12.1% | +7.7 |
+| 2 | maceta | 10.9% | +6.5 |
 
 **Ese orden no se puede leer, los escalones sí.** El ± de la columna "vs. control" es el
 error de cada estimación *contra el control*, no el de la diferencia entre dos poderes: dos
@@ -193,9 +193,12 @@ porque una cadena de pasos chicos no medibles puede sumar entre las puntas una d
 sí lo es— y abre uno nuevo cuando cae por debajo con el margen afuera. De ahí salen los pesos
 de [`POWER_WORTH`](src/ai.js), que antes eran números de oficio.
 
-El que sobra hoy es **el huevo**, solo en el último escalón. Es el mismo patrón que tenía el
-pulpo antes de rehacerlo: el escudo es defensivo puro, no te acerca a ganar, solo te aleja de
-perder.
+Dos escalones, y el más caro vale 1.75 veces el más barato. Cuando se empezó a medir eran
+tres escalones y 2.6 veces, con la fuerza sola arriba y el huevo solo abajo.
+
+Los poderes **se empujan entre ellos**: la CPU juega los mismos seis, así que fortalecer uno
+baja a los otros cinco. Al ponerle la cáscara al huevo, el pulpo cayó de +13.5 a +10.4 y el
+veneno de +13.5 a +11.4 sin que nadie los tocara. Por eso los cambios van de a uno.
 
 *Contar cuántas veces la CPU elige cada poder no mide nada de esto*: sale ordenado igual que
 `POWER_WORTH`, porque es un reflejo de esos pesos y no del juego.

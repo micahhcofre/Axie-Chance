@@ -127,15 +127,15 @@ function bestCards(options, deck, n) {
  * ganadas, 800 sembradas por poder, contra un control que nunca agarra ninguno
  * (`npm run balance`). En puntos sobre ese control:
  *
- *   pulpo +13.5 · veneno +13.5 · fuerza +8.6 · maceta +7.2 · caracol +7.0 · huevo +5.1
+ *   veneno +11.4 · pulpo +10.4 · huevo +8.9 · fuerza +8.4 · caracol +7.7 · maceta +6.5
  *
- * De ese orden solo hay **tres escalones** afirmables: {pulpo, veneno}, {fuerza,
- * maceta, caracol} y {huevo}. Comparando cada poder pareado contra el líder de su
- * grupo, adentro de cada uno el banco no distingue nada. Los ± de la tabla son el
- * error contra el control, no el de la diferencia entre dos poderes: no sirven para
+ * De ese orden solo hay **dos escalones** afirmables: {veneno, pulpo, huevo, fuerza} y
+ * {caracol, maceta}. Comparando cada poder pareado contra el líder de su grupo,
+ * adentro de cada uno el banco no distingue nada. Los ± de la tabla son el error
+ * contra el control, no el de la diferencia entre dos poderes: no sirven para
  * ordenarlos entre sí.
  *
- * Los pesos igual siguen los valores medidos y no los tres escalones, porque esto no
+ * Los pesos igual siguen los valores medidos y no los dos escalones, porque esto no
  * es una afirmación sino una decisión bajo incertidumbre: para elegir, el mejor
  * número disponible es la estimación, aunque no alcance para publicarla. Lo que no
  * hay que hacer es leer el orden fino como si fuera un hecho.
@@ -148,16 +148,19 @@ function bestCards(options, deck, n) {
  * Ojo con el lazo: la medición corre contra esta misma CPU, así que cambiar estos
  * pesos mueve los números de los que salieron. No es circular como contar cuántas
  * veces la CPU elige cada poder —eso solo refleja estos pesos y nada más—, pero
- * conviene volver a correr el banco después de tocarlos.
+ * conviene volver a correr el banco después de tocarlos. Por la misma razón, subir un
+ * poder **baja** a los otros cinco: el rival también lo tiene.
  */
 const POWER_WORTH = {
-  octopus: 1.7,
   poison: 1.7,
-  strength: 1.1,
-  pot: 0.9,
-  snail: 0.9,
-  egg: 0.65,
-};/**
+  octopus: 1.55,
+  egg: 1.3,
+  strength: 1.25,
+  snail: 1.15,
+  pot: 0.95,
+};
+
+/**
  * La carta suelta que paga cada pulpo. No es el reparto: es una sola carta, sirve
  * cualquiera —también con poder— y no sale del mazo sino de arriba de él, o sea que
  * es con lo que vas a abrir la ronda que viene.

@@ -46,6 +46,10 @@ const ARMS = {
   pulpoUno: { octopusStacks: false },
   // El pulpo cobrando salga como salga el ataque, que es como estaba antes de pedirle
   // plantarse. Queda como variante para poder volver a comprobar el cambio.
+  // El huevo sin cáscara, que es como estaba antes, y con la mitad del golpe en vez de
+  // un tercio: la mitad lo dejaba arriba del veneno y hundía al caracol un escalón.
+  huevoSinPuas: { eggThorns: 0 },
+  huevoPuas2: { eggThorns: 2 },
   pulpoSiempre: { octopusOnStand: false },
   pulpoUnoYPlantado: { octopusStacks: false },
   sesgo07: { powerBias: 0.7 },

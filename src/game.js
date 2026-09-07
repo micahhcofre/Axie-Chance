@@ -367,10 +367,17 @@ export function createGame({ pace = 1, seed } = {}) {
     // El huevo del rival se come lo que puede y solo se rompe cuando se gasta: si le
     // sobra vida, sigue puesto para el próximo golpe.
     const blocked = Math.min(theirs.egg, swing);
+    // La cáscara. Se mide contra el golpe que lo rompió y no contra lo que el huevo
+    // llegó a tapar: si fuera lo tapado, un huevo con 1 punto de vida devolvería 1, y
+    // el efecto saldría más fuerte cuanto más entero estuviera el escudo, que es al
+    // revés de lo que cuenta. Así el que pega fuerte se corta más.
+    let thorns = 0;
     if (blocked > 0) {
       theirs.egg -= blocked;
+      const broke = theirs.egg === 0;
+      if (broke && TUNING.eggThorns > 0) thorns = Math.floor(swing / TUNING.eggThorns);
       log(`${powerIcon('egg', 'sm')} El huevo de ${whom(foe)} aguanta ${blocked}` +
-        `${theirs.egg > 0 ? ` y le quedan ${theirs.egg}` : ' y se rompe'}.`, 'muted');
+        `${broke ? ' y se rompe' : ` y le quedan ${theirs.egg}`}.`, 'muted');
     }
     const landed = swing - blocked;
 
@@ -388,6 +395,13 @@ export function createGame({ pace = 1, seed } = {}) {
     if (landed > 0) {
       log(`${who(player)} pega por ${landed}. ${who(target)} queda en ${hpOf(state, target)}.`,
         player === 'cpu' ? 'cpu' : 'good');
+    }
+    // Le vuelve al que pegó, y cuenta como daño del dueño del huevo: la vida sale de
+    // `totals` (ver `hpOf`), así que la cáscara puede terminar una partida.
+    if (thorns > 0) {
+      state.totals[foe] += thorns;
+      log(`${powerIcon('egg', 'sm')} La cáscara le vuelve a ${who(player)} por ${thorns}: ` +
+        `queda en ${hpOf(state, player)}.`, foe === 'cpu' ? 'cpu' : 'good');
     }
     applyPowers(player, swing);
     emit();

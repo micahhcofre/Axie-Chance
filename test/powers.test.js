@@ -199,6 +199,39 @@ async function atPlayerTurn(chain) {
   console.log('  ✓ huevo');
 }
 {
+  // La cáscara: cuando el huevo se gasta del todo, el golpe que lo rompió le vuelve
+  // dividido al que pegó. Apagada por defecto (`eggThorns: 0`); acá se enciende.
+  const saved = TUNING.eggThorns;
+  TUNING.eggThorns = 2;
+  try {
+    const chain = chainOf(
+      card(['aquatic', 'bird']),
+      card(['aquatic', 'plant']),
+      card(['aquatic', 'beast']),
+    );
+    const game = await atPlayerTurn(chain);
+    game.state.status.cpu.egg = 4;
+    await game.stand(); // 10 de ataque contra 4 de huevo: lo rompe
+    await idle();
+    assert.equal(game.state.status.cpu.egg, 0, 'el huevo se rompió');
+    assert.equal(game.state.totals.human, 6, 'pasaron 6, como sin cáscara');
+    // Se mide contra el golpe que lo rompió (10), no contra lo que tapó (4).
+    assert.equal(game.state.totals.cpu, 5, 'y le volvieron 5 al que pegó');
+    assert.equal(hpOf(game.state, 'human'), TARGET - 5, 'la cáscara le sacó vida');
+
+    // Un huevo que aguanta no corta: solo devuelve el que se rompe.
+    const g2 = await atPlayerTurn(chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'])));
+    g2.state.status.cpu.egg = 40;
+    await g2.stand();
+    await idle();
+    assert.equal(g2.state.status.cpu.egg, 35, 'el huevo sigue puesto');
+    assert.equal(g2.state.totals.cpu, 0, 'y no devolvió nada');
+  } finally {
+    TUNING.eggThorns = saved;
+  }
+  console.log('  ✓ huevo (cáscara)');
+}
+{
   // Un ataque de 0 no toca el huevo: se gasta con daño, no con turnos.
   const chain = chainOf(card(['aquatic', 'bird']), card(['bug', 'reptile']));
   const game = await atPlayerTurn(chain);

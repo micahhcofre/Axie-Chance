@@ -49,6 +49,8 @@ export function crest(symbol, size = '') {
  *   snailShare     divisor del golpe con que se debilita
  *   snailAttacks   cuántos ataques dura cada caracol
  *   eggShare       divisor del golpe con que se arma el escudo
+ *   eggThorns      al romperse, divisor del golpe que lo rompió y que le vuelve al
+ *                  que pegó. 0 lo apaga: el huevo solo tapa
  *   octopusPowers  si la carta que paga el pulpo puede llevar poder
  *   octopusStacks  true: cada pulpo paga una carta. false: una por reparto, salgan
  *                  los pulpos que salgan
@@ -75,6 +77,7 @@ export const TUNING = {
   snailShare: 2,
   snailAttacks: 2,
   eggShare: 2,
+  eggThorns: 3,
   octopusPowers: true,
   octopusStacks: true,
   octopusOnStand: true,
