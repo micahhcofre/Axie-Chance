@@ -40,6 +40,11 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         human: owned(s, 'human'),
         cpu: owned(s, 'cpu'),
         pool: s.pool.length + s.market.length,
+        // Cada pulpo puesto paga una carta de más, aparte del reparto. Van a `top` y
+        // no al mazo, así que la pila mide exactamente cuántas se cobraron: dentro de
+        // un reparto nada más la toca, y se vacía recién al arrancar la ronda.
+        octopus: s.status[s.draft.order[0]].stacked,
+        top: s.top[s.draft.order[0]].length,
       };
     } else if (s.phase !== 'draft' && before) {
       const p = before.player;
@@ -50,6 +55,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         pool: before.pool,
         poolAfter: s.pool.length + s.market.length,
         busted: s.chains[p].busted,
+        octopus: before.octopus,
+        extra: s.top[p].length - before.top,
       });
       before = null;
     }
@@ -100,6 +107,12 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         else await game.skipDraft();
         continue;
       }
+      // La etapa del pulpo va aparte del reparto: una carta suelta por pulpo, sin
+      // reglas. No toca `humanMode`, que describe la rama del reparto normal.
+      if (s.draft.step === 'bonus') {
+        await game.takeCard(options[0].uid);
+        continue;
+      }
       if (s.draft.mode) {
         // Segunda carta del par (o el par único de una cadena cortada).
         await game.takeCard(options[0].uid);
@@ -132,19 +145,24 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       const d = drafts.shift();
       // El que no repartió no toca su mazo: cada uno se lleva lo suyo en su turno.
       assert.equal(d.otherGain, 0, `${other(d.player)} sumó en el reparto ajeno`);
-      // Nadie se lleva más de dos cartas, y una cadena cortada nunca llega a dos:
-      // le toca una sola, y sin poder.
-      assert.ok(d.gain >= 0 && d.gain <= 2, `${d.player} sumó ${d.gain}`);
+      // Las cartas del pulpo se cuentan aparte: son de más, no parte del reparto. Así
+      // los invariantes del reparto siguen siendo los de siempre en vez de aflojarse.
+      assert.ok(d.extra >= 0 && d.extra <= d.octopus,
+        `${d.player} cobró ${d.extra} cartas de pulpo y debía ${d.octopus}`);
+      const draftGain = d.gain - d.extra;
+      // Nadie se lleva más de dos cartas del reparto, y una cadena cortada nunca llega
+      // a dos: le toca una sola, y sin poder.
+      assert.ok(draftGain >= 0 && draftGain <= 2, `${d.player} sumó ${draftGain}`);
       assert.ok(d.poolAfter <= d.pool, 'la reserva nunca crece');
       // Cortarse da una carta sin poder, nunca dos. Puede dar cero: si las cinco del
       // centro traen poder no hay nada que llevarse.
-      if (d.busted) assert.ok(d.gain <= 1, `${d.player} se cortó y sumó ${d.gain}`);
+      if (d.busted) assert.ok(draftGain <= 1, `${d.player} se cortó y sumó ${draftGain}`);
       if (d.player === 'human') {
         // La carta con poder cierra el reparto ahí mismo, siempre.
         if (!d.busted && humanMode === 'power') {
-          assert.equal(d.gain, 1, 'una carta con poder y se acabó');
+          assert.equal(draftGain, 1, 'una carta con poder y se acabó');
         }
-        gains.push(d.gain);
+        gains.push(draftGain);
       }
     }
 

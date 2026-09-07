@@ -1,7 +1,7 @@
 import { buildPool, shuffle, makeRng, cardLabel, crest, powerIcon, POWERS, TUNING } from './data.js';
 import { AXIES, AXIE_IDS, axie, deckFor } from './axies.js';
 import { emptyChain, playCard, scoreChain } from './rules.js';
-import { decideDraw, planDraft, pickBest } from './ai.js';
+import { decideDraw, planDraft, pickBest, pickBonus } from './ai.js';
 
 // Los números de los poderes viven en `data.js`, al lado de los carteles que los
 // explican, así el texto sale de los mismos valores que usa el juego. Se reexportan
@@ -308,9 +308,10 @@ export function createGame({ pace = 1, seed } = {}) {
       if (power === 'strength') {
         mine.strength += TUNING.strengthStep;
         log(`${mark('strength')} ${who(player)} afila: +${mine.strength} de daño de acá en más.`, kind);
-      } else if (power === 'octopus') {
-        // No se mide contra el daño: reserva una carta del reparto, salga como salga
-        // el ataque. Se acumula, y con dos pulpos son las dos primeras de la ronda.
+      } else if (power === 'octopus' && (!TUNING.octopusOnHit || swing > 0)) {
+        // Paga una carta suelta en el reparto, aparte de lo que le toque. Con
+        // `octopusOnHit` en false sale salga como salga el ataque, como la fuerza.
+        // Se acumula, y con dos pulpos son las dos primeras cartas de la ronda.
         mine.stacked++;
         log(`${mark('octopus')} ${who(player)} va a elegir ${mine.stacked === 1
           ? 'la carta con que abre'
@@ -477,21 +478,22 @@ export function createGame({ pace = 1, seed } = {}) {
   }
 
 
-  function takeFromMarket(player, card) {
+  /**
+   * @param {boolean} toTop  carta del pulpo: no se pierde en el barajado, sale arriba
+   *   del mazo en la ronda que viene. Va aparte en `state.top` (ver `startRound`).
+   */
+  function takeFromMarket(player, card, toTop = false) {
     const at = state.market.indexOf(card);
     if (at < 0) return;
     state.market.splice(at, 1);
-    // Con un pulpo puesto, esta carta no se pierde en el barajado: queda reservada
-    // para salir arriba del mazo en la ronda que viene. Cada pulpo reserva una.
-    const st = state.status[player];
-    if (st.stacked > 0) {
-      st.stacked--;
+    const tone = player === 'cpu' ? 'cpu' : 'good';
+    if (toTop) {
       state.top[player].push(card);
       log(`${powerIcon('octopus', 'sm')} ${who(player)} reserva ${cardLabel(card)}: ` +
-        `sale arriba del mazo la ronda que viene.`, player === 'cpu' ? 'cpu' : 'good');
+        `sale arriba del mazo la ronda que viene.`, tone);
     } else {
       state.decks[player].push(card);
-      log(`${who(player)} suma ${cardLabel(card)} al mazo.`, player === 'cpu' ? 'cpu' : 'good');
+      log(`${who(player)} suma ${cardLabel(card)} al mazo.`, tone);
     }
     // Se repone en el acto, en el mismo hueco para que las cartas no salten de lugar.
     if (state.pool.length) state.market.splice(at, 0, state.pool.pop());
@@ -504,6 +506,11 @@ export function createGame({ pace = 1, seed } = {}) {
    * llevar poder. El tamaño de la carta dejó de importar.
    */
   function draftable(player) {
+    // La carta del pulpo es aparte del reparto: no la limita ni la rama que eligió ni
+    // haberse cortado. Es un turno de mercado suelto.
+    if (state.draft?.step === 'bonus') {
+      return TUNING.octopusPowers ? state.market.slice() : plainCards();
+    }
     const mode = state.draft?.mode;
     if (mode === 'power') return []; // la carta con poder cierra el reparto
     if (mode === 'plain' || awardKind(player) === 'bust') return plainCards();
@@ -537,9 +544,13 @@ export function createGame({ pace = 1, seed } = {}) {
     state.draft = {
       order: [player],
       index: 0,
+      // 'normal' es el reparto de siempre —una carta con poder o dos sin—; 'bonus'
+      // son las cartas sueltas que debe cada pulpo, una por pulpo.
+      step: 'normal',
       mode: null,
       remaining: 0,
       took: 0,
+      bonus: 0,
       renewed: { human: false, cpu: false },
     };
     state.phase = 'draft';
@@ -547,6 +558,39 @@ export function createGame({ pace = 1, seed } = {}) {
   }
 
   const drafting = () => (state.draft ? state.draft.order[state.draft.index] : null);
+
+  /** Cierra el reparto de quien esté eligiendo y pasa al siguiente. */
+  function nextDrafter() {
+    state.draft.index++;
+    state.draft.step = 'normal';
+    state.draft.mode = null;
+    state.draft.remaining = 0;
+    state.draft.bonus = 0;
+  }
+
+  /**
+   * Termina el reparto normal. Si el jugador tiene pulpos puestos, en vez de pasar el
+   * turno se abre la etapa de las cartas extra: una por pulpo, sin las reglas del
+   * reparto. Devuelve si quedó algo por elegir.
+   */
+  function openBonus(player) {
+    state.draft.mode = null;
+    state.draft.remaining = 0;
+    const owed = state.status[player].stacked;
+    // Sin acumulación, los pulpos de más se pierden: pagan una carta por reparto.
+    state.draft.bonus = TUNING.octopusStacks ? owed : Math.min(owed, 1);
+    if (state.draft.bonus === 0) { nextDrafter(); return false; }
+    if (!TUNING.octopusStacks) state.status[player].stacked = state.draft.bonus;
+    state.draft.step = 'bonus';
+    return true;
+  }
+
+  /** Se lleva una de las cartas del pulpo y consume la reserva que la pagó. */
+  function takeBonus(player, card) {
+    state.status[player].stacked--;
+    state.draft.bonus--;
+    takeFromMarket(player, card, true);
+  }
 
   async function runDraft(era) {
     while (state.draft.index < state.draft.order.length) {
@@ -577,12 +621,21 @@ export function createGame({ pace = 1, seed } = {}) {
             takeFromMarket('cpu', pickBest(plainCards(), cardsOf('cpu')));
           }
         }
-        state.draft.mode = null;
-        state.draft.index++;
+        // Y las cartas que le deben los pulpos, de a una y a la vista.
+        if (openBonus('cpu')) {
+          state.draft.step = 'bonus';
+          while (state.draft.bonus > 0 && state.market.length) {
+            emit();
+            if (!(await tick(700, era))) return;
+            takeBonus('cpu', pickBonus(state.market, cardsOf('cpu')));
+          }
+          nextDrafter();
+        }
         continue;
       }
 
       // Al jugador se le prepara la elección y se espera a que actúe desde la UI.
+      if (state.draft.step === 'bonus') { emit(); return; }
       state.draft.took = 0;
       if (kind === 'bust') {
         state.draft.mode = 'plain';
@@ -624,6 +677,15 @@ export function createGame({ pace = 1, seed } = {}) {
     const card = pickable().find((c) => c.uid === uid);
     if (!card) return;
     const era = epoch;
+
+    if (state.draft.step === 'bonus') {
+      takeBonus('human', card);
+      if (state.draft.bonus > 0 && state.market.length > 0) { emit(); return; }
+      nextDrafter();
+      await runDraft(era);
+      return;
+    }
+
     if (!state.draft.mode) {
       state.draft.mode = inferMode(card);
       state.draft.remaining = state.draft.mode === 'power' ? 1 : 2;
@@ -635,8 +697,10 @@ export function createGame({ pace = 1, seed } = {}) {
       emit();
       return;
     }
-    state.draft.index++;
-    state.draft.mode = null;
+    if (openBonus('human') && state.market.length > 0) {
+      emit();
+      return;
+    }
     await runDraft(era);
   }
 
@@ -644,13 +708,27 @@ export function createGame({ pace = 1, seed } = {}) {
   async function skipDraft() {
     if (state.phase !== 'draft' || drafting() !== 'human') return;
     const era = epoch;
+
+    // Rechazar la carta del pulpo gasta la reserva. Es gratis y sirve cualquier carta,
+    // así que no tomarla es una decisión rara; pero si no se gastara, un pulpo sin usar
+    // se arrastraría de ronda en ronda para siempre.
+    if (state.draft.step === 'bonus') {
+      log(`Dejás pasar ${state.draft.bonus === 1 ? 'la carta' : `las ${state.draft.bonus} cartas`} ` +
+        `del ${powerIcon('octopus', 'sm')}.`, 'muted');
+      state.status.human.stacked -= state.draft.bonus;
+      nextDrafter();
+      await runDraft(era);
+      return;
+    }
+
     log(
       state.draft.took ? 'Te quedás con lo que ya agarraste.' : 'No te llevás nada del centro.',
       'muted',
     );
-    state.draft.index++;
-    state.draft.mode = null;
-    state.draft.remaining = 0;
+    if (openBonus('human') && state.market.length > 0) {
+      emit();
+      return;
+    }
     await runDraft(era);
   }
 

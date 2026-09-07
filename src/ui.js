@@ -197,11 +197,27 @@ function marketHtml(state, { picking, pickable, canRenew }) {
   const open = new Set(pickable.map((c) => c.uid));
   const mode = state.draft?.mode;
   const remaining = state.draft?.remaining ?? 0;
+  const bonus = state.draft?.step === 'bonus' ? state.draft.bonus : 0;
 
   let head;
   let actions = '';
   if (picking === 'cpu') {
-    head = '<span class="overlay-title">El centro</span><p class="overlay-note">La CPU está eligiendo…</p>';
+    const note = bonus
+      ? `La CPU cobra su carta del ${powerIcon('octopus', 'sm')}…`
+      : 'La CPU está eligiendo…';
+    head = `<span class="overlay-title">El centro</span><p class="overlay-note">${note}</p>`;
+  } else if (bonus) {
+    // La etapa del pulpo tiene su propio cartel: es una carta de más y sin reglas, y
+    // si se lee como parte del reparto normal el jugador cree que está gastando su
+    // elección. El título cambia entero, no solo la bajada.
+    const note = bonus === 1
+      ? 'Una carta <b>de más</b>, la que quieras. Abre tu próxima ronda.'
+      : `<b>${bonus} cartas de más</b>, las que quieras. Abren tu próxima ronda, en el orden que las toques.`;
+    head = `<span class="overlay-title">${powerIcon('octopus', 'sm')} Carta del pulpo</span>` +
+      `<p class="overlay-note">${note}</p>`;
+    actions = `<div class="overlay-actions">
+      <button class="btn" data-action="skip"
+        title="Perdés la carta que te debe el pulpo">No agarrar</button></div>`;
   } else {
     // No se pregunta el modo: la carta que toques ya dice qué te llevás.
     let note;
@@ -239,7 +255,10 @@ function marketHtml(state, { picking, pickable, canRenew }) {
 
 function controlsHtml(state, picking) {
   if (state.phase === 'draft') {
-    const msg = picking === 'cpu' ? 'La CPU elige del centro…' : 'Elegí tu carta del centro.';
+    const bonus = state.draft?.step === 'bonus';
+    const msg = picking === 'cpu'
+      ? 'La CPU elige del centro…'
+      : bonus ? 'Elegí la carta que te debe el pulpo.' : 'Elegí tu carta del centro.';
     return `<span class="controls-msg">${msg}</span>`;
   }
 

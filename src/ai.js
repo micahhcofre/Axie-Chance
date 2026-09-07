@@ -161,6 +161,33 @@ const POWER_WORTH = {
   octopus: 0.45,
 };
 /**
+ * La carta suelta que paga cada pulpo. No es el reparto: es una sola carta, sirve
+ * cualquiera —también con poder— y no sale del mazo sino de arriba de él, o sea que
+ * es con lo que vas a abrir la ronda que viene.
+ *
+ * Se puntúa igual que en `planDraft`, con el efecto convertido a conectividad, pero
+ * sin la comparación contra dos cartas: acá no se resigna nada, así que gana la de
+ * más valor a secas. Las 36 cartas con poder son todas de 3 símbolos, así que la que
+ * trae efecto casi siempre gana — y está bien: abrir con un trío abre tres cadenas en
+ * vez de dos y **solo los símbolos de la primera carta puntúan**.
+ */
+export function pickBonus(pool, deck) {
+  if (!pool.length) return null;
+  const plain = pool.filter((c) => !c.power);
+  const two = bestCards(plain, deck, 2);
+  const perCard = two.cards.length ? two.value / two.cards.length : 0;
+
+  let best = null;
+  let bestValue = -Infinity;
+  for (const card of pool) {
+    const bonus = card.power ? POWER_WORTH[card.power] * TUNING.powerBias * perCard : 0;
+    const value = connectivity(card, deck) + bonus;
+    if (value > bestValue) { bestValue = value; best = card; }
+  }
+  return best;
+}
+
+/**
  * Qué se lleva la CPU del centro.
  *
  * La elección es poder contra cantidad: dos cartas sin poder, o una con poder. Se

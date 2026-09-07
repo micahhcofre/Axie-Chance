@@ -49,6 +49,11 @@ export function crest(symbol, size = '') {
  *   snailShare     divisor del golpe con que se debilita
  *   snailAttacks   cuántos ataques dura cada caracol
  *   eggShare       divisor del golpe con que se arma el escudo
+ *   octopusPowers  si la carta que paga el pulpo puede llevar poder
+ *   octopusStacks  true: cada pulpo paga una carta. false: una por reparto, salgan
+ *                  los pulpos que salgan
+ *   octopusOnHit   si el pulpo necesita que el ataque haya hecho daño, como los otros
+ *                  cuatro. Con false sale igual con la cadena cortada, como la fuerza
  *   powerBias      multiplicador sobre POWER_WORTH: cuán seguido la CPU prefiere un
  *                  poder antes que dos cartas sin poder. No es un número del juego
  *                  sino de la cabeza que lo juega, y está acá para poder medirlo
@@ -67,6 +72,9 @@ export const TUNING = {
   snailShare: 2,
   snailAttacks: 2,
   eggShare: 2,
+  octopusPowers: true,
+  octopusStacks: true,
+  octopusOnHit: false,
   powerBias: 1,
 };
 
@@ -77,7 +85,7 @@ export const POWERS = {
   },
   octopus: {
     id: 'octopus', symbol: 'aquatic', name: 'Pulpo',
-    note: 'al salir del mazo: sumás gratis una carta sin poder del centro',
+    note: 'una carta de más del centro, la que quieras: abre tu próxima ronda',
   },
   pot: {
     id: 'pot', symbol: 'plant', name: 'Maceta',

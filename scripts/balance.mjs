@@ -18,7 +18,7 @@
 // esto hacen falta miles de partidas por celda para distinguir un efecto real de la
 // suerte — y es exactamente el error que se cometió antes de que este script existiera.
 import { createGame, TUNING, hpOf } from '../src/game.js';
-import { decideDraw, pickBest } from '../src/ai.js';
+import { decideDraw, pickBest, pickBonus } from '../src/ai.js';
 import { POWER_IDS } from '../src/data.js';
 
 const AXIES = ['aquatic', 'beast', 'bird', 'plant', 'bug', 'reptile'];
@@ -41,6 +41,11 @@ const ARMS = {
   // una con poder. Acá el que se mide es el rival, no el juego — con el jugador
   // atado a una estrategia fija, la escala que le gana más partidas es la mejor, o
   // sea la que **baja** la columna "gana".
+  // El pulpo con y sin poderes en su carta extra.
+  pulpoPlano: { octopusPowers: false },
+  pulpoUno: { octopusStacks: false },
+  pulpoAlDar: { octopusOnHit: true },
+  pulpoAmbas: { octopusOnHit: true, octopusStacks: false },
   sesgo07: { powerBias: 0.7 },
   sesgo15: { powerBias: 1.5 },
   sesgo20: { powerBias: 2 },
@@ -79,6 +84,20 @@ async function playOne(seed, only) {
 
     if (s.phase === 'draft') {
       if (game.drafting() !== 'human') { await idle(); continue; }
+
+      // La carta que paga el pulpo se elige a criterio, no atada al poder del brazo.
+      // Atarla arruinaba justo al pulpo: su efecto **es** conseguir otras cartas, así
+      // que obligarlo a traerse otro pulpo le saca casi todo el valor y lo medía
+      // contra una versión de sí mismo que nadie jugaría. Los otros cinco brazos
+      // nunca llegan acá —sin pulpos no hay etapa extra—, así que el cambio no los
+      // toca.
+      if (s.draft.step === 'bonus') {
+        const card = pickBonus(game.pickable(), s.decks.human);
+        if (card) await game.takeCard(card.uid);
+        else await game.skipDraft();
+        continue;
+      }
+
       const mine = only && game.pickable().find((c) => c.power === only);
       if (mine) { await game.takeCard(mine.uid); continue; }
       const plain = bestPlain(game, s);

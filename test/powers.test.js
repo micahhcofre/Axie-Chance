@@ -264,13 +264,25 @@ async function atPlayerDraft(chain) {
 }
 
 {
-  // Un pulpo reserva una carta: la que agarres del centro no se pierde en el
-  // barajado, queda esperando arriba del mazo.
+  // Un pulpo paga una carta **aparte** del reparto: no es la que elegiste, es una de
+  // más. Acá el jugador rechaza el reparto entero y aun así se lleva una carta, que es
+  // la prueba de que la etapa del pulpo es independiente.
   const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'], 'octopus'));
   const game = await atPlayerDraft(chain);
   assert.equal(game.state.status.human.stacked, 1, 'quedó un pulpo puesto');
 
   const deck = game.state.decks.human.length;
+  await game.skipDraft(); // no se lleva nada del reparto normal
+  assert.equal(game.state.draft.step, 'bonus', 'se abre la etapa del pulpo');
+  assert.equal(game.state.decks.human.length, deck, 'y el reparto no dejó nada');
+
+  // Y ahí sirve el centro entero: la carta del pulpo puede llevar poder.
+  assert.deepEqual(
+    game.pickable().map((c) => c.uid).sort(),
+    game.state.market.map((c) => c.uid).sort(),
+    'sin reglas de reparto: sirve cualquier carta',
+  );
+
   const pick = game.pickable().find((c) => c.power) ?? game.pickable()[0];
   await game.takeCard(pick.uid);
 
@@ -291,22 +303,47 @@ async function atPlayerDraft(chain) {
     assert.equal(game.state.chains.human.cards[0].uid, pick.uid,
       'la ronda abre con la carta reservada');
   }
-  console.log('  ✓ pulpo (reserva)');
+  console.log('  ✓ pulpo (carta extra)');
 }
 
 {
-  // Dos pulpos reservan dos cartas, y salen en el orden en que se tocaron.
+  // La carta del pulpo es de más, no en lugar de: el jugador hace su reparto normal
+  // —una carta con poder, que lo cierra— y **después** cobra la del pulpo.
+  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'], 'octopus'));
+  const game = await atPlayerDraft(chain);
+  const deck = game.state.decks.human.length;
+
+  const powered = game.pickable().find((c) => c.power);
+  if (powered) {
+    await game.takeCard(powered.uid);
+    assert.equal(game.state.decks.human.length, deck + 1, 'la del reparto va al mazo');
+    assert.deepEqual(game.state.top.human, [], 'y no se reservó');
+    assert.equal(game.state.draft.step, 'bonus', 'recién ahora se abre la del pulpo');
+
+    const extra = game.pickable()[0];
+    await game.takeCard(extra.uid);
+    assert.equal(game.state.decks.human.length, deck + 1, 'la del pulpo no va al mazo');
+    assert.deepEqual(game.state.top.human.map((c) => c.uid), [extra.uid], 'va arriba');
+  }
+  console.log('  ✓ pulpo (es de más, no en lugar de)');
+}
+
+{
+  // Dos pulpos pagan dos cartas, y salen en el orden en que se tocaron.
   const chain = chainOf(
     card(['aquatic', 'bird'], 'octopus'),
     card(['aquatic', 'plant'], 'octopus'),
   );
   const game = await atPlayerDraft(chain);
-  assert.equal(game.state.status.human.stacked, 2, 'dos pulpos, dos reservas');
-  seedPlain(game, 2); // hacen falta dos sin poder: la primera compromete la rama
+  assert.equal(game.state.status.human.stacked, 2, 'dos pulpos, dos cartas');
 
-  const first = game.pickable().find((c) => !c.power);
+  await game.skipDraft();
+  assert.equal(game.state.draft.step, 'bonus');
+
+  const first = game.pickable()[0];
   await game.takeCard(first.uid);
   assert.equal(game.state.status.human.stacked, 1, 'queda uno');
+  assert.equal(game.state.draft.step, 'bonus', 'sigue debiendo una');
   const second = game.pickable().find((c) => c.uid !== first.uid);
   await game.takeCard(second.uid);
 
@@ -331,6 +368,19 @@ async function atPlayerDraft(chain) {
     }
   }
   console.log('  ✓ pulpo (dos, en orden)');
+}
+
+{
+  // Rechazar la carta del pulpo la gasta. Si no, un pulpo sin usar se arrastraría de
+  // ronda en ronda para siempre.
+  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'], 'octopus'));
+  const game = await atPlayerDraft(chain);
+  await game.skipDraft();
+  assert.equal(game.state.draft.step, 'bonus');
+  await game.skipDraft();
+  assert.equal(game.state.status.human.stacked, 0, 'la reserva se consumió igual');
+  assert.deepEqual(game.state.top.human, [], 'y no se llevó nada');
+  console.log('  ✓ pulpo (rechazar la gasta)');
 }
 
 {

@@ -27,11 +27,12 @@ npm test               # reglas, flujo de partida y render
 Para tener el juego en un archivo suelto, sin servidor ni dependencias:
 
 ```sh
-npm run build          # dist/axie-chance.html (~267 KB, crests incluidos)
+npm run build          # dist/axie-chance.html (~1,1 MB, crests y fondos incluidos)
 ```
 
-El build lee `src/` y `styles.css`, les saca los `import`/`export`, mete los crests
-como data URI y concatena todo. `src/` sigue siendo la fuente: no se edita el `dist/`.
+El build lee `src/` y `styles.css`, les saca los `import`/`export`, mete los crests y los
+seis fondos como data URI y concatena todo. `src/` sigue siendo la fuente: no se edita el
+`dist/`. Lo único que no viaja son los Axies, que se piden al CDN de Sky Mavis.
 
 ## Reglas
 
@@ -120,7 +121,7 @@ el ataque**, con el daño del turno ya contado.
 | 🥚 | huevo | escudo de la mitad de tu daño; aguanta golpes hasta gastarse |
 | 🪴 | maceta | te curás lo que pegaste, sin pasar de 100 |
 | 🐌 | caracol | los próximos 2 ataques del rival pegan la mitad de tu daño menos. Acumula ataques y se queda con el mordisco más grande |
-| 🐙 | pulpo | la carta que agarres del centro no se baraja: abre tu próxima ronda. Acumulable |
+| 🐙 | pulpo | una carta **de más** del centro, la que quieras: no se baraja, abre tu próxima ronda. Acumulable |
 
 Cada poder viaja siempre con **su propia clase** entre los 3 símbolos, así que el efecto de
 tu color encadena con tu mazo mejor que ningún otro. Los pares que lo acompañan
@@ -134,12 +135,17 @@ daño: huevo, maceta, veneno y caracol. La fuerza y el pulpo salen igual, porque
 golpe. Los mazos iniciales de 10 **no traen poderes**: los seis salen del centro y hay que
 ganárselos.
 
-El pulpo es el único que no se cobra en daño: marca las próximas cartas que agarres del
-centro para que **no entren al barajado**. Se guardan aparte ([`state.top`](src/game.js)) y
-al arrancar la ronda siguiente se apoyan encima del mazo ya barajado, en el orden en que las
-tocaste. Como el mazo base son 9 pares y una carta sola, la apertura que te toca es casi
-siempre de 2 símbolos: asegurarte un trío abre tres cadenas en vez de dos, y **solo los
-símbolos de la primera carta puntúan**.
+El pulpo es el único que no se cobra en daño. Abre una **etapa aparte** del reparto: una
+carta suelta por cada pulpo puesto, sin las reglas del reparto —sirve cualquiera del centro,
+también con poder— y de más, no en lugar de la que elegiste. Se guardan aparte
+([`state.top`](src/game.js)) y al arrancar la ronda siguiente se apoyan encima del mazo ya
+barajado, en el orden en que las tocaste. Como el mazo base son 9 pares y una carta sola, la
+apertura que te toca es casi siempre de 2 símbolos: asegurarte un trío abre tres cadenas en
+vez de dos, y **solo los símbolos de la primera carta puntúan**.
+
+Rechazar la carta del pulpo la gasta. Es gratis y sirve cualquier carta, así que no tomarla
+es una decisión rara; pero si no se gastara, un pulpo sin usar se arrastraría de ronda en
+ronda para siempre.
 
 **Balance del mazo base.** Medido sobre 4000 rondas: media ~3.1 puntos, 32% de cortes,
 cadenas de 1-2 cartas, y los seis símbolos rinden casi igual (3.04 a 3.21), o sea que
@@ -295,15 +301,34 @@ cada clip tres cosas:
 - **el cuerpo** — cuánto se corre y cuánto gira, en porcentaje del marco. Es la mayor parte
   del movimiento, porque el esqueleto entero cuelga de un pivote.
 - **las partes** — lo que hace cada capa *además* de eso. Para casi todas es cero —van de
-  paseo con el cuerpo— y se descartan; quedan las patas, la cola, las orejas y la cara.
+  paseo con el cuerpo— y se descartan; quedan las patas, la cola, las orejas y el lomo, que
+  son las que tienen hueso propio animado.
 - **los dibujos** — los ojos y la boca tienen versiones alternativas en el CDN (`eyes-shut`,
   `eyes-angry`, `eyes-happy`, `mouth-open`, `mouth-bite`, `mouth-smile`, y patas `-long` y
   `-stretch`). El clip dice en qué momento cambia cada una.
+
+Las dos últimas van **por dibujo y no por slot**: cada alternativa está en su propio lugar
+de reposo —la boca abierta no va donde iba la cerrada—, así que cambiar de dibujo no mueve
+nada. Mezclarlas fue un error caro: el salto que hay entre un dibujo y el otro se horneaba
+como si fuera movimiento del hueso y después se le aplicaba también al que no había
+cambiado, y los ojos se corrían de lugar cada vez que el Axie parpadeaba.
 
 La matemática es la misma que usa la librería para armar la pila quieta —rotar y trasladar,
 sin escala—, y el script **verifica que su pose de reposo caiga exactamente sobre
 `axie-avatars.js`** antes de escribir nada: si el mixer cambia de cuentas, falla en vez de
 producir Axies torcidos.
+
+También mira los PNG: pide los primeros 64 bytes de cada dibujo alternativo y compara el
+tamaño que declara el archivo con el que quiere el recorte. El esqueleto y el CDN a veces
+dejan de decir lo mismo —Sky Mavis vuelve a exportar un dibujo y no toca el esqueleto—, y
+entonces la capa sale estirada sin que nada se queje. Le pasaba a `reptile-04/eyes-shut`,
+que el esqueleto cree de 161×97 y el CDN entrega de 161×42: los ojos cerrados salían 2,3
+veces más altos de lo que son.
+
+Los ojos del roster están elegidos a mano por eso mismo: hay partes cuyo `eyes-shut` es
+casi el mismo dibujo que los ojos abiertos —`aquatic-02` cambia el 4% de los píxeles,
+`bug-08` el 2%—, así que el Axie parpadea y no se nota. Los que están puestos cambian de
+verdad.
 
 De los 46 clips entran diez, los que un combate de cartas puede llegar a mostrar. Salen
 82 KB, casi todo compartido: las patas de las seis clases son las mismas.
@@ -311,7 +336,13 @@ De los 46 clips entran diez, los que un combate de cartas puede llegar a mostrar
 [`src/axie-motion.js`](src/axie-motion.js) los reproduce con la Web Animations API. Tiene
 dos niveles: una **base** que se repite mientras dure la situación —quieto, plantado para
 atacar, festejando, desmayado— y **pulsos** que la tapan y se van solos —el ataque, el
-golpe, un aburrimiento cada 5-11 segundos—.
+golpe, un aburrimiento cada 5-11 segundos—. Los dos que pelean arrancan el bucle en
+contrafase: con el mismo clip y el mismo reloj, dos muñecos sincronizados se leen como un
+solo muñeco repetido.
+
+Los bucles del kit se aflojan (`rate`). Están hechos para verse un rato sueltos, no para
+encadenarse toda la partida: el de estar quieto dura 1,33 s y trae un parpadeo adentro, así
+que tal cual sale el Axie parpadea cada 1,3 segundos y parece nervioso.
 
 El CSS no anima partes: se ocupa de la **puesta en escena** —dónde está parado el bicho,
 adónde salta, adónde sale despedido, cómo se desploma— y del achatarse de los rebotes, que
