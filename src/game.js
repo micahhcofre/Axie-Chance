@@ -1,7 +1,12 @@
-import { buildPool, shuffle, makeRng, cardLabel, crest, powerIcon, POWERS } from './data.js';
+import { buildPool, shuffle, makeRng, cardLabel, crest, powerIcon, POWERS, TUNING } from './data.js';
 import { AXIES, AXIE_IDS, axie, deckFor } from './axies.js';
 import { emptyChain, playCard, scoreChain } from './rules.js';
 import { decideDraw, planDraft, pickBest } from './ai.js';
+
+// Los números de los poderes viven en `data.js`, al lado de los carteles que los
+// explican, así el texto sale de los mismos valores que usa el juego. Se reexportan
+// porque el banco de pruebas y los tests los buscan acá.
+export { TUNING };
 
 export const PLAYERS = ['human', 'cpu'];
 /**
@@ -13,29 +18,6 @@ export const PLAYERS = ['human', 'cpu'];
 export const TARGET = 100;
 /** Cartas boca arriba en el centro. Se repone en el acto al llevarse una. */
 export const MARKET_SIZE = 5;
-
-/**
- * Los números de los poderes, en un solo lugar y mutables a propósito: el banco de
- * pruebas los cambia para medir variantes sin editar código entre corridas. El juego
- * los lee en cada uso, así que un cambio acá vale desde la partida siguiente.
- *
- *   strengthStep   cuánto suma cada carta de fuerza, para siempre
- *   poisonShare    divisor del golpe con que se envenena (2 = la mitad)
- *   poisonDecay    cuánto baja el veneno al cerrar la ronda, después de morder
- *   poisonStacks   true suma venenos; false se queda con el mayor, como el caracol
- *   snailShare     divisor del golpe con que se debilita
- *   snailAttacks   cuántos ataques dura cada caracol
- *   eggShare       divisor del golpe con que se arma el escudo
- */
-export const TUNING = {
-  strengthStep: 2,
-  poisonShare: 2,
-  poisonDecay: 2,
-  poisonStacks: true,
-  snailShare: 2,
-  snailAttacks: 2,
-  eggShare: 2,
-};
 
 /**
  * Lo que le queda puesto a un jugador de una ronda a la otra:

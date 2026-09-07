@@ -37,6 +37,35 @@ export function crest(symbol, size = '') {
  * siempre entre sus tres símbolos, así el efecto de tu color encadena con tu mazo
  * mejor que con ningún otro.
  */
+/**
+ * Los números de los poderes, en un solo lugar y mutables a propósito: el banco de
+ * pruebas los cambia para medir variantes sin editar código entre corridas. El juego
+ * los lee en cada uso, así que un cambio acá vale desde la partida siguiente.
+ *
+ *   strengthStep   cuánto suma cada carta de fuerza, para siempre
+ *   poisonShare    divisor del golpe con que se envenena (2 = la mitad)
+ *   poisonDecay    cuánto baja el veneno al cerrar la ronda, después de morder
+ *   poisonStacks   true suma venenos; false se queda con el mayor, como el caracol
+ *   snailShare     divisor del golpe con que se debilita
+ *   snailAttacks   cuántos ataques dura cada caracol
+ *   eggShare       divisor del golpe con que se arma el escudo
+ *
+ * Viven acá y no en `game.js` para que los carteles de los poderes puedan salir de
+ * los mismos números que el juego usa. La versión anterior los escribía a mano en
+ * cada `note`, y el del caracol ya mentía: decía "pega 2 menos" cuando hace rato que
+ * saca la mitad del golpe. Un texto que hay que acordarse de actualizar se
+ * desactualiza.
+ */
+export const TUNING = {
+  strengthStep: 1,
+  poisonShare: 2,
+  poisonDecay: 2,
+  poisonStacks: true,
+  snailShare: 2,
+  snailAttacks: 2,
+  eggShare: 2,
+};
+
 export const POWERS = {
   egg: {
     id: 'egg', symbol: 'bird', name: 'Huevo',
@@ -52,15 +81,15 @@ export const POWERS = {
   },
   poison: {
     id: 'poison', symbol: 'reptile', name: 'Veneno',
-    note: 'la mitad del daño, cada ronda, bajando de a 2',
+    note: `la mitad del daño, cada ronda, bajando de a ${TUNING.poisonDecay}`,
   },
   snail: {
     id: 'snail', symbol: 'bug', name: 'Caracol',
-    note: 'el rival pega 2 menos durante 2 rondas',
+    note: `el rival pega la mitad durante ${TUNING.snailAttacks} ataques`,
   },
   strength: {
     id: 'strength', symbol: 'beast', name: 'Fuerza',
-    note: '+2 de daño en este ataque y en todos los que siguen',
+    note: `+${TUNING.strengthStep} de daño en este ataque y en todos los que siguen`,
   },
 };
 

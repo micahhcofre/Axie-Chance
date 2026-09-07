@@ -115,7 +115,7 @@ el ataque**, con el daño del turno ya contado.
 
 | | poder | efecto |
 |---|---|---|
-| ⚔️ | fuerza | +2 de daño en este ataque y en todos los que siguen. Acumulable |
+| ⚔️ | fuerza | +1 de daño en este ataque y en todos los que siguen. Acumulable |
 | ☠️ | veneno | la mitad de tu daño; muerde al cerrar cada intercambio y después baja 2. Acumulable |
 | 🥚 | huevo | escudo de la mitad de tu daño; aguanta golpes hasta gastarse |
 | 🪴 | maceta | te curás lo que pegaste, sin pasar de 100 |
@@ -189,7 +189,7 @@ De ahí salen los escalones de [`POWER_WORTH`](src/ai.js), que antes eran númer
 ```
 npm run balance                      # 300 partidas por celda
 npm run balance -- --games 800       # menos ruido
-npm run balance -- --arms base,fuerza1 --powers all
+npm run balance -- --arms base,fuerza2 --powers all
 ```
 
 Las partidas van **sembradas** ([`makeRng`](src/data.js), `createGame({ seed })`), y todas

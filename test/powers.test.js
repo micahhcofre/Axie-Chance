@@ -41,7 +41,7 @@ async function atPlayerTurn(chain) {
   await idle();
 
   const st = game.state.status.human;
-  assert.equal(st.strength, TUNING.strengthStep, 'quedó +2 acumulado');
+  assert.equal(st.strength, TUNING.strengthStep, 'quedó acumulada');
   assert.equal(game.state.roundScores.human, 5, 'el ataque que la estrena no la cobra');
   assert.equal(game.state.totals.human, 5, 'el daño aplicado es el del ataque');
 
