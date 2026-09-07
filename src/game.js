@@ -396,13 +396,6 @@ export function createGame({ pace = 1, seed } = {}) {
       log(`${who(player)} pega por ${landed}. ${who(target)} queda en ${hpOf(state, target)}.`,
         player === 'cpu' ? 'cpu' : 'good');
     }
-    // Le vuelve al que pegó, y cuenta como daño del dueño del huevo: la vida sale de
-    // `totals` (ver `hpOf`), así que la cáscara puede terminar una partida.
-    if (thorns > 0) {
-      state.totals[foe] += thorns;
-      log(`${powerIcon('egg', 'sm')} La cáscara le vuelve a ${who(player)} por ${thorns}: ` +
-        `queda en ${hpOf(state, player)}.`, foe === 'cpu' ? 'cpu' : 'good');
-    }
     applyPowers(player, swing);
     emit();
 
@@ -415,6 +408,24 @@ export function createGame({ pace = 1, seed } = {}) {
 
     // Un golpe que conecta se mira: el centro no se enciende encima del efecto.
     if (!(await tick(swing > 0 ? 900 : 500, era))) return;
+
+    // Y recién ahí contesta la cáscara, con su propio golpe en sentido contrario. Va
+    // después y no junto con el ataque porque son dos cosas distintas —le pegaste, y
+    // el huevo te contestó— y encimadas se leen como un solo número mal sumado.
+    //
+    // El daño se aplica acá, del otro lado del `tick`, y por eso el `return` de arriba
+    // no lo pierde: cuando `tick` da false es porque arrancó otra partida y `state` ya
+    // es otro objeto. Sumárselo ahí le metería daño de la partida anterior a la nueva.
+    if (thorns > 0) {
+      state.totals[foe] += thorns;
+      state.lastHit = {
+        id: ++state.hitId, by: foe, target: player, amount: thorns, blocked: 0, kind: 'thorns',
+      };
+      log(`${powerIcon('egg', 'sm')} La cáscara le vuelve a ${who(player)} por ${thorns}: ` +
+        `queda en ${hpOf(state, player)}.`, foe === 'cpu' ? 'cpu' : 'good');
+      emit();
+      if (!(await tick(900, era))) return;
+    }
     // Con alguien sin vida la partida ya está resuelta: no hay mazo que armar, solo
     // queda que el otro devuelva el golpe.
     if (matchOver()) return afterDraft(era);

@@ -176,6 +176,12 @@ async function atPlayerTurn(chain) {
     card(['aquatic', 'beast']),
   );
   const game = await atPlayerTurn(chain);
+  // Los golpes se anotan a medida que salen: `lastHit` es un pulso y se pisa. Con la
+  // cáscara encendida son dos —el ataque y la respuesta— y el segundo tapa al primero.
+  const hits = [];
+  game.subscribe((s) => {
+    if (s.lastHit && s.lastHit.id !== hits.at(-1)?.id) hits.push({ ...s.lastHit });
+  });
   game.state.status.cpu.egg = 4;
   await game.stand(); // 10 de ataque contra 4 de huevo
   await idle();
@@ -183,7 +189,9 @@ async function atPlayerTurn(chain) {
   assert.equal(game.state.totals.human, 6, 'solo entraron 6');
   assert.equal(hpOf(game.state, 'cpu'), TARGET - 6);
   assert.equal(game.state.status.cpu.egg, 0, 'el huevo se rompe');
-  assert.equal(game.state.lastHit.blocked, 4, 'el golpe recuerda cuánto le frenaron');
+  const golpe = hits.find((h) => h.by === 'human');
+  assert.equal(golpe.blocked, 4, 'el golpe recuerda cuánto le frenaron');
+  assert.equal(golpe.amount, 6, 'y cuánto entró');
 }
 {
   // Con más huevo que golpe no entra nada y el huevo sigue puesto, gastado en parte:
@@ -218,6 +226,12 @@ async function atPlayerTurn(chain) {
     // Se mide contra el golpe que lo rompió (10), no contra lo que tapó (4).
     assert.equal(game.state.totals.cpu, 5, 'y le volvieron 5 al que pegó');
     assert.equal(hpOf(game.state, 'human'), TARGET - 5, 'la cáscara le sacó vida');
+    // Y sale como golpe propio, en sentido contrario, para que se vea en pantalla.
+    const back = game.state.lastHit;
+    assert.equal(back.kind, 'thorns');
+    assert.equal(back.by, 'cpu', 'lo devuelve el dueño del huevo');
+    assert.equal(back.target, 'human', 'contra el que pegó');
+    assert.equal(back.amount, 5);
 
     // Un huevo que aguanta no corta: solo devuelve el que se rompe.
     const g2 = await atPlayerTurn(chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'])));
