@@ -52,8 +52,11 @@ export function crest(symbol, size = '') {
  *   octopusPowers  si la carta que paga el pulpo puede llevar poder
  *   octopusStacks  true: cada pulpo paga una carta. false: una por reparto, salgan
  *                  los pulpos que salgan
- *   octopusOnHit   si el pulpo necesita que el ataque haya hecho daño, como los otros
- *                  cuatro. Con false sale igual con la cadena cortada, como la fuerza
+ *   octopusOnStand si el pulpo exige haberse plantado. Con false sale igual con la
+ *                  cadena cortada, como la fuerza.
+ *                  Ojo: se mide contra la cadena, no contra el daño. Un jugador muy
+ *                  debilitado puede plantarse y pegar 0 igual (ver `swingOf`), y ahí
+ *                  cobrar el pulpo es lo correcto: ya lo castigó el caracol
  *   powerBias      multiplicador sobre POWER_WORTH: cuán seguido la CPU prefiere un
  *                  poder antes que dos cartas sin poder. No es un número del juego
  *                  sino de la cabeza que lo juega, y está acá para poder medirlo
@@ -74,7 +77,7 @@ export const TUNING = {
   eggShare: 2,
   octopusPowers: true,
   octopusStacks: true,
-  octopusOnHit: false,
+  octopusOnStand: true,
   powerBias: 1,
 };
 

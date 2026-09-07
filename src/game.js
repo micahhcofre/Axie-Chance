@@ -308,10 +308,13 @@ export function createGame({ pace = 1, seed } = {}) {
       if (power === 'strength') {
         mine.strength += TUNING.strengthStep;
         log(`${mark('strength')} ${who(player)} afila: +${mine.strength} de daño de acá en más.`, kind);
-      } else if (power === 'octopus' && (!TUNING.octopusOnHit || swing > 0)) {
-        // Paga una carta suelta en el reparto, aparte de lo que le toque. Con
-        // `octopusOnHit` en false sale salga como salga el ataque, como la fuerza.
-        // Se acumula, y con dos pulpos son las dos primeras cartas de la ronda.
+      } else if (power === 'octopus' && (!TUNING.octopusOnStand || !state.chains[player].busted)) {
+        // Paga una carta suelta en el reparto, aparte de lo que le toque. Se acumula,
+        // y con dos pulpos son las dos primeras cartas de la ronda.
+        //
+        // La condición mira la cadena y no el daño, que no es lo mismo: plantarse con
+        // un caracol encima puede dar 0 igual (`swingOf` resta el mordisco). Ahí el
+        // pulpo cobra: el jugador hizo su parte, lo dejó en cero el rival.
         mine.stacked++;
         log(`${mark('octopus')} ${who(player)} va a elegir ${mine.stacked === 1
           ? 'la carta con que abre'

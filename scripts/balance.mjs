@@ -44,8 +44,10 @@ const ARMS = {
   // El pulpo con y sin poderes en su carta extra.
   pulpoPlano: { octopusPowers: false },
   pulpoUno: { octopusStacks: false },
-  pulpoAlDar: { octopusOnHit: true },
-  pulpoAmbas: { octopusOnHit: true, octopusStacks: false },
+  // El pulpo cobrando salga como salga el ataque, que es como estaba antes de pedirle
+  // plantarse. Queda como variante para poder volver a comprobar el cambio.
+  pulpoSiempre: { octopusOnStand: false },
+  pulpoUnoYPlantado: { octopusStacks: false },
   sesgo07: { powerBias: 0.7 },
   sesgo15: { powerBias: 1.5 },
   sesgo20: { powerBias: 2 },

@@ -121,7 +121,7 @@ el ataque**, con el daño del turno ya contado.
 | 🥚 | huevo | escudo de la mitad de tu daño; aguanta golpes hasta gastarse |
 | 🪴 | maceta | te curás lo que pegaste, sin pasar de 100 |
 | 🐌 | caracol | los próximos 2 ataques del rival pegan la mitad de tu daño menos. Acumula ataques y se queda con el mordisco más grande |
-| 🐙 | pulpo | una carta **de más** del centro, la que quieras: no se baraja, abre tu próxima ronda. Acumulable |
+| 🐙 | pulpo | una carta **de más** del centro, la que quieras: no se baraja, abre tu próxima ronda. Hay que haberse plantado. Acumulable |
 
 Cada poder viaja siempre con **su propia clase** entre los 3 símbolos, así que el efecto de
 tu color encadena con tu mazo mejor que ningún otro. Los pares que lo acompañan
@@ -131,8 +131,11 @@ sobre 20 tríos posibles, así que el mismo trío aparece con poderes distintos 
 igual y se eligen por el efecto.
 
 Si **se corta la cadena** el ataque hace 0, y con él se pierde todo lo que se mide contra el
-daño: huevo, maceta, veneno y caracol. La fuerza y el pulpo salen igual, porque no salen del
-golpe. Los mazos iniciales de 10 **no traen poderes**: los seis salen del centro y hay que
+daño: huevo, maceta, veneno y caracol. El pulpo tampoco cobra —hay que haberse plantado—,
+pero se mide contra la cadena y no contra el daño, que no es lo mismo: plantarse con un
+caracol encima puede dar 0 igual ([`swingOf`](src/game.js)) y ahí el pulpo sale, porque al
+jugador lo dejó en cero el rival y no su propia jugada. **La fuerza es la única que sobrevive
+a un ataque roto**, porque es la única que no sale del golpe. Los mazos iniciales de 10 **no traen poderes**: los seis salen del centro y hay que
 ganárselos.
 
 El pulpo es el único que no se cobra en daño. Abre una **etapa aparte** del reparto: una
@@ -169,35 +172,59 @@ vueltas.
 
 **Pero pesan muchísimo.** Una medición simétrica es ciega a esto: si los dos lados agarran
 poderes por igual, no dice nada sobre cuánto valen. Atando al jugador a un solo poder contra
-la CPU normal, 400 partidas **sembradas** por poder, contra un control que nunca agarra
+la CPU normal, 800 partidas **sembradas** por poder, contra un control que nunca agarra
 ninguno:
 
 | escalón | | gana | vs. control |
 |---|---|---|---|
-| | control (nunca agarra poderes) | 4.6% | — |
-| 1 | veneno | 15.8% | +11.1 |
-| 1 | fuerza | 12.3% | +7.6 |
-| 1 | caracol | 12.1% | +7.5 |
-| 2 | huevo | 10.6% | +6.0 |
-| 2 | maceta | 9.6% | +5.0 |
-| 2 | pulpo | 7.4% | +2.8 |
+| | control (nunca agarra poderes) | 4.3% | — |
+| 1 | pulpo | 17.8% | +13.5 |
+| 1 | veneno | 17.8% | +13.5 |
+| 2 | fuerza | 12.9% | +8.6 |
+| 2 | maceta | 11.5% | +7.2 |
+| 2 | caracol | 11.3% | +7.0 |
+| 3 | huevo | 9.4% | +5.1 |
 
 **Ese orden no se puede leer, los escalones sí.** El ± de la columna "vs. control" es el
 error de cada estimación *contra el control*, no el de la diferencia entre dos poderes: dos
 pueden estar los dos clarísimo arriba del control y ser indistinguibles entre ellos. El banco
 compara además cada poder **pareado contra el líder de su escalón** —no contra el de al lado,
 porque una cadena de pasos chicos no medibles puede sumar entre las puntas una diferencia que
-sí lo es— y abre uno nuevo cuando cae por debajo con el margen afuera. Salen dos escalones, y
-eso es todo lo que estos datos sostienen. De ahí salen los pesos de
-[`POWER_WORTH`](src/ai.js), que antes eran números de oficio.
+sí lo es— y abre uno nuevo cuando cae por debajo con el margen afuera. De ahí salen los pesos
+de [`POWER_WORTH`](src/ai.js), que antes eran números de oficio.
+
+El que sobra hoy es **el huevo**, solo en el último escalón. Es el mismo patrón que tenía el
+pulpo antes de rehacerlo: el escudo es defensivo puro, no te acerca a ganar, solo te aleja de
+perder.
 
 *Contar cuántas veces la CPU elige cada poder no mide nada de esto*: sale ordenado igual que
 `POWER_WORTH`, porque es un reflejo de esos pesos y no del juego.
 
-**Ignorar los poderes gana el 4.6%**, así que "una carta con poder o dos sin poder" casi
+**Ignorar los poderes gana el 4.3%**, así que "una carta con poder o dos sin poder" casi
 nunca es una decisión: el poder es casi siempre correcto. **Es a propósito.** Con los dos
 lados usándolos la partida queda pareja, y la decisión interesante no es *si* agarrás un
 poder sino *cuál*: son seis efectos que quieren mazos distintos.
+
+### El pulpo, que se midió tres veces
+
+Vale como ejemplo de todo lo que este banco hace bien y mal:
+
+| | vs. control | qué cambió |
+|---|---|---|
+| reordenaba tu carta | +2.8 ±3.4 | — |
+| carta **de más**, con poderes | +3.0 ±3.4 | el diseño |
+| ídem, midiéndolo bien | **+17.4** ±4.6 | **el banco**, no el juego |
+| ídem, exigiendo plantarse | **+13.5** ±2.9 | el diseño |
+
+El salto de +3.0 a +17.4 no fue un cambio del juego: el banco ata al jugador a un solo poder
+para aislarlo, y en la etapa del pulpo lo obligaba a traerse **otro pulpo**. El efecto del
+pulpo es conseguir otras cartas; atarlo así lo medía contra una versión de sí mismo que nadie
+jugaría, y lo dejaba último cuando era primero.
+
+Casi todo su valor está en que la carta pueda llevar poder: sin poderes da +1.5, o sea 15.9
+±4.3 puntos de diferencia. Capar la acumulación casi no mueve nada (−1.8): dos pulpos en la
+misma cadena son raros. Exigirle plantarse sí: **−3.9 ±2.4** pareado, y con eso baja al
+escalón del veneno sin tocarle nada a la decisión del jugador.
 
 ### Dos cosas que se midieron y no eran
 
@@ -330,15 +357,28 @@ casi el mismo dibujo que los ojos abiertos —`aquatic-02` cambia el 4% de los p
 `bug-08` el 2%—, así que el Axie parpadea y no se nota. Los que están puestos cambian de
 verdad.
 
-De los 46 clips entran diez, los que un combate de cartas puede llegar a mostrar. Salen
-82 KB, casi todo compartido: las patas de las seis clases son las mismas.
+De los 46 clips entran catorce, los que un combate de cartas puede llegar a mostrar.
+Siete son emotes: los tres `idle/random` que el kit hizo para eso —rascarse, estirar el
+cuello, gruñir— más cuatro prestados de situaciones que el juego no juega —recibir un buff,
+comer, entrar a la arena—, que fuera de contexto se leen igual de bien: un saltito, masticar,
+un tarascón, plantarse. Ninguno mueve al Axie de su lugar ni pide un dibujo que no esté ya
+cargado. Salen 129 KB —26 KB comprimidos—, casi todo compartido: las patas de las seis
+clases son las mismas.
 
 [`src/axie-motion.js`](src/axie-motion.js) los reproduce con la Web Animations API. Tiene
 dos niveles: una **base** que se repite mientras dure la situación —quieto, plantado para
 atacar, festejando, desmayado— y **pulsos** que la tapan y se van solos —el ataque, el
-golpe, un aburrimiento cada 5-11 segundos—. Los dos que pelean arrancan el bucle en
+golpe, un emote cada 5-11 segundos—. Los dos que pelean arrancan el bucle en
 contrafase: con el mismo clip y el mismo reloj, dos muñecos sincronizados se leen como un
 solo muñeco repetido.
+
+Se aburre el que está respirando, y eso incluye al que ya se plantó para atacar:
+`activity/prepare` es un pulso, y cuando termina abajo queda el mismo bucle de estar
+quieto. Mirar solo `idle` dejaba al Axie propio sin hacer un gesto en toda la partida,
+porque durante tu turno está plantado y el único que esperaba en `idle` era el de la CPU.
+Es lo que mira [`test/motion.test.js`](test/motion.test.js), con reloj de mentira: un
+minuto de partida y contar los emotes. Un muñeco más quieto no rompe nada, así que no se
+nota desde ningún otro lado.
 
 Los bucles del kit se aflojan (`rate`). Están hechos para verse un rato sueltos, no para
 encadenarse toda la partida: el de estar quieto dura 1,33 s y trae un parpadeo adentro, así

@@ -124,43 +124,40 @@ function bestCards(options, deck, n) {
  * carta más al mazo".
  *
  * Salen de atar al jugador a un solo poder contra la CPU normal y contar partidas
- * ganadas, 400 sembradas por poder, contra un control que nunca agarra ninguno
+ * ganadas, 800 sembradas por poder, contra un control que nunca agarra ninguno
  * (`npm run balance`). En puntos sobre ese control:
  *
- *   veneno +11.1 · fuerza +7.6 · caracol +7.5 · huevo +6.0 · maceta +5.0 · pulpo +2.8
+ *   pulpo +13.5 · veneno +13.5 · fuerza +8.6 · maceta +7.2 · caracol +7.0 · huevo +5.1
  *
- * De ese orden **solo hay dos escalones afirmables**. Comparando cada poder pareado
- * contra el líder de su grupo, el banco separa {veneno, fuerza, caracol} de {huevo,
- * maceta, pulpo} y adentro de cada grupo no distingue nada. Que el veneno esté 3.5
- * arriba de la fuerza no se puede sostener: los ± de la tabla son el error contra el
- * control, no el de la diferencia entre dos poderes.
+ * De ese orden solo hay **tres escalones** afirmables: {pulpo, veneno}, {fuerza,
+ * maceta, caracol} y {huevo}. Comparando cada poder pareado contra el líder de su
+ * grupo, adentro de cada uno el banco no distingue nada. Los ± de la tabla son el
+ * error contra el control, no el de la diferencia entre dos poderes: no sirven para
+ * ordenarlos entre sí.
  *
- * Los pesos igual siguen los valores medidos y no los dos escalones, porque esto no
+ * Los pesos igual siguen los valores medidos y no los tres escalones, porque esto no
  * es una afirmación sino una decisión bajo incertidumbre: para elegir, el mejor
  * número disponible es la estimación, aunque no alcance para publicarla. Lo que no
  * hay que hacer es leer el orden fino como si fuera un hecho.
  *
  * La escala de la banda —cuán seguido un poder le gana a dos cartas sin poder— resultó
  * no importar. Está detrás de `TUNING.powerBias`, y multiplicarla por 0.7, 1.5 y 2 no
- * mueve ningún resultado fuera del ruido sobre 300 partidas. Se midió porque parecía
- * que sí: al recalibrar estos pesos los números subieron en todos lados y la sospecha
- * era que bajar cinco de seis había vuelto glotona de cartas sin poder a la CPU. No
- * era eso. Lo que decide es el **orden relativo**, no el nivel absoluto.
+ * mueve ningún resultado fuera del ruido. Lo que decide es el **orden relativo**, no
+ * el nivel absoluto.
  *
- * Ojo con el lazo igual: la medición corre contra esta misma CPU, así que cambiar
- * estos pesos mueve los números de los que salieron. No es circular como contar
- * cuántas veces la CPU elige cada poder —eso solo refleja estos pesos y nada más—,
- * pero conviene volver a correr el banco después de tocarlos.
+ * Ojo con el lazo: la medición corre contra esta misma CPU, así que cambiar estos
+ * pesos mueve los números de los que salieron. No es circular como contar cuántas
+ * veces la CPU elige cada poder —eso solo refleja estos pesos y nada más—, pero
+ * conviene volver a correr el banco después de tocarlos.
  */
 const POWER_WORTH = {
+  octopus: 1.7,
   poison: 1.7,
-  strength: 1.15,
-  snail: 1.15,
-  egg: 0.9,
-  pot: 0.75,
-  octopus: 0.45,
-};
-/**
+  strength: 1.1,
+  pot: 0.9,
+  snail: 0.9,
+  egg: 0.65,
+};/**
  * La carta suelta que paga cada pulpo. No es el reparto: es una sola carta, sirve
  * cualquiera —también con poder— y no sale del mazo sino de arriba de él, o sea que
  * es con lo que vas a abrir la ronda que viene.

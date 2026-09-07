@@ -384,8 +384,9 @@ async function atPlayerDraft(chain) {
 }
 
 {
-  // El pulpo no se mide contra el daño: sale igual con la cadena cortada, como la
-  // fuerza. Es lo único que las dos comparten.
+  // Con la cadena cortada el pulpo no cobra: hay que haberse plantado. La fuerza sí
+  // sale, y ahora es la única de las seis que sobrevive a un ataque roto, porque es
+  // la única que no sale del golpe.
   const chain = chainOf(
     card(['aquatic', 'bird'], 'octopus'),
     card(['bug', 'reptile'], 'strength'), // ni bug ni reptile viven: acá se corta
@@ -395,9 +396,27 @@ async function atPlayerDraft(chain) {
   await game.stand();
   await idle();
   assert.equal(game.state.roundScores.human, 0, 'el ataque hizo 0');
-  assert.equal(game.state.status.human.stacked, 1, 'el pulpo sale igual');
-  assert.equal(game.state.status.human.strength, TUNING.strengthStep, 'la fuerza también');
-  console.log('  ✓ pulpo (cadena cortada)');
+  assert.equal(game.state.status.human.stacked, 0, 'el pulpo se fue con la cadena');
+  assert.equal(game.state.status.human.strength, TUNING.strengthStep, 'la fuerza no');
+  console.log('  ✓ pulpo (cadena cortada: no cobra)');
+}
+
+{
+  // Pero se mide contra la cadena, no contra el daño. Plantarse con un caracol encima
+  // puede dar 0 igual, y ahí el pulpo cobra: el jugador hizo su parte y lo dejó en
+  // cero el rival, así que no lo castiga dos veces.
+  const chain = chainOf(card(['aquatic', 'bird'], 'octopus'));
+  const game = await atPlayerTurn(chain);
+  assert.ok(!chain.busted, 'la cadena está entera');
+  // Un caracol grande puesto encima: el mordisco se come el golpe entero.
+  game.state.status.human.weak = 2;
+  game.state.status.human.weakBite = 99;
+  assert.equal(swingOf(game.state, 'human'), 0, 'se planta y pega 0');
+
+  await game.stand();
+  await idle();
+  assert.equal(game.state.status.human.stacked, 1, 'el pulpo cobra igual');
+  console.log('  ✓ pulpo (plantado y en cero: cobra)');
 }
 
 console.log('✓ poderes ok');
