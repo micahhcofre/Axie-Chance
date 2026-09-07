@@ -163,26 +163,52 @@ vueltas.
 
 **Pero pesan muchísimo.** Una medición simétrica es ciega a esto: si los dos lados agarran
 poderes por igual, no dice nada sobre cuánto valen. Atando al jugador a un solo poder contra
-la CPU normal, 400 partidas por poder, contra un control que nunca agarra ninguno:
+la CPU normal, 400 partidas **sembradas** por poder, contra un control que nunca agarra
+ninguno:
 
-| | gana | vs. control |
-|---|---|---|
-| control (nunca agarra poderes) | 3.5% | — |
-| veneno | 16.8% | +13.3 |
-| fuerza | 15.8% | +12.3 |
-| maceta | 12.3% | +8.8 |
-| huevo | 9.0% | +5.5 |
-| caracol | 7.3% | +3.8 |
-| pulpo | 6.5% | +3.0 |
+| escalón | | gana | vs. control |
+|---|---|---|---|
+| | control (nunca agarra poderes) | 4.6% | — |
+| 1 | veneno | 15.8% | +11.1 |
+| 1 | fuerza | 12.3% | +7.6 |
+| 1 | caracol | 12.1% | +7.5 |
+| 2 | huevo | 10.6% | +6.0 |
+| 2 | maceta | 9.6% | +5.0 |
+| 2 | pulpo | 7.4% | +2.8 |
 
-**Ignorar los poderes gana el 3.5%**, así que "una carta con poder o dos sin poder" hoy no es
-una decisión: el poder es casi siempre correcto. La fuerza suma +2 permanente por carta y en
-14 rondas se juntan 4 o 5 — +8 o +10 en cada ataque, sobre cadenas que valen 5 a 10.
-
-De ahí salen los escalones de [`POWER_WORTH`](src/ai.js), que antes eran números de oficio.
+**Ese orden no se puede leer, los escalones sí.** El ± de la columna "vs. control" es el
+error de cada estimación *contra el control*, no el de la diferencia entre dos poderes: dos
+pueden estar los dos clarísimo arriba del control y ser indistinguibles entre ellos. El banco
+compara además cada poder **pareado contra el líder de su escalón** —no contra el de al lado,
+porque una cadena de pasos chicos no medibles puede sumar entre las puntas una diferencia que
+sí lo es— y abre uno nuevo cuando cae por debajo con el margen afuera. Salen dos escalones, y
+eso es todo lo que estos datos sostienen. De ahí salen los pesos de
+[`POWER_WORTH`](src/ai.js), que antes eran números de oficio.
 
 *Contar cuántas veces la CPU elige cada poder no mide nada de esto*: sale ordenado igual que
 `POWER_WORTH`, porque es un reflejo de esos pesos y no del juego.
+
+**Ignorar los poderes gana el 4.6%**, así que "una carta con poder o dos sin poder" casi
+nunca es una decisión: el poder es casi siempre correcto. **Es a propósito.** Con los dos
+lados usándolos la partida queda pareja, y la decisión interesante no es *si* agarrás un
+poder sino *cuál*: son seis efectos que quieren mazos distintos.
+
+### Dos cosas que se midieron y no eran
+
+**El tope del veneno.** La fuerza y el veneno eran los únicos dos poderes sin techo, así que
+la hipótesis era aplicarles a los dos la regla del caracol —acumular en tiempo, no en
+cantidad—. Con la fuerza funcionó: bajarla de +2 a +1 la sacó de +13.9 y la dejó en +7.6,
+empatada con el caracol (`-5.6 ±2.5` pareado contra el juego anterior). Con el veneno no:
+que un veneno nuevo se quede con el máximo en vez de sumarse da `-1.1 ±1.2`, dentro del
+ruido. Y no es que el caso no ocurra —instrumentado sobre 200 partidas, el 20.7% de los
+venenos caen sobre alguien ya envenenado—: cuando el tope muerde, la partida ya está
+decidida. Mecánicamente real, irrelevante para ganar. Queda como variante `venenoMax`.
+
+**La escala de `POWER_WORTH`.** Al recalibrar los pesos los números subieron en todos lados,
+y la sospecha era que bajar cinco de seis había vuelto glotona de cartas sin poder a la CPU.
+`TUNING.powerBias` multiplica la banda entera; a 0.7x, 1.5x y 2x no se mueve ningún resultado
+fuera del ruido sobre 300 partidas. Lo que decide es el **orden relativo** de los pesos, no su
+nivel absoluto.
 
 ### Volver a medir
 
@@ -196,7 +222,7 @@ Las partidas van **sembradas** ([`makeRng`](src/data.js), `createGame({ seed })`
 las celdas usan las mismas semillas. Eso es lo que hace comparables dos variantes: la misma
 estrategia sobre los mismos repartos, cambiando una constante, se compara de a pares y el
 ruido del sorteo se cancela en vez de sumarse. Los números de los poderes viven todos en
-[`TUNING`](src/game.js) y el banco los parchea para medir sin editar código.
+[`TUNING`](src/data.js) y el banco los parchea para medir sin editar código.
 
 Sin esto, dos corridas del mismo experimento daban distinto y hacía falta adivinar cuánto de
 la diferencia era efecto y cuánto sorteo — que es el error que se cometió antes de que el
@@ -251,6 +277,49 @@ Las imágenes se sirven del CDN público de Sky Mavis
 Si el CDN no responde —o si abrís el `dist/` sin internet—, cada Axie cae al crest de su
 clase y el juego sigue igual.
 
+### Cómo se mueve
+
+El mixer trae, además de los PNG, el **esqueleto Spine con 46 animaciones hechas** por Sky
+Mavis: caras, patas, colas, el ataque, el golpe recibido, el festejo y cinco maneras de
+aburrirse —entre ellas rascarse con la pata de adelante—. El juego no las puede reproducir
+tal cual, porque dibuja una pila de PNG y no un esqueleto, así que se hornean offline igual
+que las capas:
+
+```sh
+npm run poses          # regenera src/axie-poses.js
+```
+
+[`scripts/poses.mjs`](scripts/poses.mjs) evalúa el esqueleto cuadro a cuadro y guarda de
+cada clip tres cosas:
+
+- **el cuerpo** — cuánto se corre y cuánto gira, en porcentaje del marco. Es la mayor parte
+  del movimiento, porque el esqueleto entero cuelga de un pivote.
+- **las partes** — lo que hace cada capa *además* de eso. Para casi todas es cero —van de
+  paseo con el cuerpo— y se descartan; quedan las patas, la cola, las orejas y la cara.
+- **los dibujos** — los ojos y la boca tienen versiones alternativas en el CDN (`eyes-shut`,
+  `eyes-angry`, `eyes-happy`, `mouth-open`, `mouth-bite`, `mouth-smile`, y patas `-long` y
+  `-stretch`). El clip dice en qué momento cambia cada una.
+
+La matemática es la misma que usa la librería para armar la pila quieta —rotar y trasladar,
+sin escala—, y el script **verifica que su pose de reposo caiga exactamente sobre
+`axie-avatars.js`** antes de escribir nada: si el mixer cambia de cuentas, falla en vez de
+producir Axies torcidos.
+
+De los 46 clips entran diez, los que un combate de cartas puede llegar a mostrar. Salen
+82 KB, casi todo compartido: las patas de las seis clases son las mismas.
+
+[`src/axie-motion.js`](src/axie-motion.js) los reproduce con la Web Animations API. Tiene
+dos niveles: una **base** que se repite mientras dure la situación —quieto, plantado para
+atacar, festejando, desmayado— y **pulsos** que la tapan y se van solos —el ataque, el
+golpe, un aburrimiento cada 5-11 segundos—.
+
+El CSS no anima partes: se ocupa de la **puesta en escena** —dónde está parado el bicho,
+adónde salta, adónde sale despedido, cómo se desploma— y del achatarse de los rebotes, que
+es lo único que el horno no guarda. Las dos capas no se pisan porque tocan elementos
+distintos: la escena va sobre `.axie` y `.axie-rig`, la actuación sobre `.axie-pose` y las
+capas de adentro. Sin CDN, sin `animate()` o con `prefers-reduced-motion`, no se reproduce
+nada y el juego es el mismo.
+
 ## La CPU
 
 `src/ai.js` evalúa cada decisión con un *lookahead* sobre las cartas que todavía no
@@ -283,10 +352,13 @@ tiene que valer más para ganarles.
 | `src/data.js` | símbolos, iconos, poderes, mazo personal y reserva común |
 | `src/axies.js` | el roster: seis Axies, sus partes, su mazo y su dibujo |
 | `src/axie-avatars.js` | generado — capas de cada Axie y catálogo de partes |
+| `src/axie-poses.js` | generado — las animaciones del kit, horneadas |
+| `src/axie-motion.js` | las reproduce sobre las capas |
 | `src/rules.js` | cadenas, cortes, puntaje y probabilidades — funciones puras |
 | `src/ai.js` | decisión de la CPU |
 | `src/game.js` | máquina de estados: turnos, daño, poderes, centro y reparto, sin DOM |
 | `src/ui.js` | render y eventos |
 | `scripts/axies.mjs` | corre el mixer offline y regenera `src/axie-avatars.js` |
+| `scripts/poses.mjs` | hornea las animaciones del kit a `src/axie-poses.js` |
 | `scripts/build.mjs` | empaqueta todo en un solo `.html` |
 | `scripts/balance.mjs` | banco de pruebas: mide cuánto vale cada poder en partidas |
