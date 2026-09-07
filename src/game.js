@@ -1,7 +1,7 @@
 import { buildPool, shuffle, cardLabel, crest, powerIcon, POWERS } from './data.js';
 import { AXIES, AXIE_IDS, axie, deckFor } from './axies.js';
 import { emptyChain, playCard, scoreChain } from './rules.js';
-import { decideDraw, planDraft, pickBest, pickGrab } from './ai.js';
+import { decideDraw, planDraft, pickBest } from './ai.js';
 
 export const PLAYERS = ['human', 'cpu'];
 /**
@@ -17,25 +17,33 @@ export const MARKET_SIZE = 5;
 // Los números de los poderes, todos juntos para poder moverlos de a uno.
 /** Cuánto suma cada carta de fuerza, en este ataque y en todos los siguientes. */
 const STRENGTH_STEP = 2;
-/** Cuánto le saca el caracol a cada ataque del debilitado, y cuántos ataques dura. */
-const SNAIL_BITE = 2;
+/**
+ * El caracol le saca a cada ataque del debilitado la mitad del golpe con que se lo
+ * pusieron, durante SNAIL_ATTACKS ataques. Escala como el veneno y el huevo: pegar
+ * fuerte al ponerlo es lo que lo hace valer.
+ */
+const SNAIL_SHARE = 2; // divisor del golpe
 const SNAIL_ATTACKS = 2;
 /** Cuánto baja el veneno al cerrar la ronda, después de haber mordido. */
 const POISON_DECAY = 2;
 
 /**
  * Lo que le queda puesto a un jugador de una ronda a la otra:
- *   `egg`      vida del escudo; se come el próximo golpe y se rompe
+ *   `egg`      vida del escudo; aguanta golpes hasta gastarse
  *   `poison`   cuánto muerde al cerrar cada ronda, bajando de a POISON_DECAY
- *   `weak`     cuántos ataques suyos todavía pegan SNAIL_BITE menos
+ *   `weak`     cuántos ataques suyos todavía pegan de menos
+ *   `weakBite` cuánto de menos pegan. Dos caracoles suman ataques y se quedan con el
+ *              mordisco más grande: acumulan duración, nunca cantidad
  *   `strength` daño extra acumulado, para siempre
+ *   `stacked`  cuántas de las próximas cartas que agarre del centro van arriba del
+ *              mazo en vez de perderse en el barajado (ver el pulpo)
  */
-const emptyStatus = () => ({ egg: 0, poison: 0, weak: 0, strength: 0 });
+const emptyStatus = () => ({ egg: 0, poison: 0, weak: 0, weakBite: 0, strength: 0, stacked: 0 });
 
 /** Los números de los poderes, para que la UI los cuente igual que el juego. */
 export const POWER_NUMBERS = {
   strength: STRENGTH_STEP,
-  snailBite: SNAIL_BITE,
+  snailShare: SNAIL_SHARE,
   snailAttacks: SNAIL_ATTACKS,
   poisonDecay: POISON_DECAY,
 };
@@ -71,7 +79,7 @@ export function swingOf(state, player) {
   const points = chain.busted ? 0 : scoreChain(chain).total;
   if (points <= 0) return 0;
   const st = state.status[player];
-  return Math.max(points + st.strength - (st.weak > 0 ? SNAIL_BITE : 0), 0);
+  return Math.max(points + st.strength - (st.weak > 0 ? st.weakBite : 0), 0);
 }
 
 /**
@@ -84,6 +92,13 @@ export function onTable(state, player) {
   const chain = state.chains[player];
   return chain.cards.length - state.recycled[player] + (chain.bustCard ? 1 : 0);
 }
+
+/**
+ * Todas las cartas de `player`: el mazo, lo que reservó el pulpo para arriba del
+ * mazo, y lo que sigue en la mesa sin devolver.
+ */
+export const ownedBy = (state, player) =>
+  state.decks[player].length + state.top[player].length + onTable(state, player);
 
 /** @param {{pace?: number}} opts  pace 0 corre sin pausas (tests). */
 export function createGame({ pace = 1 } = {}) {
@@ -122,8 +137,8 @@ export function createGame({ pace = 1 } = {}) {
   /** Cartas que todavía pueden salir del mazo de `player`: el mazo, sin más. */
   const unseenPool = (player) => state.decks[player];
 
-  /** Todas las cartas que posee `player`. Entre rondas están todas en el mazo. */
-  const ownedBy = (player) => state.decks[player];
+  /** Las cartas de `player` con las que la CPU mide conectividad: mazo y reservadas. */
+  const cardsOf = (player) => [...state.decks[player], ...state.top[player]];
 
   /** @param {{difficulty?: string, axie?: string}} opts  `axie` es un id del roster. */
   function newMatch({ difficulty, axie: axieId } = {}) {
@@ -143,6 +158,9 @@ export function createGame({ pace = 1 } = {}) {
       pool: shuffle(buildPool()), // pila boca abajo que alimenta el centro
       market: [], // las 5 cartas a la vista, se llena abajo
       decks: { human: shuffle(deckFor(mine.id)), cpu: shuffle(deckFor(theirs.id)) },
+      // Cartas reservadas por el pulpo, esperando el arranque de la ronda siguiente
+      // para entrar arriba del mazo. Ver `takeFromMarket` y `startRound`.
+      top: { human: [], cpu: [] },
       // Cuántas cartas de la cadena en curso ya volvieron al mazo (ver `draw`).
       recycled: { human: 0, cpu: 0 },
       // Si la cadena entera ya volvió al mazo, al terminar el turno de ese jugador.
@@ -157,10 +175,8 @@ export function createGame({ pace = 1 } = {}) {
       roundScores: { human: null, cpu: null },
       order: ['human', 'cpu'],
       turn: null,
-      phase: 'turn', // 'turn' | 'grab' | 'draft' | 'roundEnd' | 'matchEnd'
+      phase: 'turn', // 'turn' | 'draft' | 'roundEnd' | 'matchEnd'
       draft: null,
-      // El pulpo abierto: quién está eligiendo del centro a mitad de su turno.
-      grab: null,
       busy: false,
       roundWinner: null,
       // Último golpe resuelto. La UI compara `id` con el que ya animó: mientras no
@@ -181,15 +197,20 @@ export function createGame({ pace = 1 } = {}) {
 
   async function startRound(era) {
     state.round++;
-    // Se rebaraja todo el mazo propio: lo de la ronda pasada y lo que se sumó del centro.
-    for (const player of PLAYERS) state.decks[player] = shuffle(state.decks[player]);
+    // Se rebaraja todo el mazo propio: lo de la ronda pasada y lo que se sumó del
+    // centro. Lo que reservó el pulpo se apoya encima **después** de barajar —es todo
+    // el punto: esas cartas no se sortean—. Van al revés porque `draw` saca del final,
+    // así la primera que se tocó en el centro es la primera que sale.
+    for (const player of PLAYERS) {
+      state.decks[player] = shuffle(state.decks[player]).concat(state.top[player].reverse());
+      state.top[player] = [];
+    }
     state.recycled = { human: 0, cpu: 0 };
     state.returned = { human: false, cpu: false };
     state.chains = { human: emptyChain(), cpu: emptyChain() };
     state.roundScores = { human: null, cpu: null };
     state.roundWinner = null;
     state.draft = null;
-    state.grab = null;
     state.phase = 'turn';
     // Se alterna quién abre: el segundo juega sabiendo el puntaje del primero.
     state.order = state.round % 2 === 1 ? ['human', 'cpu'] : ['cpu', 'human'];
@@ -205,15 +226,10 @@ export function createGame({ pace = 1 } = {}) {
     state.chains[player] = playCard(state.chains[player], card);
     log(`${who(player)} abre con ${cardLabel(card)}`, player === 'cpu' ? 'cpu' : 'info');
     emit();
-    // El pulpo sale apenas la carta sale del mazo, y la de apertura también cuenta.
-    const octopus = card.power === 'octopus';
     if (player === 'cpu') {
       if (!(await tick(800, era))) return;
-      if (octopus && !(await cpuGrab(era))) return;
       await cpuTurn(era);
-      return;
     }
-    if (octopus) openGrab('human');
   }
 
   /**
@@ -255,7 +271,6 @@ export function createGame({ pace = 1 } = {}) {
         return;
       }
       log(`La CPU saca ${cardLabel(card)} → ataque de ${swingOf(state, 'cpu')}`, 'cpu');
-      if (card.power === 'octopus' && !(await cpuGrab(era))) return;
     }
   }
 
@@ -299,16 +314,27 @@ export function createGame({ pace = 1 } = {}) {
       if (power === 'strength') {
         mine.strength += STRENGTH_STEP;
         log(`${mark('strength')} ${who(player)} afila: +${mine.strength} de daño de acá en más.`, kind);
-      } else if (power === 'snail') {
-        theirs.weak += SNAIL_ATTACKS;
-        log(`${mark('snail')} ${who(foe)} queda debilitado: ${theirs.weak} ataques con ` +
-          `${SNAIL_BITE} menos.`, kind);
+      } else if (power === 'octopus') {
+        // No se mide contra el daño: reserva una carta del reparto, salga como salga
+        // el ataque. Se acumula, y con dos pulpos son las dos primeras de la ronda.
+        mine.stacked++;
+        log(`${mark('octopus')} ${who(player)} va a elegir ${mine.stacked === 1
+          ? 'la carta con que abre'
+          : `las ${mine.stacked} cartas con que abre`} la ronda que viene.`, kind);
       } else if (swing <= 0) {
-        // Sin daño no hay nada que medir: el huevo, la cura y el veneno se pierden.
+        // Sin daño no hay nada contra qué medir: solo la fuerza sobrevive a un
+        // ataque desarmado, porque es la única que no sale del golpe.
         log(`${mark(power)} ${POWERS[power].name} sin efecto: el ataque hizo 0.`, 'muted');
+      } else if (power === 'snail') {
+        // Suma ataques y se queda con el mordisco más grande: acumula duración, no
+        // cantidad. Un caracol chico no debilita un caracol grande que ya estaba.
+        theirs.weak += SNAIL_ATTACKS;
+        theirs.weakBite = Math.max(theirs.weakBite, Math.floor(swing / SNAIL_SHARE));
+        log(`${mark('snail')} ${who(foe)} queda debilitado: ${theirs.weak} ataques con ` +
+          `${theirs.weakBite} menos.`, kind);
       } else if (power === 'egg') {
         mine.egg += Math.floor(swing / 2);
-        log(`${mark('egg')} ${who(player)} pone un huevo de ${mine.egg}.`, kind);
+        log(`${mark('egg')} ${who(player)} queda con un huevo de ${mine.egg}.`, kind);
       } else if (power === 'pot') {
         const got = heal(player, swing);
         log(got > 0
@@ -321,67 +347,6 @@ export function createGame({ pace = 1 } = {}) {
     }
   }
 
-  // ---- el pulpo ---------------------------------------------------------------
-
-  /**
-   * Lo que el pulpo le deja agarrar a `player`: cartas del centro **sin poder** que
-   * además no le corten la cadena. Encadenar poderes gratis sería demasiado, y una
-   * carta que rompe la cadena no es una carta que se pueda colocar.
-   */
-  function grabbable(player) {
-    return state.market.filter((c) => !c.power && !playCard(state.chains[player], c).busted);
-  }
-
-  /**
-   * Suma una carta del centro directo a la cadena. A diferencia del reparto, acá la
-   * carta **no** va al mazo: entra en juego ya puesta, y llega al mazo recién al
-   * cerrar el turno, con el resto de la cadena (ver `finishTurn`).
-   */
-  function takeGrab(player, card) {
-    const at = state.market.indexOf(card);
-    if (at < 0) return;
-    state.market.splice(at, 1);
-    state.chains[player] = playCard(state.chains[player], card);
-    log(`${powerIcon('octopus', 'sm')} ${who(player)} suma ${cardLabel(card)} del centro ` +
-      `a la cadena: ataque de ${swingOf(state, player)}.`, player === 'cpu' ? 'cpu' : 'good');
-    // Se repone en el mismo hueco, como en el reparto: las cartas no saltan de lugar.
-    if (state.pool.length) state.market.splice(at, 0, state.pool.pop());
-  }
-
-  /**
-   * El pulpo del jugador: frena el turno y abre el centro. Devuelve false si no había
-   * nada que colocar, y entonces el turno sigue de largo sin interrumpir nada.
-   */
-  function openGrab(player) {
-    if (grabbable(player).length === 0) {
-      log(`${powerIcon('octopus', 'sm')} El centro no tiene nada que ${whom(player)} pueda ` +
-        'colocar: el pulpo se pierde.', 'muted');
-      return false;
-    }
-    state.grab = { player };
-    state.phase = 'grab';
-    state.busy = false;
-    emit();
-    return true;
-  }
-
-  /**
-   * El pulpo de la CPU: elige sola, con una pausa para que se vea. Devuelve false si
-   * la partida se reinició mientras tanto y esta corrutina quedó obsoleta.
-   */
-  async function cpuGrab(era) {
-    const options = grabbable('cpu');
-    if (options.length === 0) {
-      log(`${powerIcon('octopus', 'sm')} El centro no tiene nada que la CPU pueda ` +
-        'colocar: el pulpo se pierde.', 'muted');
-      return true;
-    }
-    emit();
-    if (!(await tick(700, era))) return false;
-    takeGrab('cpu', pickGrab(options, state.chains.cpu, ownedBy('cpu')));
-    return true;
-  }
-
   async function finishTurn(player, points, era) {
     const foe = other(player);
     const mine = state.status[player];
@@ -390,19 +355,21 @@ export function createGame({ pace = 1 } = {}) {
     const swing = swingOf(state, player);
     // El caracol se gasta por ataque y no por ronda: así dura siempre lo mismo, sin
     // depender de si le tocaba abrir o cerrar el intercambio.
-    if (mine.weak > 0) mine.weak--;
+    if (mine.weak > 0 && --mine.weak === 0) mine.weakBite = 0;
     if (swing !== points) {
       log(`${who(player)} ataca por ${swing}: ${points} de cadena` +
         `${mine.strength ? ` +${mine.strength} de fuerza` : ''}` +
-        `${swing < points + mine.strength ? ` −${SNAIL_BITE} por el caracol` : ''}.`, 'muted');
+        `${mine.weakBite && swing < points + mine.strength ? ` −${mine.weakBite} por el caracol` : ''}.`,
+        'muted');
     }
 
-    // El huevo del rival se come lo que puede y se rompe igual, le sobre vida o no.
+    // El huevo del rival se come lo que puede y solo se rompe cuando se gasta: si le
+    // sobra vida, sigue puesto para el próximo golpe.
     const blocked = Math.min(theirs.egg, swing);
-    if (swing > 0 && theirs.egg > 0) {
-      theirs.egg = 0;
-      log(`${powerIcon('egg', 'sm')} El huevo de ${whom(foe)} aguanta ${blocked} y se rompe.`,
-        'muted');
+    if (blocked > 0) {
+      theirs.egg -= blocked;
+      log(`${powerIcon('egg', 'sm')} El huevo de ${whom(foe)} aguanta ${blocked}` +
+        `${theirs.egg > 0 ? ` y le quedan ${theirs.egg}` : ' y se rompe'}.`, 'muted');
     }
     const landed = swing - blocked;
 
@@ -517,8 +484,18 @@ export function createGame({ pace = 1 } = {}) {
     const at = state.market.indexOf(card);
     if (at < 0) return;
     state.market.splice(at, 1);
-    state.decks[player].push(card);
-    log(`${who(player)} suma ${cardLabel(card)} al mazo.`, player === 'cpu' ? 'cpu' : 'good');
+    // Con un pulpo puesto, esta carta no se pierde en el barajado: queda reservada
+    // para salir arriba del mazo en la ronda que viene. Cada pulpo reserva una.
+    const st = state.status[player];
+    if (st.stacked > 0) {
+      st.stacked--;
+      state.top[player].push(card);
+      log(`${powerIcon('octopus', 'sm')} ${who(player)} reserva ${cardLabel(card)}: ` +
+        `sale arriba del mazo la ronda que viene.`, player === 'cpu' ? 'cpu' : 'good');
+    } else {
+      state.decks[player].push(card);
+      log(`${who(player)} suma ${cardLabel(card)} al mazo.`, player === 'cpu' ? 'cpu' : 'good');
+    }
     // Se repone en el acto, en el mismo hueco para que las cartas no salten de lugar.
     if (state.pool.length) state.market.splice(at, 0, state.pool.pop());
   }
@@ -594,13 +571,13 @@ export function createGame({ pace = 1 } = {}) {
         // Decide la rama una vez —poder, o cartas sin poder— y después vuelve a
         // mirar el centro entre carta y carta: la reposición puede ofrecerle algo
         // mejor que lo que había al empezar.
-        const plan = planDraft(state.market, ownedBy('cpu'), { kind });
+        const plan = planDraft(state.market, cardsOf('cpu'), { kind });
         state.draft.mode = plan.mode;
         if (plan.mode === 'power') {
           takeFromMarket('cpu', plan.cards[0]);
         } else {
           for (let n = 0; n < plan.cards.length && plainCards().length; n++) {
-            takeFromMarket('cpu', pickBest(plainCards(), ownedBy('cpu')));
+            takeFromMarket('cpu', pickBest(plainCards(), cardsOf('cpu')));
           }
         }
         state.draft.mode = null;
@@ -700,42 +677,8 @@ export function createGame({ pace = 1 } = {}) {
       return;
     }
     log(`Sacaste ${cardLabel(card)} → ataque de ${swingOf(state, 'human')}`, 'good');
-    // El pulpo abre el centro acá mismo: es el único poder que no espera al ataque.
-    if (card.power === 'octopus' && openGrab('human')) return;
     state.busy = false;
     emit();
-  }
-
-  /** Cierra el pulpo y devuelve al jugador a su turno, con los botones vivos. */
-  function closeGrab() {
-    state.grab = null;
-    state.phase = 'turn';
-    state.busy = false;
-    emit();
-  }
-
-  /** Lo que el jugador puede tocar ahora mismo con el pulpo abierto. */
-  function grabOptions() {
-    if (!state || state.phase !== 'grab' || state.grab.player !== 'human') return [];
-    return grabbable('human');
-  }
-
-  function grabCard(uid) {
-    const card = grabOptions().find((c) => c.uid === uid);
-    if (!card) return;
-    takeGrab('human', card);
-    closeGrab();
-  }
-
-  /**
-   * No colocar nada. Es una decisión real y no solo el caso degenerado: una carta que
-   * encadena igual puede matar cadenas vivas y dejarte peor. Después de pasar, el
-   * turno sigue como si nada — se puede robar de nuevo o plantarse.
-   */
-  function skipGrab() {
-    if (state.phase !== 'grab' || state.grab.player !== 'human') return;
-    log('No colocás nada del centro.', 'muted');
-    closeGrab();
   }
 
   async function stand() {
@@ -758,7 +701,6 @@ export function createGame({ pace = 1 } = {}) {
     },
     unseenPool,
     pickable,
-    grabOptions,
     drafting,
     canRenew,
     /** Vuelve a pintar el estado actual sin tocarlo. */
@@ -773,8 +715,6 @@ export function createGame({ pace = 1 } = {}) {
     stand,
     nextRound,
     takeCard,
-    grabCard,
-    skipGrab,
     skipDraft,
     renewMarket,
   };

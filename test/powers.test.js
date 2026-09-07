@@ -55,27 +55,41 @@ async function atPlayerTurn(chain) {
   console.log('  ✓ fuerza');
 }
 
-// --- caracol: el rival pega 2 menos, dos ataques ------------------------------
+// --- caracol: el rival pega la mitad de tu golpe menos, dos ataques -----------
 {
-  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'], 'snail'));
+  // Cadena de 10: el caracol le saca 5 a cada uno de los dos próximos ataques.
+  const chain = chainOf(
+    card(['aquatic', 'bird']),
+    card(['aquatic', 'plant'], 'snail'),
+    card(['aquatic', 'beast']),
+  );
   const game = await atPlayerTurn(chain);
+  assert.equal(scoreChain(chain).total, 10);
   await game.stand();
   await idle();
 
   const st = game.state.status.cpu;
   assert.equal(st.weak, POWER_NUMBERS.snailAttacks, 'quedan dos ataques debilitados');
+  assert.equal(st.weakBite, 5, 'muerde la mitad del golpe con que se lo pusieron');
 
-  // El caracol muerde siempre lo mismo, tenga uno o cinco encima: acumula duración.
-  game.state.chains.cpu = chainOf(card(['beast', 'bird']), card(['beast', 'plant']));
   const clean = 5; // beast 2² + bird 1²
-  assert.equal(swingOf(game.state, 'cpu'), clean - POWER_NUMBERS.snailBite, 'pega 2 menos');
-  game.state.status.cpu.weak += POWER_NUMBERS.snailAttacks;
-  assert.equal(swingOf(game.state, 'cpu'), clean - POWER_NUMBERS.snailBite,
-    'un segundo caracol dura más, no muerde más');
+  game.state.chains.cpu = chainOf(card(['beast', 'bird']), card(['beast', 'plant']));
+  assert.equal(swingOf(game.state, 'cpu'), clean - 5, 'pega 5 menos');
 
-  // Una cadena cortada hace 0 y ningún modificador la mueve —ni para abajo.
+  // Un caracol chico no debilita al grande que ya estaba: suma ataques y se queda
+  // con el mordisco más grande.
+  game.state.status.cpu.weak += POWER_NUMBERS.snailAttacks;
+  game.state.status.cpu.weakBite = Math.max(game.state.status.cpu.weakBite, 1);
+  assert.equal(game.state.status.cpu.weakBite, 5, 'el mordisco no baja');
+  assert.equal(game.state.status.cpu.weak, 4, 'la duración sí sube');
+
+  // Nunca deja un ataque en negativo.
+  game.state.status.cpu.weakBite = 99;
+  assert.equal(swingOf(game.state, 'cpu'), 0, 'el golpe se hunde hasta 0, no más');
+
+  // Una cadena cortada hace 0 y ningún modificador la mueve.
   game.state.chains.cpu = { ...game.state.chains.cpu, busted: true };
-  assert.equal(swingOf(game.state, 'cpu'), 0, 'cortada es 0, no menos que 0');
+  assert.equal(swingOf(game.state, 'cpu'), 0, 'cortada es 0');
   console.log('  ✓ caracol');
 }
 
@@ -172,7 +186,8 @@ async function atPlayerTurn(chain) {
   assert.equal(game.state.lastHit.blocked, 4, 'el golpe recuerda cuánto le frenaron');
 }
 {
-  // Con más huevo que golpe no pasa nada… pero el huevo se rompe igual.
+  // Con más huevo que golpe no entra nada y el huevo sigue puesto, gastado en parte:
+  // aguanta hasta terminarse, que es lo que lo hace valer la carta.
   const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant']));
   const game = await atPlayerTurn(chain);
   game.state.status.cpu.egg = 40;
@@ -180,8 +195,19 @@ async function atPlayerTurn(chain) {
   await idle();
   assert.equal(game.state.totals.human, 0, 'no entró nada');
   assert.equal(hpOf(game.state, 'cpu'), TARGET);
-  assert.equal(game.state.status.cpu.egg, 0, 'se rompe aunque le sobrara');
+  assert.equal(game.state.status.cpu.egg, 35, 'le quedan 35 para el próximo golpe');
   console.log('  ✓ huevo');
+}
+{
+  // Un ataque de 0 no toca el huevo: se gasta con daño, no con turnos.
+  const chain = chainOf(card(['aquatic', 'bird']), card(['bug', 'reptile']));
+  const game = await atPlayerTurn(chain);
+  assert.ok(chain.busted);
+  game.state.status.cpu.egg = 8;
+  await game.stand();
+  await idle();
+  assert.equal(game.state.status.cpu.egg, 8, 'una cadena cortada no le hace nada al huevo');
+  console.log('  ✓ huevo (cadena cortada)');
 }
 
 // --- cadena cortada: salen los poderes que no se miden contra el daño ---------
@@ -202,112 +228,126 @@ async function atPlayerTurn(chain) {
   const s = game.state;
   assert.equal(s.roundScores.human, 0, 'una cadena cortada hace 0');
   assert.equal(s.totals.human, 0);
+  // La fuerza es la única que no sale del golpe, así que es la única que sobrevive.
   assert.equal(s.status.human.strength, POWER_NUMBERS.strength, 'la fuerza sale igual');
-  assert.equal(s.status.cpu.weak, POWER_NUMBERS.snailAttacks, 'el caracol también');
-  assert.equal(s.status.cpu.poison, 0, 'el veneno se mide contra el daño: nada');
-  assert.equal(s.status.human.egg, 0, 'el huevo también: nada');
+  assert.equal(s.status.cpu.weak, 0, 'el caracol se mide contra el daño: nada');
+  assert.equal(s.status.cpu.poison, 0, 'el veneno tampoco');
+  assert.equal(s.status.human.egg, 0, 'el huevo tampoco');
   console.log('  ✓ cadena cortada');
 }
 
-// --- pulpo: una carta del centro directo a la cadena, a mitad de turno --------
-
-/** Deja `card` como próxima carta a salir del mazo del jugador: `draw` hace `pop`. */
-const nextDraw = (game, card) => game.state.decks.human.push(card);
+// --- pulpo: reserva cartas del reparto para que abran la ronda siguiente -------
 
 /**
- * Pone en el centro una carta sin poder que lleve `symbol`, para que el pulpo tenga
- * algo que ofrecer. Sin esto el centro es sorteado y la prueba sale distinta cada vez.
+ * Deja `n` cartas sin poder a la vista en el centro. El centro es sorteado, y una
+ * prueba del reparto que dependa de lo que salió sale distinta cada vez.
  */
-function seedGrabbable(game, symbol) {
+function seedPlain(game, n) {
   const s = game.state;
-  const at = s.pool.findIndex((c) => !c.power && c.symbols.includes(symbol));
-  assert.ok(at >= 0, 'queda alguna carta sin poder del símbolo en la reserva');
-  s.pool.push(s.market[0]);
-  s.market[0] = s.pool.splice(at, 1)[0];
-}
-
-{
-  // El pulpo sale, el centro se abre y el turno queda esperando al jugador.
-  const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
-  seedGrabbable(game, 'aquatic');
-  nextDraw(game, card(['aquatic', 'plant'], 'octopus'));
-  await game.hit();
-  await idle();
-
-  assert.equal(game.state.phase, 'grab', 'el centro se abre a mitad de turno');
-  assert.equal(game.state.grab.player, 'human');
-  assert.equal(game.state.busy, false, 'el jugador puede actuar');
-
-  const options = game.grabOptions();
-  assert.ok(options.length > 0, 'con aquatic vivo algo tiene que servir');
-  assert.ok(options.every((c) => !c.power), 'el pulpo no encadena poderes');
-  assert.ok(options.every((c) => game.state.market.includes(c)), 'salen del centro');
-  // Todas las opciones continúan la cadena: colocar una que la corte no es colocar.
-  const alive = activeSymbols(game.state.chains.human);
-  assert.ok(options.every((c) => c.symbols.some((sym) => alive.includes(sym))),
-    'ninguna opción corta la cadena');
-
-  // Colocarla: entra en la cadena, sale del centro y el centro se repone.
-  const chosen = options[0];
-  const before = game.state.chains.human.cards.length;
-  const market = game.state.market.length;
-  game.grabCard(chosen.uid);
-
-  assert.equal(game.state.phase, 'turn', 'el turno sigue');
-  assert.equal(game.state.chains.human.cards.length, before + 1, 'la carta entró a la cadena');
-  assert.equal(game.state.chains.human.cards.at(-1).uid, chosen.uid);
-  assert.ok(!game.state.market.includes(chosen), 'salió del centro');
-  assert.equal(game.state.market.length, market, 'el centro se repuso');
-  assert.ok(!game.state.decks.human.some((c) => c.uid === chosen.uid),
-    'todavía no está en el mazo: está en la mesa');
-
-  // Y al cerrar el turno se la queda, como el resto de la cadena.
-  await game.stand();
-  await idle();
-  assert.ok(game.state.decks.human.some((c) => c.uid === chosen.uid),
-    'la carta agarrada queda en el mazo');
-  console.log('  ✓ pulpo (colocar)');
-}
-
-{
-  // No colocar es una decisión: el turno sigue igual y la cadena queda intacta.
-  const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
-  seedGrabbable(game, 'aquatic');
-  nextDraw(game, card(['aquatic', 'plant'], 'octopus'));
-  await game.hit();
-  await idle();
-  assert.equal(game.state.phase, 'grab');
-
-  const cards = game.state.chains.human.cards.length;
-  const market = game.state.market.map((c) => c.uid);
-  game.skipGrab();
-
-  assert.equal(game.state.phase, 'turn', 'vuelve al turno');
-  assert.equal(game.state.chains.human.cards.length, cards, 'la cadena queda igual');
-  assert.deepEqual(game.state.market.map((c) => c.uid), market, 'el centro queda igual');
-  // Y se puede seguir robando o plantarse, que es el punto de poder pasar.
-  await game.hit();
-  await idle();
-  assert.ok(['turn', 'draft', 'grab'].includes(game.state.phase), 'el turno sigue jugable');
-  console.log('  ✓ pulpo (pasar)');
-}
-
-{
-  // Con las cinco del centro trayendo poder no hay nada que colocar: el pulpo se
-  // pierde y el turno no se interrumpe.
-  const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
-  const s = game.state;
-  for (let i = 0; i < s.market.length; i++) {
-    const at = s.pool.findIndex((c) => c.power);
-    assert.ok(at >= 0, 'quedan cartas con poder en la reserva');
+  for (let i = 0; i < n; i++) {
+    if (!s.market[i].power) continue;
+    const at = s.pool.findIndex((c) => !c.power);
+    assert.ok(at >= 0, 'quedan cartas sin poder en la reserva');
     s.pool.push(s.market[i]);
     s.market[i] = s.pool.splice(at, 1)[0];
   }
-  nextDraw(game, card(['aquatic', 'plant'], 'octopus'));
-  await game.hit();
+}
+
+/** Lleva la partida hasta el reparto del jugador, que es donde el pulpo se cobra. */
+async function atPlayerDraft(chain) {
+  const game = await atPlayerTurn(chain);
+  await game.stand();
+  for (let i = 0; i < 50 && game.state.phase !== 'draft'; i++) await idle();
+  assert.equal(game.state.phase, 'draft', 'se abrió el reparto');
+  assert.equal(game.drafting(), 'human', 'y le toca al jugador');
+  return game;
+}
+
+{
+  // Un pulpo reserva una carta: la que agarres del centro no se pierde en el
+  // barajado, queda esperando arriba del mazo.
+  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'], 'octopus'));
+  const game = await atPlayerDraft(chain);
+  assert.equal(game.state.status.human.stacked, 1, 'quedó un pulpo puesto');
+
+  const deck = game.state.decks.human.length;
+  const pick = game.pickable().find((c) => c.power) ?? game.pickable()[0];
+  await game.takeCard(pick.uid);
+
+  assert.equal(game.state.status.human.stacked, 0, 'el pulpo se gastó');
+  assert.deepEqual(game.state.top.human.map((c) => c.uid), [pick.uid], 'quedó reservada');
+  assert.equal(game.state.decks.human.length, deck, 'y no entró al mazo todavía');
+
+  // Al arrancar la ronda se apoya encima del mazo barajado: es la próxima en salir.
+  for (let i = 0; i < 400 && !['roundEnd', 'matchEnd'].includes(game.state.phase); i++) {
+    if (game.state.phase === 'draft' && game.drafting() === 'human') await game.skipDraft();
+    else await idle();
+  }
+  if (game.state.phase === 'roundEnd') {
+    await game.nextRound();
+    assert.equal(game.state.top.human.length, 0, 'la pila se vació al arrancar la ronda');
+    // La promesa del pulpo: esa carta abre la ronda, no la sortea el barajado.
+    for (let i = 0; i < 400 && game.state.chains.human.cards.length === 0; i++) await idle();
+    assert.equal(game.state.chains.human.cards[0].uid, pick.uid,
+      'la ronda abre con la carta reservada');
+  }
+  console.log('  ✓ pulpo (reserva)');
+}
+
+{
+  // Dos pulpos reservan dos cartas, y salen en el orden en que se tocaron.
+  const chain = chainOf(
+    card(['aquatic', 'bird'], 'octopus'),
+    card(['aquatic', 'plant'], 'octopus'),
+  );
+  const game = await atPlayerDraft(chain);
+  assert.equal(game.state.status.human.stacked, 2, 'dos pulpos, dos reservas');
+  seedPlain(game, 2); // hacen falta dos sin poder: la primera compromete la rama
+
+  const first = game.pickable().find((c) => !c.power);
+  await game.takeCard(first.uid);
+  assert.equal(game.state.status.human.stacked, 1, 'queda uno');
+  const second = game.pickable().find((c) => c.uid !== first.uid);
+  await game.takeCard(second.uid);
+
+  assert.deepEqual(game.state.top.human.map((c) => c.uid), [first.uid, second.uid]);
+  assert.equal(game.state.status.human.stacked, 0);
+
+  for (let i = 0; i < 400 && !['roundEnd', 'matchEnd'].includes(game.state.phase); i++) {
+    if (game.state.phase === 'draft' && game.drafting() === 'human') await game.skipDraft();
+    else await idle();
+  }
+  if (game.state.phase === 'roundEnd') {
+    await game.nextRound();
+    for (let i = 0; i < 400 && game.state.chains.human.cards.length === 0; i++) await idle();
+    assert.equal(game.state.chains.human.cards[0].uid, first.uid,
+      'abre con la primera que tocó');
+    // Y la que sigue en el mazo es la segunda: se arma el arranque entero.
+    if (game.state.turn === 'human' && !game.state.busy) {
+      await game.hit();
+      const chain = game.state.chains.human;
+      const played = chain.bustCard ?? chain.cards[1];
+      assert.equal(played.uid, second.uid, 'la segunda sale justo después');
+    }
+  }
+  console.log('  ✓ pulpo (dos, en orden)');
+}
+
+{
+  // El pulpo no se mide contra el daño: sale igual con la cadena cortada, como la
+  // fuerza. Es lo único que las dos comparten.
+  const chain = chainOf(
+    card(['aquatic', 'bird'], 'octopus'),
+    card(['bug', 'reptile'], 'strength'), // ni bug ni reptile viven: acá se corta
+  );
+  const game = await atPlayerTurn(chain);
+  assert.ok(chain.busted);
+  await game.stand();
   await idle();
-  assert.equal(game.state.phase, 'turn', 'sin nada que colocar el turno no se frena');
-  console.log('  ✓ pulpo (centro sin nada)');
+  assert.equal(game.state.roundScores.human, 0, 'el ataque hizo 0');
+  assert.equal(game.state.status.human.stacked, 1, 'el pulpo sale igual');
+  assert.equal(game.state.status.human.strength, POWER_NUMBERS.strength, 'la fuerza también');
+  console.log('  ✓ pulpo (cadena cortada)');
 }
 
 console.log('✓ poderes ok');

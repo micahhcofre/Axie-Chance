@@ -1,19 +1,19 @@
 // Smoke test del flujo completo: rondas, reparto de la reserva y final a 100 puntos.
 import assert from 'node:assert/strict';
-import { createGame, TARGET, PLAYERS, MARKET_SIZE, hpOf, onTable } from '../src/game.js';
+import { createGame, TARGET, PLAYERS, MARKET_SIZE, hpOf, ownedBy } from '../src/game.js';
 import { scoreChain } from '../src/rules.js';
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
 const other = (p) => (p === 'human' ? 'cpu' : 'human');
-// Todo lo que tiene un jugador: su mazo más lo que sigue en la mesa sin devolver.
-const owned = (s, p) => s.decks[p].length + onTable(s, p);
+// Todo lo que tiene un jugador: mazo, lo que reservó el pulpo y lo que sigue en la
+// mesa sin devolver.
+const owned = (s, p) => ownedBy(s, p);
 
 
 for (const difficulty of ['facil', 'normal', 'duro']) {
   const game = createGame({ pace: 0 });
   const openers = [];
   const gains = [];
-  let grabs = 0;
   game.newMatch({ difficulty, axie: 'aquatic' });
   assert.equal(game.state.axies.human, 'aquatic');
   assert.equal(game.state.symbols.human, 'aquatic', 'la clase del Axie es su símbolo');
@@ -65,25 +65,25 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       91,
       'cartas totales en juego',
     );
+    // Ninguna carta está en dos lados a la vez: el pulpo saca cartas del reparto y
+    // las guarda aparte hasta que arranca la ronda, y ahí es fácil duplicarlas.
+    for (const p of PLAYERS) {
+      // Lo que sigue en la mesa sin devolver: `recycled` marca hasta dónde de la
+      // cadena ya volvió al mazo, y `returned` que volvió entera. Esas sí están en
+      // los dos lados a propósito (ver `draw`), así que no cuentan acá.
+      const table = s.returned[p] ? [] : [
+        ...s.chains[p].cards.slice(s.recycled[p]),
+        ...(s.chains[p].bustCard ? [s.chains[p].bustCard] : []),
+      ];
+      const uids = [...s.decks[p], ...s.top[p], ...table].map((c) => c.uid);
+      assert.equal(new Set(uids).size, uids.length, `${p}: una carta en dos lados`);
+    }
     // El centro está siempre lleno mientras quede reserva para reponer.
     assert.equal(
       s.market.length,
       Math.min(MARKET_SIZE, s.market.length + s.pool.length),
       'el centro se repone en el acto',
     );
-
-    // El pulpo abre el centro a mitad de turno. Se alterna colocar y pasar: las dos
-    // ramas devuelven el turno al jugador con los botones vivos.
-    if (s.phase === 'grab') {
-      const options = game.grabOptions();
-      assert.ok(options.every((c) => !c.power), 'el pulpo no agarra poderes');
-      assert.ok(options.every((c) => s.market.includes(c)), 'las opciones salen del centro');
-      grabs++;
-      if (options.length && grabs % 2 === 1) game.grabCard(options[0].uid);
-      else game.skipGrab();
-      assert.equal(game.state.phase, 'turn', 'después del pulpo sigue el turno');
-      continue;
-    }
 
     if (s.phase === 'draft') {
       const picking = game.drafting();
@@ -191,7 +191,6 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   while (game.state.phase !== 'roundEnd') {
     assert.ok(guard++ < 4000, 'la ronda no cierra');
     const s = game.state;
-    if (s.phase === 'grab') { game.skipGrab(); continue; }
     if (s.phase === 'draft') {
       if (game.drafting() !== 'human') { await idle(); continue; }
       const options = game.pickable();
@@ -225,8 +224,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   while (!(game.state.phase === 'draft' && game.drafting() === 'human')) {
     assert.ok(guard++ < 4000, 'no se llegó al reparto del jugador');
     const s = game.state;
-    if (s.phase === 'grab') game.skipGrab();
-    else if (s.phase === 'draft' || s.busy || s.turn !== 'human') await idle();
+    if (s.phase === 'draft' || s.busy || s.turn !== 'human') await idle();
     else await game.stand();
   }
 

@@ -103,7 +103,6 @@ function dropOwnSymbol(s) {
 }
 
 const phases = new Set();
-let grabbed = false;
 let sawDraw = false;
 let sawFreePick = false;
 let sawSkip = false;
@@ -114,19 +113,6 @@ while (game.state.phase !== 'matchEnd') {
   assert.ok(guard++ < 4000, 'la partida no termina');
   const s = game.state;
   phases.add(s.phase);
-
-  // El pulpo abre el mismo panel a mitad de turno, con otra pregunta. Que salga o no
-  // depende del sorteo, así que acá solo se comprueba que se pinte bien cuando sale;
-  // el flujo completo se prueba a mano en powers.test.js.
-  if (s.phase === 'grab') {
-    assert.equal(nodes.market.hidden, false, 'el pulpo abre el centro');
-    assert.match(nodes.market.innerHTML, /data-action="skip-grab"/, 'se ofrece no colocar');
-    assert.match(nodes.controls.innerHTML, /pulpo/i, 'los controles lo cuentan');
-    const options = game.grabOptions();
-    if (options.length && !grabbed) { grabbed = true; game.grabCard(options[0].uid); }
-    else game.skipGrab();
-    continue;
-  }
 
   if (s.phase === 'draft') {
     assert.equal(nodes.market.hidden, false, 'el centro se abre encima al cerrar el turno');

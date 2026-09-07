@@ -117,10 +117,10 @@ el ataque**, con el daño del turno ya contado.
 |---|---|---|
 | ⚔️ | fuerza | +2 de daño en este ataque y en todos los que siguen. Acumulable |
 | ☠️ | veneno | la mitad de tu daño; muerde al cerrar cada intercambio y después baja 2. Acumulable |
-| 🥚 | huevo | escudo de la mitad de tu daño; se come el próximo golpe y se rompe, le sobre o no |
+| 🥚 | huevo | escudo de la mitad de tu daño; aguanta golpes hasta gastarse |
 | 🪴 | maceta | te curás lo que pegaste, sin pasar de 100 |
-| 🐌 | caracol | los próximos 2 ataques del rival pegan 2 menos. Acumula ataques, nunca daño |
-| 🐙 | pulpo | al salir del mazo, sumás gratis a la cadena una carta **sin poder** del centro |
+| 🐌 | caracol | los próximos 2 ataques del rival pegan la mitad de tu daño menos. Acumula ataques y se queda con el mordisco más grande |
+| 🐙 | pulpo | la carta que agarres del centro no se baraja: abre tu próxima ronda. Acumulable |
 
 Cada poder viaja siempre con **su propia clase** entre los 3 símbolos, así que el efecto de
 tu color encadena con tu mazo mejor que ningún otro. Los pares que lo acompañan
@@ -129,9 +129,17 @@ tu color encadena con tu mazo mejor que ningún otro. Los pares que lo acompaña
 sobre 20 tríos posibles, así que el mismo trío aparece con poderes distintos — encadenan
 igual y se eligen por el efecto.
 
-Si **se corta la cadena** el ataque hace 0, y con él se pierden el huevo, la maceta y el
-veneno, que se miden contra el daño. La fuerza y el caracol salen igual. Los mazos iniciales
-de 10 **no traen poderes**: los seis salen del centro y hay que ganárselos.
+Si **se corta la cadena** el ataque hace 0, y con él se pierde todo lo que se mide contra el
+daño: huevo, maceta, veneno y caracol. La fuerza y el pulpo salen igual, porque no salen del
+golpe. Los mazos iniciales de 10 **no traen poderes**: los seis salen del centro y hay que
+ganárselos.
+
+El pulpo es el único que no se cobra en daño: marca las próximas cartas que agarres del
+centro para que **no entren al barajado**. Se guardan aparte ([`state.top`](src/game.js)) y
+al arrancar la ronda siguiente se apoyan encima del mazo ya barajado, en el orden en que las
+tocaste. Como el mazo base son 9 pares y una carta sola, la apertura que te toca es casi
+siempre de 2 símbolos: asegurarte un trío abre tres cadenas en vez de dos, y **solo los
+símbolos de la primera carta puntúan**.
 
 **Balance del mazo base.** Medido sobre 4000 rondas: media ~3.1 puntos, 32% de cortes,
 cadenas de 1-2 cartas, y los seis símbolos rinden casi igual (3.04 a 3.21), o sea que
@@ -179,10 +187,7 @@ puestos.
 *Contar cuántas veces la CPU elige cada poder no mide nada de esto*: sale ordenado igual que
 `POWER_WORTH`, porque es un reflejo de esos pesos y no del juego.
 
-**El pulpo tiene fase propia.** Es el único poder que no espera al ataque: corre apenas la
-carta sale del mazo, y para eso la máquina de estados suma una fase `grab` entre `turn` y
-`draft`. El centro se abre con la cadena a la vista, se coloca (o no) y el turno sigue con
-los botones vivos.
+
 
 Atajos: `R` robar, `P` plantarse, `Enter` continuar.
 

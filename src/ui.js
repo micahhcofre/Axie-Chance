@@ -2,7 +2,9 @@ import { SYMBOLS, POWERS, crest, iconUrl, powerIcon } from './data.js';
 import { AXIES, AXIE_IDS, axie, axieArt } from './axies.js';
 import { activeSymbols, isScoringCell, scoreChain, survivalOdds } from './rules.js';
 import { createVfx, hitDelay, preloadVfx } from './vfx.js';
-import { TARGET, PLAYERS, MARKET_SIZE, POWER_NUMBERS, hpOf, onTable, swingOf } from './game.js';
+import {
+  TARGET, PLAYERS, MARKET_SIZE, POWER_NUMBERS, hpOf, ownedBy, swingOf,
+} from './game.js';
 
 const $ = (id) => document.getElementById(id);
 const settled = new Set();
@@ -56,21 +58,33 @@ function runsHtml(chain) {
  */
 function statusHtml(state, player) {
   const st = state.status[player];
-  const pip = (id, value, title) =>
-    `<span class="pip-status" title="${title}"
-      ><img src="${iconUrl(`status-${id}.png`)}" alt=""><b>${value}</b></span>`;
+  const pipIcon = (src, value, title) =>
+    `<span class="pip-status" title="${title}"><img src="${src}" alt=""><b>${value}</b></span>`;
+  const pip = (id, value, title) => pipIcon(iconUrl(`status-${id}.png`), value, title);
 
   const chips = [];
-  if (st.egg) chips.push(pip('egg', st.egg, `Huevo: se come ${st.egg} del próximo golpe y se rompe`));
+  if (st.egg) chips.push(pip('egg', st.egg, `Huevo: aguanta ${st.egg} de daño antes de romperse`));
   if (st.poison) {
     chips.push(pip('poison', st.poison,
       `Veneno: ${st.poison} de daño al cerrar la ronda, después baja ${POWER_NUMBERS.poisonDecay}`));
   }
   if (st.weak) {
     chips.push(pip('weak', st.weak,
-      `Debilitado: sus próximos ${st.weak} ataques pegan ${POWER_NUMBERS.snailBite} menos`));
+      `Debilitado: sus próximos ${st.weak} ataques pegan ${st.weakBite} menos`));
   }
   if (st.strength) chips.push(pip('strength', `+${st.strength}`, `Fuerza: +${st.strength} de daño en cada ataque`));
+  if (st.stacked) {
+    chips.push(pipIcon(POWERS.octopus.icon, st.stacked,
+      `Pulpo: las próximas ${st.stacked} cartas que agarre del centro salen arriba del ` +
+      'mazo, sin barajar'));
+  }
+  // Lo ya reservado, esperando a la ronda que viene.
+  const held = state.top[player].length;
+  if (held) {
+    chips.push(pipIcon(POWERS.octopus.icon, `▲${held}`,
+      `${held === 1 ? 'Una carta reservada' : `${held} cartas reservadas`}: ` +
+      'abre la ronda que viene'));
+  }
   return chips.length ? `<span class="plate-status">${chips.join('')}</span>` : '';
 }
 
@@ -113,9 +127,6 @@ function plateHtml(state, player) {
  * puestas hasta que abre el siguiente.
  */
 function focusOf(state, picking) {
-  // Con el pulpo abierto la mesa es del que está eligiendo: hay que ver la cadena
-  // para saber qué carta colocarle.
-  if (state.phase === 'grab') return state.grab.player;
   if (state.phase === 'draft') return picking ?? state.order[0];
   if (state.turn) return state.turn;
   const played = state.order.filter((p) => state.roundScores[p] !== null);
@@ -144,7 +155,7 @@ function fieldHtml(state, player) {
   if (points !== raw) {
     mods.push(`${raw} de cadena`);
     if (st.strength) mods.push(`+${st.strength} de fuerza`);
-    if (st.weak) mods.push(`−${POWER_NUMBERS.snailBite} por el caracol`);
+    if (st.weak) mods.push(`−${st.weakBite} por el caracol`);
   }
   const breakdown = mods.length ? `<span class="field-mods">${mods.join(' · ')}</span>` : '';
 
@@ -226,44 +237,7 @@ function marketHtml(state, { picking, pickable, canRenew }) {
   </div>`;
 }
 
-/**
- * El centro abierto por el pulpo, a mitad de turno. Es el mismo panel del reparto
- * pero con otra pregunta: acá la carta no va al mazo, va a la cadena en curso, y
- * pasar es una decisión real —una carta que encadena puede matar cadenas vivas y
- * dejarte peor para seguir robando—.
- */
-function grabHtml(state, options) {
-  const open = new Set(options.map((c) => c.uid));
-  const slots = state.market
-    .map((c) => marketCardHtml(c, open.has(c.uid)))
-    .join('');
-  const empty = '<div class="market-slot"></div>'.repeat(
-    Math.max(MARKET_SIZE - state.market.length, 0),
-  );
-  return `<div class="overlay-panel">
-    <div class="overlay-head">
-      <img class="overlay-mark" src="${POWERS.octopus.icon}" alt="">
-      <span class="overlay-title">El pulpo</span>
-      <p class="overlay-note">Sumá <b>gratis</b> una carta a tu cadena. Solo las que no
-        llevan poder y no te la cortan.</p>
-    </div>
-    <div class="market-row">${slots}${empty}</div>
-    <div class="overlay-actions">
-      <button class="btn" data-action="skip-grab"
-        title="Seguí tu turno sin colocar nada">No colocar</button>
-    </div>
-  </div>`;
-}
-
 function controlsHtml(state, picking) {
-  if (state.phase === 'grab') {
-    return `<span class="controls-msg">${
-      state.grab.player === 'human'
-        ? 'El pulpo: elegí una carta del centro para tu cadena, o seguí sin colocar.'
-        : 'La CPU está colocando una carta del centro…'
-    }</span>`;
-  }
-
   if (state.phase === 'draft') {
     const msg = picking === 'cpu' ? 'La CPU elige del centro…' : 'Elegí tu carta del centro.';
     return `<span class="controls-msg">${msg}</span>`;
@@ -310,7 +284,7 @@ function controlsHtml(state, picking) {
 
 function oddsHtml(state, pool) {
   // No hay descarte: fuera del mazo solo están las cartas de la cadena en curso.
-  const deckInfo = `<div class="odds-deck"><span>Tu mazo ${state.decks.human.length + onTable(state, 'human')}</span>
+  const deckInfo = `<div class="odds-deck"><span>Tu mazo ${ownedBy(state, 'human')}</span>
     <span>Sin salir ${state.decks.human.length}</span></div>`;
 
   if (state.turn !== 'human' || state.phase !== 'turn') {
@@ -486,17 +460,12 @@ export function mount(game) {
     field.dataset.owner = focus;
     field.dataset.busted = String(state.chains[focus].busted);
 
-    // El centro solo existe mientras haya que elegir: al cerrar un turno (el reparto)
-    // o a mitad de turno si salió el pulpo. El resto del tiempo no está.
-    const grabbing = state.phase === 'grab' && state.grab.player === 'human';
+    // El centro solo existe mientras haya que elegir; el resto del tiempo no está.
     const drafting = state.phase === 'draft';
-    market.hidden = !drafting && !grabbing;
-    if (grabbing) market.innerHTML = grabHtml(state, game.grabOptions());
-    else if (drafting) {
-      market.innerHTML = marketHtml(state, {
-        picking, pickable: game.pickable(), canRenew: game.canRenew('human'),
-      });
-    } else market.innerHTML = '';
+    market.hidden = !drafting;
+    market.innerHTML = drafting
+      ? marketHtml(state, { picking, pickable: game.pickable(), canRenew: game.canRenew('human') })
+      : '';
 
     $('controls').innerHTML = controlsHtml(state, picking);
     const roster = `${state.axies.human}|${state.axies.cpu}`;
@@ -529,12 +498,8 @@ export function mount(game) {
   market.addEventListener('click', (e) => {
     if (e.target.closest('[data-action="renew"]')) return game.renewMarket();
     if (e.target.closest('[data-action="skip"]')) return game.skipDraft();
-    if (e.target.closest('[data-action="skip-grab"]')) return game.skipGrab();
     const uid = e.target.closest('.market-card:not([disabled])')?.dataset.uid;
-    if (!uid) return;
-    // El mismo panel sirve para las dos cosas: la fase dice a dónde va la carta.
-    if (game.state.phase === 'grab') game.grabCard(Number(uid));
-    else game.takeCard(Number(uid));
+    if (uid) game.takeCard(Number(uid));
   });
 
   $('axie-picker').addEventListener('click', (e) => {
@@ -550,7 +515,7 @@ export function mount(game) {
     if (e.target.matches('input, select, textarea')) return;
     const state = game.state;
     if (!state) return;
-    if (state.phase === 'draft' || state.phase === 'grab') return;
+    if (state.phase === 'draft') return;
     if (e.key === 'r' || e.key === 'R') game.hit();
     if (e.key === 'p' || e.key === 'P') game.stand();
     if (e.key === 'Enter') {
