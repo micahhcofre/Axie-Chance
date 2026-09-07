@@ -267,4 +267,45 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.ok(!game.canRenew('human'), 'con una carta del símbolo propio no se renueva');
 }
 
+// Con semilla la partida es reproducible. Es lo que hace comparables dos corridas
+// del banco de pruebas: mismo reparto, y la diferencia que se mida es del cambio y
+// no del sorteo.
+{
+  /** Juega una partida entera con decisiones fijas y devuelve su huella. */
+  async function trace(seed) {
+    const game = createGame({ pace: 0, seed });
+    game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+    const steps = [];
+    let guard = 0;
+    while (game.state.phase !== 'matchEnd') {
+      assert.ok(guard++ < 4000, 'la partida no termina');
+      const s = game.state;
+      if (s.phase === 'draft') {
+        if (game.drafting() !== 'human') { await idle(); continue; }
+        const options = game.pickable();
+        if (!options.length) await game.skipDraft();
+        else await game.takeCard(options[0].uid);
+        continue;
+      }
+      if (s.phase === 'roundEnd') { await game.nextRound(); continue; }
+      if (s.turn === 'human' && !s.busy) {
+        if (s.chains.human.cards.length < 2) await game.hit();
+        else await game.stand();
+        steps.push(`${s.round}:${s.chains.human.cards.map((c) => c.key).join('|')}`);
+        continue;
+      }
+      await idle();
+    }
+    const s = game.state;
+    return [s.axies.cpu, s.round, s.totals.human, s.totals.cpu, ...steps].join('/');
+  }
+
+  const a = await trace(1234);
+  const b = await trace(1234);
+  const c = await trace(1235);
+  assert.equal(a, b, 'la misma semilla juega la misma partida');
+  assert.notEqual(a, c, 'otra semilla juega otra partida');
+  assert.ok(a.length > 40, 'la huella cubre la partida entera');
+}
+
 console.log('✓ flujo de partida ok');

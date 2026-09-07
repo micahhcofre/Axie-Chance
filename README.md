@@ -179,13 +179,30 @@ la CPU normal, 400 partidas por poder, contra un control que nunca agarra ningun
 una decisión: el poder es casi siempre correcto. La fuerza suma +2 permanente por carta y en
 14 rondas se juntan 4 o 5 — +8 o +10 en cada ataque, sobre cadenas que valen 5 a 10.
 
-Con ±1.5 puntos de error a ese tamaño de muestra, veneno y fuerza están empatados arriba y
-huevo, caracol y pulpo empatados abajo. De ahí salen los tres escalones de
-[`POWER_WORTH`](src/ai.js), que antes eran números de oficio y le erraban al pulpo por tres
-puestos.
+De ahí salen los escalones de [`POWER_WORTH`](src/ai.js), que antes eran números de oficio.
 
 *Contar cuántas veces la CPU elige cada poder no mide nada de esto*: sale ordenado igual que
 `POWER_WORTH`, porque es un reflejo de esos pesos y no del juego.
+
+### Volver a medir
+
+```
+npm run balance                      # 300 partidas por celda
+npm run balance -- --games 800       # menos ruido
+npm run balance -- --arms base,fuerza1 --powers all
+```
+
+Las partidas van **sembradas** ([`makeRng`](src/data.js), `createGame({ seed })`), y todas
+las celdas usan las mismas semillas. Eso es lo que hace comparables dos variantes: la misma
+estrategia sobre los mismos repartos, cambiando una constante, se compara de a pares y el
+ruido del sorteo se cancela en vez de sumarse. Los números de los poderes viven todos en
+[`TUNING`](src/game.js) y el banco los parchea para medir sin editar código.
+
+Sin esto, dos corridas del mismo experimento daban distinto y hacía falta adivinar cuánto de
+la diferencia era efecto y cuánto sorteo — que es el error que se cometió antes de que el
+script existiera. Al 95% el margen es ±2 errores estándar, que el script imprime al lado de
+cada número: lo que entra en ese margen no se puede afirmar, por más que la tabla salga
+ordenada.
 
 
 
@@ -272,3 +289,4 @@ tiene que valer más para ganarles.
 | `src/ui.js` | render y eventos |
 | `scripts/axies.mjs` | corre el mixer offline y regenera `src/axie-avatars.js` |
 | `scripts/build.mjs` | empaqueta todo en un solo `.html` |
+| `scripts/balance.mjs` | banco de pruebas: mide cuánto vale cada poder en partidas |

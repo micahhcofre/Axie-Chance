@@ -1,4 +1,4 @@
-import { buildPool, shuffle, cardLabel, crest, powerIcon, POWERS } from './data.js';
+import { buildPool, shuffle, makeRng, cardLabel, crest, powerIcon, POWERS } from './data.js';
 import { AXIES, AXIE_IDS, axie, deckFor } from './axies.js';
 import { emptyChain, playCard, scoreChain } from './rules.js';
 import { decideDraw, planDraft, pickBest } from './ai.js';
@@ -14,23 +14,33 @@ export const TARGET = 100;
 /** Cartas boca arriba en el centro. Se repone en el acto al llevarse una. */
 export const MARKET_SIZE = 5;
 
-// Los números de los poderes, todos juntos para poder moverlos de a uno.
-/** Cuánto suma cada carta de fuerza, en este ataque y en todos los siguientes. */
-const STRENGTH_STEP = 2;
 /**
- * El caracol le saca a cada ataque del debilitado la mitad del golpe con que se lo
- * pusieron, durante SNAIL_ATTACKS ataques. Escala como el veneno y el huevo: pegar
- * fuerte al ponerlo es lo que lo hace valer.
+ * Los números de los poderes, en un solo lugar y mutables a propósito: el banco de
+ * pruebas los cambia para medir variantes sin editar código entre corridas. El juego
+ * los lee en cada uso, así que un cambio acá vale desde la partida siguiente.
+ *
+ *   strengthStep   cuánto suma cada carta de fuerza, para siempre
+ *   poisonShare    divisor del golpe con que se envenena (2 = la mitad)
+ *   poisonDecay    cuánto baja el veneno al cerrar la ronda, después de morder
+ *   poisonStacks   true suma venenos; false se queda con el mayor, como el caracol
+ *   snailShare     divisor del golpe con que se debilita
+ *   snailAttacks   cuántos ataques dura cada caracol
+ *   eggShare       divisor del golpe con que se arma el escudo
  */
-const SNAIL_SHARE = 2; // divisor del golpe
-const SNAIL_ATTACKS = 2;
-/** Cuánto baja el veneno al cerrar la ronda, después de haber mordido. */
-const POISON_DECAY = 2;
+export const TUNING = {
+  strengthStep: 2,
+  poisonShare: 2,
+  poisonDecay: 2,
+  poisonStacks: true,
+  snailShare: 2,
+  snailAttacks: 2,
+  eggShare: 2,
+};
 
 /**
  * Lo que le queda puesto a un jugador de una ronda a la otra:
  *   `egg`      vida del escudo; aguanta golpes hasta gastarse
- *   `poison`   cuánto muerde al cerrar cada ronda, bajando de a POISON_DECAY
+ *   `poison`   cuánto muerde al cerrar cada ronda, bajando de a `TUNING.poisonDecay`
  *   `weak`     cuántos ataques suyos todavía pegan de menos
  *   `weakBite` cuánto de menos pegan. Dos caracoles suman ataques y se quedan con el
  *              mordisco más grande: acumulan duración, nunca cantidad
@@ -39,14 +49,6 @@ const POISON_DECAY = 2;
  *              mazo en vez de perderse en el barajado (ver el pulpo)
  */
 const emptyStatus = () => ({ egg: 0, poison: 0, weak: 0, weakBite: 0, strength: 0, stacked: 0 });
-
-/** Los números de los poderes, para que la UI los cuente igual que el juego. */
-export const POWER_NUMBERS = {
-  strength: STRENGTH_STEP,
-  snailShare: SNAIL_SHARE,
-  snailAttacks: SNAIL_ATTACKS,
-  poisonDecay: POISON_DECAY,
-};
 
 // Cada jugador roba de su propio mazo y no hay descarte: cada ronda arranca con el
 // mazo entero barajado de nuevo, como una tragamonedas. Contar lo que salió sigue
@@ -100,9 +102,19 @@ export function onTable(state, player) {
 export const ownedBy = (state, player) =>
   state.decks[player].length + state.top[player].length + onTable(state, player);
 
-/** @param {{pace?: number}} opts  pace 0 corre sin pausas (tests). */
-export function createGame({ pace = 1 } = {}) {
+/**
+ * @param {{pace?: number, seed?: number}} opts
+ *   `pace` 0 corre sin pausas (tests).
+ *   `seed` fija todo el azar de la partida: los barajados y el Axie que le toca a la
+ *   CPU. Dos partidas con la misma semilla y las mismas decisiones son idénticas, que
+ *   es lo que hace comparables dos corridas del banco de pruebas. Sin semilla, azar
+ *   del sistema — que es como se juega.
+ */
+export function createGame({ pace = 1, seed } = {}) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms * pace));
+  const rng = seed === undefined ? Math.random : makeRng(seed);
+  /** Baraja con el azar de esta partida, no con el del sistema. */
+  const deal = (cards) => shuffle(cards, rng);
   let state = null;
   // Los turnos son asíncronos. Si se arranca otra partida en el medio, la época
   // cambia y las corrutinas viejas se cortan en vez de escribir sobre el estado nuevo.
@@ -127,7 +139,7 @@ export function createGame({ pace = 1 } = {}) {
       // adentro. `recycled` marca hasta dónde de la cadena ya se devolvió, para no
       // contarlo otra vez al cerrar la ronda.
       const played = state.chains[player].cards;
-      state.decks[player] = shuffle(played.slice(state.recycled[player]));
+      state.decks[player] = deal(played.slice(state.recycled[player]));
       state.recycled[player] = played.length;
       log(`${who(player)} rebaraja lo que ya salió.`, 'muted');
     }
@@ -146,7 +158,7 @@ export function createGame({ pace = 1 } = {}) {
     const mine = axie(axieId ?? state?.axies.human ?? 'aquatic');
     // La CPU juega otro Axie, y de otra clase: dos mazos iguales no tendrían gracia.
     const rivals = AXIE_IDS.filter((id) => AXIES[id].class !== mine.class);
-    const theirs = AXIES[rivals[Math.floor(Math.random() * rivals.length)]];
+    const theirs = AXIES[rivals[Math.floor(rng() * rivals.length)]];
 
     epoch++;
     state = {
@@ -155,9 +167,9 @@ export function createGame({ pace = 1 } = {}) {
       // La clase del Axie es el símbolo con el que puntúa; el resto del juego usa esto.
       symbols: { human: mine.class, cpu: theirs.class },
       round: 0,
-      pool: shuffle(buildPool()), // pila boca abajo que alimenta el centro
+      pool: deal(buildPool()), // pila boca abajo que alimenta el centro
       market: [], // las 5 cartas a la vista, se llena abajo
-      decks: { human: shuffle(deckFor(mine.id)), cpu: shuffle(deckFor(theirs.id)) },
+      decks: { human: deal(deckFor(mine.id)), cpu: deal(deckFor(theirs.id)) },
       // Cartas reservadas por el pulpo, esperando el arranque de la ronda siguiente
       // para entrar arriba del mazo. Ver `takeFromMarket` y `startRound`.
       top: { human: [], cpu: [] },
@@ -202,7 +214,7 @@ export function createGame({ pace = 1 } = {}) {
     // el punto: esas cartas no se sortean—. Van al revés porque `draw` saca del final,
     // así la primera que se tocó en el centro es la primera que sale.
     for (const player of PLAYERS) {
-      state.decks[player] = shuffle(state.decks[player]).concat(state.top[player].reverse());
+      state.decks[player] = deal(state.decks[player]).concat(state.top[player].reverse());
       state.top[player] = [];
     }
     state.recycled = { human: 0, cpu: 0 };
@@ -312,7 +324,7 @@ export function createGame({ pace = 1 } = {}) {
 
     for (const power of powersPlayed(player)) {
       if (power === 'strength') {
-        mine.strength += STRENGTH_STEP;
+        mine.strength += TUNING.strengthStep;
         log(`${mark('strength')} ${who(player)} afila: +${mine.strength} de daño de acá en más.`, kind);
       } else if (power === 'octopus') {
         // No se mide contra el daño: reserva una carta del reparto, salga como salga
@@ -328,12 +340,12 @@ export function createGame({ pace = 1 } = {}) {
       } else if (power === 'snail') {
         // Suma ataques y se queda con el mordisco más grande: acumula duración, no
         // cantidad. Un caracol chico no debilita un caracol grande que ya estaba.
-        theirs.weak += SNAIL_ATTACKS;
-        theirs.weakBite = Math.max(theirs.weakBite, Math.floor(swing / SNAIL_SHARE));
+        theirs.weak += TUNING.snailAttacks;
+        theirs.weakBite = Math.max(theirs.weakBite, Math.floor(swing / TUNING.snailShare));
         log(`${mark('snail')} ${who(foe)} queda debilitado: ${theirs.weak} ataques con ` +
           `${theirs.weakBite} menos.`, kind);
       } else if (power === 'egg') {
-        mine.egg += Math.floor(swing / 2);
+        mine.egg += Math.floor(swing / TUNING.eggShare);
         log(`${mark('egg')} ${who(player)} queda con un huevo de ${mine.egg}.`, kind);
       } else if (power === 'pot') {
         const got = heal(player, swing);
@@ -341,7 +353,10 @@ export function createGame({ pace = 1 } = {}) {
           ? `${mark('pot')} ${who(player)} se cura ${got} y queda en ${hpOf(state, player)}.`
           : `${mark('pot')} ${who(player)} ya está entero: la maceta no cura nada.`, got > 0 ? kind : 'muted');
       } else if (power === 'poison') {
-        theirs.poison += Math.floor(swing / 2);
+        // Sumar o quedarse con el mayor: es la diferencia entre un veneno que se
+        // dispara sin techo y uno que respeta la regla del caracol.
+        const dose = Math.floor(swing / TUNING.poisonShare);
+        theirs.poison = TUNING.poisonStacks ? theirs.poison + dose : Math.max(theirs.poison, dose);
         log(`${mark('poison')} ${who(foe)} queda con ${theirs.poison} de veneno.`, kind);
       }
     }
@@ -425,7 +440,7 @@ export function createGame({ pace = 1 } = {}) {
 
   /**
    * El veneno se cobra al cerrar el intercambio, cuando los dos ya pegaron: muerde
-   * por su cuenta entera y recién después baja de a POISON_DECAY. Cuenta como daño
+   * por su cuenta entera y recién después baja de a `TUNING.poisonDecay`. Cuenta como daño
    * de quien lo puso, así que suma a su total como cualquier golpe.
    */
   function tickPoison() {
@@ -435,7 +450,7 @@ export function createGame({ pace = 1 } = {}) {
       state.totals[other(player)] += st.poison;
       log(`${powerIcon('poison', 'sm')} El veneno le saca ${st.poison} a ${whom(player)}: ` +
         `queda en ${hpOf(state, player)}.`, player === 'human' ? 'bad' : 'good');
-      st.poison = Math.max(st.poison - POISON_DECAY, 0);
+      st.poison = Math.max(st.poison - TUNING.poisonDecay, 0);
     }
   }
 

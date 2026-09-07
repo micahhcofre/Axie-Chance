@@ -4,7 +4,7 @@
 // suelta el ataque, que es el momento en que todos resuelven. Se mira el estado que
 // queda puesto, no el registro: lo que importa es que el próximo golpe cuente bien.
 import assert from 'node:assert/strict';
-import { createGame, TARGET, POWER_NUMBERS, hpOf, swingOf } from '../src/game.js';
+import { createGame, TARGET, TUNING, hpOf, swingOf } from '../src/game.js';
 import { activeSymbols, emptyChain, playCard, scoreChain } from '../src/rules.js';
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
@@ -41,17 +41,17 @@ async function atPlayerTurn(chain) {
   await idle();
 
   const st = game.state.status.human;
-  assert.equal(st.strength, POWER_NUMBERS.strength, 'quedó +2 acumulado');
+  assert.equal(st.strength, TUNING.strengthStep, 'quedó +2 acumulado');
   assert.equal(game.state.roundScores.human, 5, 'el ataque que la estrena no la cobra');
   assert.equal(game.state.totals.human, 5, 'el daño aplicado es el del ataque');
 
   // La próxima cadena idéntica sí pega 2 más.
   game.state.chains.human = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant']));
-  assert.equal(swingOf(game.state, 'human'), 5 + POWER_NUMBERS.strength, 'el golpe siguiente ya suma');
+  assert.equal(swingOf(game.state, 'human'), 5 + TUNING.strengthStep, 'el golpe siguiente ya suma');
 
   // Y se acumula: una segunda carta de fuerza suma otros 2.
-  game.state.status.human.strength += POWER_NUMBERS.strength;
-  assert.equal(swingOf(game.state, 'human'), 5 + 2 * POWER_NUMBERS.strength, 'acumulable');
+  game.state.status.human.strength += TUNING.strengthStep;
+  assert.equal(swingOf(game.state, 'human'), 5 + 2 * TUNING.strengthStep, 'acumulable');
   console.log('  ✓ fuerza');
 }
 
@@ -69,7 +69,7 @@ async function atPlayerTurn(chain) {
   await idle();
 
   const st = game.state.status.cpu;
-  assert.equal(st.weak, POWER_NUMBERS.snailAttacks, 'quedan dos ataques debilitados');
+  assert.equal(st.weak, TUNING.snailAttacks, 'quedan dos ataques debilitados');
   assert.equal(st.weakBite, 5, 'muerde la mitad del golpe con que se lo pusieron');
 
   const clean = 5; // beast 2² + bird 1²
@@ -78,7 +78,7 @@ async function atPlayerTurn(chain) {
 
   // Un caracol chico no debilita al grande que ya estaba: suma ataques y se queda
   // con el mordisco más grande.
-  game.state.status.cpu.weak += POWER_NUMBERS.snailAttacks;
+  game.state.status.cpu.weak += TUNING.snailAttacks;
   game.state.status.cpu.weakBite = Math.max(game.state.status.cpu.weakBite, 1);
   assert.equal(game.state.status.cpu.weakBite, 5, 'el mordisco no baja');
   assert.equal(game.state.status.cpu.weak, 4, 'la duración sí sube');
@@ -115,7 +115,7 @@ async function atPlayerTurn(chain) {
     else await idle();
   }
   assert.equal(hpOf(game.state, 'cpu'), before - 5, 'mordió por 5');
-  assert.equal(game.state.status.cpu.poison, 5 - POWER_NUMBERS.poisonDecay, 'y después bajó 2');
+  assert.equal(game.state.status.cpu.poison, 5 - TUNING.poisonDecay, 'y después bajó 2');
   console.log('  ✓ veneno');
 }
 
@@ -229,7 +229,7 @@ async function atPlayerTurn(chain) {
   assert.equal(s.roundScores.human, 0, 'una cadena cortada hace 0');
   assert.equal(s.totals.human, 0);
   // La fuerza es la única que no sale del golpe, así que es la única que sobrevive.
-  assert.equal(s.status.human.strength, POWER_NUMBERS.strength, 'la fuerza sale igual');
+  assert.equal(s.status.human.strength, TUNING.strengthStep, 'la fuerza sale igual');
   assert.equal(s.status.cpu.weak, 0, 'el caracol se mide contra el daño: nada');
   assert.equal(s.status.cpu.poison, 0, 'el veneno tampoco');
   assert.equal(s.status.human.egg, 0, 'el huevo tampoco');
@@ -346,7 +346,7 @@ async function atPlayerDraft(chain) {
   await idle();
   assert.equal(game.state.roundScores.human, 0, 'el ataque hizo 0');
   assert.equal(game.state.status.human.stacked, 1, 'el pulpo sale igual');
-  assert.equal(game.state.status.human.strength, POWER_NUMBERS.strength, 'la fuerza también');
+  assert.equal(game.state.status.human.strength, TUNING.strengthStep, 'la fuerza también');
   console.log('  ✓ pulpo (cadena cortada)');
 }
 

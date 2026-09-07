@@ -179,10 +179,30 @@ export function buildPersonalDeck(symbol) {
   ];
 }
 
-export function shuffle(cards) {
+/**
+ * Un generador de azar reproducible a partir de un número (mulberry32: corto, rápido
+ * y de período de sobra para una partida).
+ *
+ * Existe para poder medir. Sin esto, dos corridas del mismo experimento reparten
+ * cartas distintas y la diferencia entre ellas es mitad efecto y mitad sorteo — hacen
+ * falta miles de partidas para distinguir una cosa de la otra. Con la misma semilla,
+ * un A/B se compara de a pares sobre repartos idénticos y el ruido se cancela en vez
+ * de sumarse.
+ */
+export function makeRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function shuffle(cards, rng = Math.random) {
   const out = cards.slice();
   for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;

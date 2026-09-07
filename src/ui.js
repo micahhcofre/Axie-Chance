@@ -3,7 +3,7 @@ import { AXIES, AXIE_IDS, axie, axieArt } from './axies.js';
 import { activeSymbols, isScoringCell, scoreChain, survivalOdds } from './rules.js';
 import { createVfx, hitDelay, preloadVfx } from './vfx.js';
 import {
-  TARGET, PLAYERS, MARKET_SIZE, POWER_NUMBERS, hpOf, ownedBy, swingOf,
+  TARGET, PLAYERS, MARKET_SIZE, TUNING, hpOf, ownedBy, swingOf,
 } from './game.js';
 
 const $ = (id) => document.getElementById(id);
@@ -66,7 +66,7 @@ function statusHtml(state, player) {
   if (st.egg) chips.push(pip('egg', st.egg, `Huevo: aguanta ${st.egg} de daño antes de romperse`));
   if (st.poison) {
     chips.push(pip('poison', st.poison,
-      `Veneno: ${st.poison} de daño al cerrar la ronda, después baja ${POWER_NUMBERS.poisonDecay}`));
+      `Veneno: ${st.poison} de daño al cerrar la ronda, después baja ${TUNING.poisonDecay}`));
   }
   if (st.weak) {
     chips.push(pip('weak', st.weak,
