@@ -152,7 +152,8 @@ body {
   grid-template-rows: minmax(150px, 1fr) auto auto;
   gap: 10px 0;
   min-height: 470px;
-  padding: 16px;
+  --pad: 16px;
+  padding: var(--pad);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-2) var(--arena, none) center 38% / cover no-repeat;
@@ -175,8 +176,37 @@ body {
   background:
     linear-gradient(180deg,
       rgba(9, 12, 26, .5) 0%, rgba(9, 12, 26, .04) 22%,
-      rgba(9, 12, 26, .34) 50%, rgba(9, 12, 26, .9) 82%),
+      rgba(9, 12, 26, .22) 50%, rgba(9, 12, 26, .58) 88%),
     radial-gradient(130% 85% at 50% 34%, transparent 44%, rgba(9, 12, 26, .55) 100%);
+}
+
+/* ---------- el piso ---------- */
+
+/* Los dos Axies apoyan en el borde de la primera fila del arena, así que la línea de
+   piso es esa. Este bloque se cuelga justo ahí —84px de aire arriba, el resto abajo—
+   y hace lo único que hace un suelo: cortar. Arriba de la línea no pasa nada; apenas
+   la cruza, la escena se hunde de golpe. Sin este corte los fondos son una
+   ilustración pareja de arriba abajo y los dos bichos quedan flotando encima.
+
+   Va como celda de la grilla y no en `position: absolute` a propósito: así lo ubica
+   la misma fila que ubica a los Axies y la línea les queda pegada a las patas por más
+   que cambien las cartas de abajo. Los márgenes negativos le sacan el padding del
+   arena, que el piso llega hasta el borde. */
+.arena::after {
+  content: ""; grid-area: 1 / 1 / 2 / -1; align-self: end;
+  height: 300px; margin: 0 calc(var(--pad) * -1) -216px;
+  pointer-events: none; z-index: 1;
+  background:
+    /* la luz rasante que roza el filo del suelo: es lo que lo vuelve un borde y no
+       una mancha */
+    radial-gradient(64% 26px at 50% 84px, rgba(196, 218, 255, .11), transparent 72%),
+    /* el escalón. El salto va entre 27% y 30% de los 300px —los 84px de arriba— */
+    linear-gradient(180deg,
+      rgba(6, 9, 22, 0) 0%,
+      rgba(6, 9, 22, .05) 25%,
+      rgba(6, 9, 22, .38) 30%,
+      rgba(6, 9, 22, .60) 48%,
+      rgba(6, 9, 22, .84) 100%);
 }
 
 /* Los efectos del Origins Asset Kit. Van capturados sobre negro, así que se suman a
@@ -249,19 +279,53 @@ body {
 .plate-hp[data-low="true"] .hpbar i { background: var(--danger); }
 
 /* El Axie ocupa el aire que sobra y se apoya abajo, así los dos quedan sobre la misma
-   línea de piso por más que sus dibujos tengan proporciones distintas. */
+   línea de piso por más que sus dibujos tengan proporciones distintas.
+
+   `--axie-w` es el ancho del dibujo y también la medida de todo lo que lo acompaña:
+   la sombra que lo apoya y el charco de luz del turno salen de acá, así que achicar
+   el Axie en una pantalla angosta les cambia el tamaño a los tres de una. */
 .board-axie {
+  --axie-w: min(100%, 232px);
   position: relative;
   flex: 1 1 auto; min-height: 130px; width: 100%;
   display: flex; align-items: flex-end; justify-content: center;
 }
-/* La sombra que lo apoya en el terreno: sin esto los Axies flotan sobre la foto. */
+
+/* La sombra de contacto: la mancha corta y oscura justo abajo de las patas. Es lo
+   que apoya al Axie en el piso —una sombra difusa y lejana lo levanta, una pegada y
+   dura lo planta—. Reacciona a todo lo que hace el cuerpo: se achica cuando salta,
+   se corre cuando lo empujan, se desparrama cuando se cae. */
 .board-axie::after {
-  content: ""; position: absolute; left: 50%; bottom: 0;
-  width: 40%; height: 18px; transform: translateX(-50%);
-  background: radial-gradient(closest-side, rgba(6, 8, 18, .55), transparent);
+  content: ""; position: absolute; z-index: 0;
+  left: 50%; bottom: -9px;
+  width: calc(var(--axie-w) * .72); height: 24px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side,
+    rgba(3, 5, 12, .8) 0%, rgba(3, 5, 12, .52) 52%, rgba(3, 5, 12, 0) 100%);
+  filter: blur(4px);
 }
-.board-axie .axie { position: relative; z-index: 1; width: min(100%, 200px); }
+
+/* El charco de luz del que está jugando. Suma luz sobre el terreno (de ahí `screen`)
+   en vez de dibujar un aro: dice de quién es el turno mirando el piso, sin agregar
+   un cartel más a una pantalla que ya tiene chapas y botones. */
+.board-axie::before {
+  content: ""; position: absolute; z-index: 0;
+  left: 50%; bottom: -26px;
+  width: calc(var(--axie-w) * 1.45); height: 76px;
+  transform: translateX(-50%) scale(.86);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--glow, #7c8bff), transparent 76%);
+  mix-blend-mode: screen; opacity: 0;
+  transition: opacity .35s ease, transform .35s ease;
+}
+.fighter--human .board-axie::before { --glow: #2e7d6c; }
+.fighter--cpu   .board-axie::before { --glow: #3b45a8; }
+.fighter[data-active="true"] .board-axie::before {
+  opacity: 1; transform: translateX(-50%) scale(1);
+}
+
+.board-axie .axie { position: relative; z-index: 1; width: var(--axie-w); }
 
 /* ---------- la mesa, que es de los dos ---------- */
 
@@ -367,7 +431,11 @@ body {
   position: relative; display: block; width: 100%;
   aspect-ratio: var(--ratio, 1);
   transform-origin: 50% 92%; /* pivotea sobre las patas, no sobre el aire */
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55));
+  /* Dos sombras cortas y pegadas al dibujo, no un halo blando: un halo grande y
+     corrido hacia abajo es exactamente cómo se ve algo suspendido en el aire. Lo que
+     apoya al Axie en el suelo es `.board-axie::after`; esto solo lo recorta del
+     fondo, que es una ilustración con tanto color como él. */
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .55)) drop-shadow(0 4px 7px rgba(0, 0, 0, .38));
 }
 .axie-rig, .axie-body { position: absolute; inset: 0; display: block; }
 .axie-rig { transform-origin: 50% 100%; }
@@ -396,10 +464,29 @@ body {
 /* Lo único que corre todo el tiempo: el pecho que sube y baja. Es poco a propósito
    —un Axie quieto se lee como una calcomanía, uno que se mueve mucho distrae de las
    cartas—. Solo en la mesa: los seis del selector se quedan quietos. */
-.board-axie .axie-rig { animation: axie-breathe 3.6s var(--beat, 0s) ease-in-out infinite; }
+/* Nada de `translateY`: mover el cuerpo entero hacia arriba levanta también las
+   patas, y un bicho que se despega del piso cada 1,8 segundos flota. El pecho sube
+   porque la caja se estira desde su borde de abajo —`transform-origin: 50% 100%`—,
+   que es lo que hace un pecho al llenarse de aire. Las patas no se enteran. */
+/* Van dos animaciones sobre el mismo nodo porque usan propiedades distintas —una
+   escribe `transform` y la otra `rotate`, que se aplica antes—, y así cualquier regla
+   de más abajo que le ponga `animation` al rig (agacharse, saltar, desplomarse) las
+   reemplaza a las dos de una. */
+.board-axie .axie-rig {
+  animation:
+    axie-breathe 3.6s var(--beat, 0s) ease-in-out infinite,
+    axie-sway 7.3s calc(var(--beat, 0s) - 1.7s) ease-in-out infinite;
+}
 @keyframes axie-breathe {
-  0%, 100% { transform: translateY(0) scale(1, 1); }
-  50%      { transform: translateY(-1.4%) scale(.993, 1.022); }
+  0%, 100% { transform: scale(1, 1); }
+  50%      { transform: scale(.988, 1.026); }
+}
+/* El peso pasando de una pata a la otra: medio grado, con un ciclo largo y primo con
+   el de la respiración, así los dos nunca caen juntos. Pivotea sobre las patas como
+   todo lo demás del rig. */
+@keyframes axie-sway {
+  0%, 100% { rotate: -.7deg; }
+  50%      { rotate: .7deg; }
 }
 
 /* La cola se hamaca desde donde se engancha al cuerpo, no desde su centro. */
@@ -443,8 +530,8 @@ body {
   animation: axie-charge 1.5s var(--beat, 0s) ease-in-out infinite;
 }
 @keyframes axie-charge {
-  0%, 100% { transform: translateY(0) scale(1, 1); }
-  50%      { transform: translateY(-3%) scale(.984, 1.04); }
+  0%, 100% { transform: scale(1, 1); }
+  50%      { transform: scale(.972, 1.055); }
 }
 /* Vuelve a su lugar caminando, no de un salto, cuando deja de ser su turno. */
 .board-axie .axie { transition: transform .35s ease; }
