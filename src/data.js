@@ -49,6 +49,9 @@ export function crest(symbol, size = '') {
  *   snailShare     divisor del golpe con que se debilita
  *   snailAttacks   cuántos ataques dura cada caracol
  *   eggShare       divisor del golpe con que se arma el escudo
+ *   powerBias      multiplicador sobre POWER_WORTH: cuán seguido la CPU prefiere un
+ *                  poder antes que dos cartas sin poder. No es un número del juego
+ *                  sino de la cabeza que lo juega, y está acá para poder medirlo
  *
  * Viven acá y no en `game.js` para que los carteles de los poderes puedan salir de
  * los mismos números que el juego usa. La versión anterior los escribía a mano en
@@ -64,6 +67,7 @@ export const TUNING = {
   snailShare: 2,
   snailAttacks: 2,
   eggShare: 2,
+  powerBias: 1,
 };
 
 export const POWERS = {

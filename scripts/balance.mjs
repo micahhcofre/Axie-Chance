@@ -30,9 +30,20 @@ const idle = () => new Promise((r) => setTimeout(r, 0));
  */
 const ARMS = {
   base: {},
+  // El valor viejo de la fuerza, antes de medirla. Queda como variante para que el
+  // cambio se pueda volver a comprobar en vez de tener que creerle a este comentario.
+  fuerza2: { strengthStep: 2 },
+  // Medida y descartada: el tope hace lo que dice —muerde una de cada cinco veces que
+  // se aplica veneno— pero no mueve las partidas (-1.1 ±1.2 sobre 400). Queda acá
+  // porque una variante que se midió y no sirvió también es un resultado.
   venenoMax: { poisonStacks: false },
-  fuerza1: { strengthStep: 1 },
-  ambas: { poisonStacks: false, strengthStep: 1 },
+  // La escala de POWER_WORTH: cuán seguido la CPU cambia dos cartas sin poder por
+  // una con poder. Acá el que se mide es el rival, no el juego — con el jugador
+  // atado a una estrategia fija, la escala que le gana más partidas es la mejor, o
+  // sea la que **baja** la columna "gana".
+  sesgo07: { powerBias: 0.7 },
+  sesgo15: { powerBias: 1.5 },
+  sesgo20: { powerBias: 2 },
 };
 
 const args = process.argv.slice(2);
@@ -151,10 +162,27 @@ for (const arm of armNames) {
 
   console.log(`── ${arm} ${'─'.repeat(Math.max(46 - arm.length, 0))}`);
   console.log(`   control (nunca agarra poderes)  ${pct(mean(control))}`);
-  for (const r of rows.sort((x, y) => y.diff - x.diff)) {
-    // ±2 errores estándar ≈ intervalo al 95%. Lo que entra en ese margen no se
-    // puede afirmar, por más que la tabla lo muestre ordenado.
-    console.log(`   ${r.power.padEnd(9)} ${pct(r.win).padStart(6)}   ` +
+  // Los escalones, que es lo único que se puede leer del orden.
+  //
+  // La columna "vs control" no sirve para comparar dos poderes entre sí: su ± es el
+  // error de cada estimación contra el control, no el de la diferencia entre las dos.
+  // Dos poderes pueden estar los dos clarísimo arriba del control y ser
+  // indistinguibles entre ellos; ordenarlos ahí es leerle una cifra al ruido.
+  //
+  // Así que cada poder se compara pareado contra el **líder de su escalón**, no
+  // contra el de al lado. Contra el de al lado no alcanza: una cadena de pasos
+  // chicos, ninguno medible por separado, puede sumar entre las puntas una diferencia
+  // que sí lo es, y la tabla los mostraría todos empatados. Cuando uno cae por debajo
+  // del líder con el margen afuera, abre un escalón nuevo y pasa a ser el líder.
+  rows.sort((x, y) => y.diff - x.diff);
+  let tier = 1;
+  let lead = rows[0];
+  for (const r of rows) {
+    if (r !== lead) {
+      const { diff, err } = pairedDiff(lead.got, r.got);
+      if (diff > 2 * err) { tier++; lead = r; }
+    }
+    console.log(`   ${String(tier).padStart(2)}. ${r.power.padEnd(9)} ${pct(r.win).padStart(6)}   ` +
       `${signed(r.diff).padStart(6)} ±${(200 * r.err).toFixed(1)} vs control`);
   }
   console.log('');

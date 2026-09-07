@@ -1,4 +1,5 @@
 import { playCard, scoreChain, survivalOdds } from './rules.js';
+import { TUNING } from './data.js';
 
 // El mazo tiene 96 cartas pero solo 41 combinaciones distintas de símbolos.
 // Agrupando por combinación, un lookahead de 3 niveles cuesta ~70k evaluaciones.
@@ -123,27 +124,42 @@ function bestCards(options, deck, n) {
  * carta más al mazo".
  *
  * Salen de atar al jugador a un solo poder contra la CPU normal y contar partidas
- * ganadas, 400 por poder, contra un control que nunca agarra ninguno. Promedio de las
- * dos corridas con los poderes ya ajustados, en puntos sobre ese control:
+ * ganadas, 400 sembradas por poder, contra un control que nunca agarra ninguno
+ * (`npm run balance`). En puntos sobre ese control:
  *
- *   fuerza +16 · veneno +13 · maceta +9 · caracol +9 · huevo +7 · pulpo +6
+ *   veneno +11.1 · fuerza +7.6 · caracol +7.5 · huevo +6.0 · maceta +5.0 · pulpo +2.8
  *
- * Con 400 partidas el intervalo al 95% ronda ±3.5 puntos, así que solo se puede
- * afirmar el escalón grande —fuerza y veneno arriba, los otros cuatro juntos— y no
- * el orden fino de adentro de cada grupo. Los pesos siguen ese corte.
+ * De ese orden **solo hay dos escalones afirmables**. Comparando cada poder pareado
+ * contra el líder de su grupo, el banco separa {veneno, fuerza, caracol} de {huevo,
+ * maceta, pulpo} y adentro de cada grupo no distingue nada. Que el veneno esté 3.5
+ * arriba de la fuerza no se puede sostener: los ± de la tabla son el error contra el
+ * control, no el de la diferencia entre dos poderes.
  *
- * Si cambian los números de los poderes, hay que volver a correrlo:
- * scripts no versionados, ver el README.
+ * Los pesos igual siguen los valores medidos y no los dos escalones, porque esto no
+ * es una afirmación sino una decisión bajo incertidumbre: para elegir, el mejor
+ * número disponible es la estimación, aunque no alcance para publicarla. Lo que no
+ * hay que hacer es leer el orden fino como si fuera un hecho.
+ *
+ * La escala de la banda —cuán seguido un poder le gana a dos cartas sin poder— resultó
+ * no importar. Está detrás de `TUNING.powerBias`, y multiplicarla por 0.7, 1.5 y 2 no
+ * mueve ningún resultado fuera del ruido sobre 300 partidas. Se midió porque parecía
+ * que sí: al recalibrar estos pesos los números subieron en todos lados y la sospecha
+ * era que bajar cinco de seis había vuelto glotona de cartas sin poder a la CPU. No
+ * era eso. Lo que decide es el **orden relativo**, no el nivel absoluto.
+ *
+ * Ojo con el lazo igual: la medición corre contra esta misma CPU, así que cambiar
+ * estos pesos mueve los números de los que salieron. No es circular como contar
+ * cuántas veces la CPU elige cada poder —eso solo refleja estos pesos y nada más—,
+ * pero conviene volver a correr el banco después de tocarlos.
  */
 const POWER_WORTH = {
-  strength: 1.7,
-  poison: 1.5,
-  pot: 1.0,
-  snail: 1.0,
-  egg: 0.8,
-  octopus: 0.7,
+  poison: 1.7,
+  strength: 1.15,
+  snail: 1.15,
+  egg: 0.9,
+  pot: 0.75,
+  octopus: 0.45,
 };
-
 /**
  * Qué se lleva la CPU del centro.
  *
@@ -170,7 +186,7 @@ export function planDraft(pool, deck, { kind }) {
   let best = null;
   let bestValue = -1;
   for (const card of powered) {
-    const value = connectivity(card, deck) + POWER_WORTH[card.power] * perCard;
+    const value = connectivity(card, deck) + POWER_WORTH[card.power] * TUNING.powerBias * perCard;
     if (value > bestValue) { bestValue = value; best = card; }
   }
 
