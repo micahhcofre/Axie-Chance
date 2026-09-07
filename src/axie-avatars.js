@@ -25,7 +25,7 @@ export const AVATARS = {
     ],
   },
   aquatic: {
-    from: {"class":"aquatic","color":3,"parts":{"eyes":"aquatic-02","ears":"aquatic-04","mouth":"aquatic-08","horn":"aquatic-06","back":"aquatic-02","tail":"aquatic-12"}},
+    from: {"class":"aquatic","color":3,"parts":{"eyes":"aquatic-08","ears":"aquatic-04","mouth":"aquatic-08","horn":"aquatic-06","back":"aquatic-02","tail":"aquatic-12"}},
     ratio: 1.32408,
     layers: [
       { src: 'body-normal/leg-front-right/aquatic-03.png', x: 0.13925, y: 0.84408, w: 0.09283, h: 0.14443 },
@@ -37,7 +37,7 @@ export const AVATARS = {
       { src: 'body-normal/leg-front-left/aquatic-03.png', x: 0.44077, y: 0.9032, w: 0.08355, h: 0.0968 },
       { src: 'aquatic-04/ear-left.png', x: 0.47345, y: 0.32673, w: 0.13344, h: 0.24737 },
       { src: 'aquatic-06/horn.png', x: 0.18515, y: 0.11638, w: 0.26689, h: 0.24276 },
-      { src: 'aquatic-02/eyes/aquatic-03.png', x: 0.07181, y: 0.38564, w: 0.31098, h: 0.18591 },
+      { src: 'aquatic-08/eyes.png', x: 0.06415, y: 0.38308, w: 0.33187, h: 0.19052 },
       { src: 'aquatic-08/mouth/aquatic-03.png', x: 0.14422, y: 0.50752, w: 0.20423, h: 0.24276 },
     ],
   },
@@ -75,7 +75,7 @@ export const AVATARS = {
     ],
   },
   bug: {
-    from: {"class":"bug","color":2,"parts":{"eyes":"bug-08","ears":"bug-12","mouth":"bug-10","horn":"bug-04","back":"bug-08","tail":"bug-02"}},
+    from: {"class":"bug","color":2,"parts":{"eyes":"bug-02","ears":"bug-12","mouth":"bug-10","horn":"bug-04","back":"bug-08","tail":"bug-02"}},
     ratio: 1.20536,
     layers: [
       { src: 'body-normal/leg-front-right/bug-02.png', x: 0.15613, y: 0.84085, w: 0.10409, h: 0.14742 },
@@ -87,12 +87,12 @@ export const AVATARS = {
       { src: 'body-normal/leg-front-left/bug-02.png', x: 0.49422, y: 0.9012, w: 0.09368, h: 0.0988 },
       { src: 'bug-12/ear-left.png', x: 0.54043, y: 0.21142, w: 0.14182, h: 0.18349 },
       { src: 'bug-04/horn.png', x: 0.04021, y: 0, w: 0.38513, h: 0.31523 },
-      { src: 'bug-08/eyes.png', x: 0.07125, y: 0.29715, w: 0.37732, h: 0.26504 },
+      { src: 'bug-02/eyes/bug-02.png', x: 0.04108, y: 0.32931, w: 0.43327, h: 0.24936 },
       { src: 'bug-10/mouth.png', x: 0.15081, y: 0.54167, w: 0.17565, h: 0.11605 },
     ],
   },
   reptile: {
-    from: {"class":"reptile","color":3,"parts":{"eyes":"reptile-04","ears":"reptile-08","mouth":"reptile-02","horn":"reptile-10","back":"reptile-06","tail":"reptile-04"}},
+    from: {"class":"reptile","color":3,"parts":{"eyes":"reptile-08","ears":"reptile-08","mouth":"reptile-02","horn":"reptile-10","back":"reptile-06","tail":"reptile-04"}},
     ratio: 1.25382,
     layers: [
       { src: 'body-normal/leg-front-right/reptile-03.png', x: 0.15783, y: 0.83793, w: 0.1019, h: 0.15012 },
@@ -104,7 +104,7 @@ export const AVATARS = {
       { src: 'body-normal/leg-front-left/reptile-03.png', x: 0.48881, y: 0.89938, w: 0.09171, h: 0.10062 },
       { src: 'reptile-08/ear-left/reptile-03.png', x: 0.52074, y: 0.31388, w: 0.16814, h: 0.30983 },
       { src: 'reptile-10/horn/reptile-03.png', x: 0.17939, y: 0, w: 0.32226, h: 0.31941 },
-      { src: 'reptile-04/eyes/reptile-03.png', x: 0.06887, y: 0.3519, w: 0.37576, h: 0.20602 },
+      { src: 'reptile-08/eyes/reptile-03.png', x: 0.09171, y: 0.36749, w: 0.35156, h: 0.23637 },
       { src: 'reptile-02/mouth/reptile-03.png', x: 0.10303, y: 0.55132, w: 0.29679, h: 0.13894 },
     ],
   },

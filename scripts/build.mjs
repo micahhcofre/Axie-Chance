@@ -8,7 +8,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 
 const MODULES = [
-  'data', 'axie-avatars', 'axies', 'rules', 'ai', 'game', 'vfx-clips', 'vfx', 'ui', 'main',
+  'data', 'axie-avatars', 'axie-poses', 'axies', 'rules', 'ai', 'game',
+  'vfx-clips', 'vfx', 'axie-motion', 'ui', 'main',
 ];
 const FONTS =
   'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800' +
@@ -58,7 +59,14 @@ const css = arenas.reduce(
   read('styles.css').trim(),
 );
 
-const page = `<link rel="stylesheet" href="${FONTS}">
+// El `<head>` del index no viaja —el body se recorta y el resto se arma acá—, así que
+// las tres etiquetas que sí hacen falta se vuelven a poner. El `charset` no es
+// opcional: abierto como archivo suelto nadie manda un `Content-Type`, el navegador
+// adivina latin-1 y el juego entero queda con los acentos rotos.
+const page = `<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="${icons['bird-crest.png']}">
+<link rel="stylesheet" href="${FONTS}">
 <title>Axie Chance</title>
 <style>
 ${css}
