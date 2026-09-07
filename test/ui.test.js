@@ -21,6 +21,29 @@ const nodes = Object.fromEntries(
 
 globalThis.document = { getElementById: (id) => nodes[id] ?? null, addEventListener() {} };
 
+/**
+ * Guarda todos los valores que pasaron por el `dataset` de un nodo.
+ *
+ * Los pulsos de animación se ponen con un `setTimeout` y se limpian con otro, así que
+ * mirarlos en un instante fijo del reloj es apostar a que la máquina esté libre: con
+ * el CPU ocupado los timers llegan tarde y la ventana se pierde. Sobre la historia la
+ * pregunta deja de depender del reloj — "en algún momento pasó por acá".
+ */
+function recordDataset(node) {
+  const seen = {};
+  const raw = node.dataset;
+  node.dataset = new Proxy(raw, {
+    set(target, key, value) {
+      (seen[key] ??= []).push(value);
+      target[key] = value;
+      return true;
+    },
+  });
+  return seen;
+}
+
+const pulses = { human: recordDataset(nodes['axie-human']), cpu: recordDataset(nodes['axie-cpu']) };
+
 const { createGame } = await import('../src/game.js');
 const { mount } = await import('../src/ui.js');
 const { scoreChain } = await import('../src/rules.js');
@@ -171,9 +194,16 @@ while (game.state.phase !== 'matchEnd') {
     assert.match(nodes.controls.innerHTML, /class="banner"/);
     await game.nextRound();
   } else if (s.turn === 'human' && !s.busy) {
-    // Igual que en match.test.js: plantarse en las rondas pares asegura que se pinte
-    // la elección de trío o pares aunque las cadenas se corten muchas veces seguidas.
-    if (s.round % 2 === 0 || scoreChain(s.chains.human).total >= 6) {
+    // Plantarse en las rondas pares asegura que se pinte la elección del reparto
+    // aunque las cadenas se corten muchas veces seguidas; en las impares se roba.
+    //
+    // El umbral es alto a propósito. Con los poderes las partidas se acortaron de ~19
+    // rondas a ~14, y contra una CPU cargada pueden terminar en 7: con pocas rondas
+    // impares y un robo por ronda, había un ~1.5% de partidas donde todos los robos
+    // se cortaban (y no quedaba ninguno exitoso que mirar) o ninguno se cortaba (y no
+    // había cadena rota que pintar). Robando hasta 12 hay varios tiros por ronda y
+    // los dos casos salen igual.
+    if (s.round % 2 === 0 || scoreChain(s.chains.human).total >= 12) {
       await game.stand();
     } else {
       await game.hit();
@@ -184,6 +214,7 @@ while (game.state.phase !== 'matchEnd') {
       // puesto.)
       if (!game.state.chains.human.busted) {
         sawDraw = true;
+        // Este sí se pone en el mismo repintado, sin timers de por medio.
         assert.equal(nodes['axie-human'].dataset.act, 'draw', 'el tirón de robar');
       }
     }
@@ -222,14 +253,14 @@ assert.match(bustHtml, /class="field-dmg" data-busted="true">0</, 'una cadena co
 // después de terminada la partida, sobre el último golpe, esperando cada momento.
 const last = game.state.lastHit;
 assert.ok(last, 'la partida terminó con un golpe');
-await new Promise((r) => setTimeout(r, 450));
+await new Promise((r) => setTimeout(r, 1200));
 // Un ataque que se desarma no cruza a ningún lado: no hay salto que mirar.
 if (last.amount > 0) {
-  assert.equal(nodes[`axie-${last.by}`].dataset.act, 'attack', 'el que pega va hacia el otro');
+  assert.ok(pulses[last.by].act?.includes('attack'), 'el que pega va hacia el otro');
 }
-await new Promise((r) => setTimeout(r, 500));
 const hitNode = nodes[`axie-${last.target}`];
-assert.match(hitNode.dataset.react, /^(hit|whiff)$/, 'el que recibe el golpe se sacude');
+assert.ok(pulses[last.target].react?.some((v) => /^(hit|whiff)$/.test(v)),
+  'el que recibe el golpe se sacude');
 assert.match(hitNode.innerHTML, /class="dmg"/, 'sale el número del golpe');
 
 console.log('✓ render ok');

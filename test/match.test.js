@@ -106,11 +106,22 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         continue;
       }
       // Se alterna entre las dos ramas: una carta con poder cierra el reparto (suma
-      // 1) y una sin poder deja pendiente la segunda (suma 2). El caso de dos cartas
-      // solo se registra con reserva de sobra, y la reserva se vacía hacia el final,
-      // así que primero se va por ahí hasta cubrirlo.
+      // 1) y una sin poder deja pendiente la segunda (suma 2).
       const want = (!gains.includes(2) || humanMode === 'power') ? 'plain' : 'power';
-      const card = options.find((c) => (want === 'power' ? c.power : !c.power)) ?? options[0];
+      // Para llegar a 2 hacen falta dos cartas sin poder a la vista, y 36 de las 71
+      // traen poder: hay repartos donde no hay ninguna. Con partidas de 7 rondas eso
+      // alcanzaba para terminar sin haber probado nunca la rama, así que se fuerza.
+      if (want === 'plain' && s.pool.length) {
+        for (let i = 0; i < s.market.length && s.market.filter((c) => !c.power).length < 2; i++) {
+          if (!s.market[i].power) continue;
+          const at = s.pool.findIndex((c) => !c.power);
+          if (at < 0) break;
+          s.pool.push(s.market[i]);
+          s.market[i] = s.pool.splice(at, 1)[0];
+        }
+      }
+      const options2 = game.pickable();
+      const card = options2.find((c) => (want === 'power' ? c.power : !c.power)) ?? options2[0];
       // Espejo de la inferencia del juego: la carta que tocás decide.
       humanMode = card.power ? 'power' : 'plain';
       await game.takeCard(card.uid);
