@@ -31,7 +31,7 @@ body {
 }
 
 /* Los números se leen en columna por todos lados: marcador, rachas, probabilidades. */
-.sb-round, .sb-pool, .field-dmg, .field-mods, .plate-hp b, .plate-tag, .pip-status,
+.sb-round, .swing-dmg, .swing-cap, .swing-mods, .plate-hp b, .plate-tag, .pip-status,
 .odds-pct, .odds-frac, .deck, .run, .card-no, .controls-msg b {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
@@ -49,67 +49,356 @@ body {
   clip-path: inset(50%); white-space: nowrap;
 }
 
+/* La partida ya no es un tablero apoyado sobre una página: es una pantalla.
+
+   Antes esto era una grilla de tres columnas y el combate vivía adentro de una
+   tarjeta —fondo redondeado, sombra, y el terreno recortado a su borde—, con el resto
+   de la página pintado de azul liso. Al lado de la portada, que es una escena entera
+   de borde a borde, parecían dos juegos distintos.
+
+   Ahora el terreno es la página. La mesa se clava a la ventana (ver `.table`) y lo que
+   antes era el marco pasa a ser lo que se apoya encima: la barra de arriba y la
+   columna del costado, las dos flotando sobre el dibujo. Por eso acá abajo no queda
+   ninguna grilla: cada sección se ubica sola contra un borde de la ventana y `.app` es
+   nada más que el ancla. */
 .app {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 260px;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 16px;
-  max-width: 1320px;
+  position: relative;
   min-height: 100vh;
-  margin: 0 auto;
-  padding: 16px;
+  /* Bloque propio. En un teléfono la columna del costado se va abajo de la escena con
+     un margen de 100vh (ver el `@media` de 940px), y sin esto ese margen se escapa
+     hacia afuera —se fusiona con el del `.app`— y corre la página entera en vez de
+     dejar el lugar adentro. */
+  display: flow-root;
 }
 
-.table   { grid-column: 2; grid-row: 2; }
-.sidebar { grid-column: 3; grid-row: 2; }
+/* Cuánto le come a la escena la única sección que sigue apoyada encima: la barra de
+   arriba. Va suelta en `:root` porque la miran los dos lados del asunto —la barra,
+   para saber cuánto ocupa, y el arena, para no dejar a nadie debajo de ella—, y porque
+   pisarla en un `@media` es todo lo que hace falta para reacomodar la pantalla entera.
+   El dibujo igual pasa por abajo: se lo devuelven los márgenes negativos de
+   `.arena-art`.
+
+   Hubo una segunda, `--costado`, que reservaba una columna a la derecha para el mazo y
+   el historial. Se fue con ellos: los dos se abren ahora cuando se los pide —el mazo
+   tocando un Axie, el historial desde el menú— y la escena se quedó con la ventana
+   entera, que es lo que tiene que ser en un juego. */
+:root {
+  --barra: 96px;
+
+  /* Y la medida que ordena la pantalla entera: **dónde apoyan las patas**, contando
+     desde el borde de arriba de la ventana. A la mitad. De ahí para arriba es cielo y
+     de ahí para abajo, suelo, cartas y botones.
+
+     Antes esto no se elegía: salía de lo que sobraba —la ventana menos la barra menos
+     las cartas— y quedaba a dos tercios de alto. Eso es lo que rompía el fondo, y no
+     por gusto: el horizonte de un dibujo apaisado está a la mitad de la imagen, así
+     que pedirle que llegue a dos tercios de la pantalla es pedirle que se agrande un
+     60%. A la mitad no hay que pedirle nada — el dibujo ya viene con esa proporción.
+
+     Un poco más abajo de la mitad, eso sí (`--mitad`): a la mitad justa el bicho queda
+     demasiado arriba. Parada la pantalla sí va a la mitad, que es donde entra el
+     terreno arriba y la mesa entera abajo.
+
+     `--frente` es lo que mide la mesa —las cartas, los números y los botones— y es el
+     tope: la línea no baja tanto como para dejar una carta fuera del cuadro. En una
+     ventana alta manda la mitad; en una baja, el frente. Y como la mesa se mide sola a
+     partir del tamaño de la carta, agrandar las cartas sube la línea sin que haya que
+     tocar nada más. */
+  --mitad: 56vh;
+  --frente: calc(var(--mesa) + var(--resto, 265px));
+  --patas: clamp(150px, var(--mitad), calc(100vh - var(--frente)));
+
+  /* El tamaño de la carta, del que cuelga todo lo de abajo: lo que mide el símbolo
+     adentro, lo que mide la mesa y, por lo tanto, dónde apoyan las patas. Sale del alto
+     de la ventana —una carta grande en una ventana baja se come la pelea— y también
+     del ancho, que en un teléfono es lo que ata.
+
+     `--mesa` es el alto de la carta más alta que existe: tres símbolos y un poder. Sale
+     de las proporciones de más abajo —el símbolo es el 68% del ancho útil— y está de
+     más por unos píxeles a propósito: si quedara corta, una carta alta desbordaría. */
+  --carta: clamp(56px, min(8vh, 17vw), 84px);
+  --mesa: calc(2.72 * (var(--carta) - 24px) + 88px);
+
+  /* Y el pie: lo que mide de alto la franja de abajo, la que se aprieta.
+
+     Es una medida **elegida**, como la línea de las patas, y no la suma de lo que haya
+     adentro en este momento. Ese era el problema que se veía jugando: adentro del pie
+     hay cosas distintas según dónde esté la partida —el renglón del turno con sus dos
+     botones, el mismo renglón solo mientras juega la CPU, el cierre de ronda sin nada,
+     el final con el botón de volver a jugar—, y cada una medía distinto. Como las
+     filas de abajo del arena se empaquetan contra el borde de la ventana (ver
+     `.arena`), cada vez que el pie cambiaba de alto se movía todo lo que tiene encima:
+     las cartas, las rachas y los botones, en cada cierre de turno. Un juego no hace eso.
+
+     Son dos casilleros y los dos están siempre: `--aviso` es lo que se lee y
+     `--botones` lo que se aprieta. El contenido entra ahí adentro y lo que sobra queda
+     vacío —aire de terreno—, que es el precio de que nada se mueva. `--aviso` está
+     medido en la cosa más alta que le puede tocar, y desde que el cierre de ronda no
+     dice nada (ver `controlsHtml`) esa cosa es un aviso de dos renglones: la última
+     chance. Medía 66px cuando había que meter ahí la cinta del cierre con el marcador
+     debajo; sin cinta, esos 18px eran hueco puesto justo encima de lo que se aprieta.
+
+     `--pie` es la suma, y la miran los dos lados: el pie para medirse y `--resto` para
+     saber cuánto hay que dejar libre debajo de las patas. */
+  --aviso: 48px;
+  --botones: 70px;
+  /* Y un zócalo: el aire que queda **debajo** de los botones, entre ellos y el borde de
+     la ventana. Antes no existía y apoyaban directo sobre el padding del arena, o sea a
+     16px del filo del vidrio: un botón pegado al borde de abajo se lee como el pie de
+     la página y no como lo que hay que apretar, y en un teléfono cae justo donde el
+     navegador pone su propia barra. Va como fila del pie y no como padding para que
+     siga siendo cierta la única regla de acá abajo: el alto de la franja es la suma de
+     medidas elegidas y ninguna depende del contenido.
+
+     Los botones, además, crecieron y el aviso se achicó en la misma cuenta. El aviso
+     ya no lleva el renglón del turno —lo que decía estaba dibujado más arriba, ver
+     `controlsHtml`—, así que casi siempre está vacío: era aire caro justo encima de lo
+     único que se aprieta. */
+  --zocalo: 14px;
+  --pie: calc(var(--aviso) + var(--botones) + var(--zocalo));
+
+  /* El renglón de las rachas, debajo de las cartas. Son tres chapitas como mucho —una
+     por símbolo de la primera carta— así que nunca se parte en dos renglones, y por eso
+     alcanza con reservarle uno. Vive acá arriba porque el medidor de la próxima carta
+     se apoya sobre él para no quedar flotando (ver el `@media` de 940px). */
+  --rachas: 26px;
+}
 
 /* ---------- topbar ---------- */
 
+/* Va apoyada sobre el cielo del terreno, así que lo que la separa de la escena no es
+   una línea: es su propia sombra. El degradé se apaga hacia abajo en vez de cortar
+   —un borde duro acá parte el dibujo en dos— y el desenfoque de atrás hace el resto,
+   que es lo que deja leer un texto chico sobre una ilustración con luz propia. */
+/* Un escalón por encima de la columna del mazo, que también está clavada a la ventana
+   con `z-index: 20` y viene después en el HTML. Sin esto el menú de las tres rayitas
+   —que cuelga de acá y cae justo sobre esa columna— se abriría **detrás** del mazo y
+   del historial. Debajo del centro (`z-index: 25`) sigue estando, que es lo correcto:
+   mientras se elige del centro no hay nada más que hacer. */
+/* Tres columnas y un solo renglón: la marca a la izquierda, la ronda clavada en el
+   medio de la ventana y las tres rayitas a la derecha.
+
+   Con `flex` el medio no era el medio. La ronda venía empujada por el ancho del logo y
+   terminaba pegada a la marca —las dos cosas leyéndose como una sola—, y encima el
+   lugar se movía solo: el logo cambia de alto con la ventana. Las dos columnas de los
+   costados son `1fr` y miden lo mismo pase lo que pase, así que lo del medio queda
+   centrado contra la **pantalla** y no contra lo que sobró del renglón. `minmax(0, …)`
+   es lo que las deja achicarse: sin eso, algo ancho a un costado empuja el centro
+   fuera del centro. */
 .topbar {
-  grid-column: 1 / -1;
-  display: flex;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 21;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  padding: 4px 4px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  gap: 12px;
+  /* Arriba lleva más aire que abajo a propósito: la barra no tiene borde —se disuelve
+     en el dibujo— así que lo único que la despega del canto de la ventana es ese
+     espacio. Pegada al canto se lee como parte del cromo del navegador y no del juego,
+     y en un teléfono queda justo debajo de la barra de direcciones, que es el peor
+     vecino posible. */
+  padding: 14px clamp(12px, 2.2vw, 24px) 12px;
+}
+/* La sombra y el desenfoque van en una capa aparte, con máscara, y no en la barra.
+
+   Puestos en la barra el degradé se apaga hacia abajo pero el desenfoque no: se corta
+   en seco en el borde, y esa línea de foco cruzando el cielo se ve más que cualquier
+   borde que hubiéramos dibujado a propósito. Con la máscara se apagan los dos juntos y
+   la barra deja de tener borde de abajo: se disuelve en el dibujo. */
+.topbar::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(180deg,
+    rgba(7, 10, 24, .86) 0%, rgba(7, 10, 24, .62) 52%, rgba(7, 10, 24, 0) 100%);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 44%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 44%, transparent 100%);
+}
+/* Los botones de la barra son fantasmas, y un fantasma sobre un dibujo no se lee como
+   algo que se pueda apretar. Acá arriba llevan cuerpo: apenas el suficiente para que
+   se vean redondeados contra el cielo. */
+.topbar .btn-ghost {
+  background: rgba(11, 16, 36, .46);
+  border-color: rgba(255, 255, 255, .1);
+}
+.topbar .btn-ghost:hover:not(:disabled) { background: rgba(26, 34, 68, .72); }
+
+/* La marca, sin chapa.
+
+   Tuvo una: un vidrio oscuro como el de las chapas de los Axies, para que el logo no
+   se leyera como una calcomanía pegada sobre el dibujo. Lo que hacía en realidad era
+   dibujar un rectángulo alrededor de algo que ya tiene forma propia —el logo es un
+   dibujo con contorno, no una palabra— y de paso poner dos marcos en el mismo renglón,
+   uno a cada lado de la ronda. Tres cajas en el cielo.
+
+   Sin chapa el trabajo lo hace la sombra del propio logo, que es lo que ya lo despegaba
+   del vidrio: más larga y más oscura, alcanza para separarlo de cualquier fondo. La
+   única caja que queda en la barra es la de las tres rayitas, que es la que tiene que
+   parecer un botón porque lo es. */
+.brand {
+  justify-self: start;
+  display: flex; align-items: center;
+}
+/* El logo manda su propio alto y el ancho sale de la proporción. Es la única imagen
+   de la barra, y va a la altura de los botones de al lado para que el renglón no se
+   agrande solo por él. */
+.brand-logo {
+  display: block; height: 46px; width: auto;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, .8))
+          drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
 }
 
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: .02em; }
-.brand-mark { color: var(--accent); font-size: 20px; }
-.brand-name { font-family: var(--display); font-weight: 800; font-size: 18px; letter-spacing: -.01em; }
+/* Arriba solo queda dónde estamos parados: la vida se lee sobre cada Axie y el
+   marcador quedó en una sola cosa, en qué ronda estamos.
 
-/* Arriba solo queda dónde estamos parados: la vida se lee sobre cada Axie. */
-.scoreboard { display: flex; align-items: baseline; gap: 12px; margin-left: auto; }
+   Y en el medio exacto del renglón es donde tiene que estar: la ronda es el reloj de la
+   partida —lo único de la barra que cambia mientras se juega— y el medio es el único
+   lugar que no se lee como una decoración de la marca.
+
+   Debajo iba cuántas cartas quedaban en la reserva, y era un número que nadie usa: no
+   se decide nada con él —no se cuentan cartas, se apuesta contra el azar— y bajaba de
+   a poco toda la partida, así que lo único que hacía era ocupar el medio de la pantalla
+   con letra chica. Con un solo renglón el marcador ya no necesita ser un bloque: es
+   una palabra y un número, centrados contra la ventana.
+
+   Y sin chapa, por lo mismo que la marca. Lo que lo deja leerse sobre el dibujo es la
+   letra —grande, espaciada y con su sombra— más el degradé de la propia barra, que ya
+   oscurece el cielo justo acá arriba. */
+.scoreboard {
+  justify-self: center;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  text-align: center;
+}
 .sb-round {
-  font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em;
+  font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: .2em;
+  /* El espaciado se reparte a los dos costados de cada letra, así que el último hueco
+     cae después de la última: sin esto la palabra queda medio hueco corrida a la
+     izquierda de un centro que es exacto por todos lados menos por el ojo. */
+  text-indent: .2em;
+  color: var(--ink); white-space: nowrap;
+  line-height: 1.15;
+  text-shadow: 0 2px 12px rgba(4, 7, 18, .95), 0 1px 3px rgba(4, 7, 18, .9);
+}
+
+/* El reloj: los segundos y una rayita que se vacía, del color del que tiene que
+   decidir. Apagado guarda su lugar (`visibility` y no `display`): la barra está
+   centrada en alto, y si el reloj entrara y saliera del renglón la ronda daría un
+   saltito en cada cambio de turno. Los últimos segundos se ponen en rojo y laten. */
+.clock {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 13px; line-height: 1;
   color: var(--ink);
+  text-shadow: 0 1px 6px rgba(4, 7, 18, .95);
+  transition: opacity .2s ease;
 }
-.sb-pool { font-size: 12px; color: var(--ink-faint); }
+.clock[data-on="false"] { visibility: hidden; opacity: 0; }
+.clock b { font-weight: 600; min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.clock-bar {
+  width: 76px; height: 5px; border-radius: 999px; overflow: hidden;
+  background: rgba(255, 255, 255, .16);
+  box-shadow: 0 1px 6px rgba(4, 7, 18, .6);
+}
+.clock-bar i {
+  display: block; height: 100%; border-radius: inherit;
+  width: calc(var(--p, 1) * 100%);
+  background: var(--c, var(--accent));
+}
+.clock[data-low="true"] b { color: var(--danger); animation: clock-low 1s ease-in-out infinite; }
+.clock[data-low="true"] .clock-bar i { background: var(--danger); }
+@keyframes clock-low { 50% { transform: scale(1.18); } }
+/* La copia de adentro del centro, debajo de la bajada. */
+.clock--draft { justify-content: center; margin-top: 10px; font-size: 15px; }
+.clock--draft .clock-bar { width: 120px; height: 6px; }
 
-.topbar-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.topbar-actions {
+  justify-self: end; min-width: 0;
+  display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+  flex-wrap: wrap;
+}
 
-.picker { display: flex; align-items: center; gap: 8px; }
-.picker-label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint);
+/* ---------- el menú de la mesa ---------- */
+
+/* Las tres rayitas. Es el único botón de la barra: adentro está todo lo que no es
+   jugar. Cuadrado y con las rayas dibujadas a mano —tres `<i>` y no un carácter— para
+   que midan siempre lo mismo, no dependan de la fuente y se puedan animar. */
+.btn-burger {
+  display: flex; flex-direction: column; justify-content: center; gap: 5px;
+  /* Es la única puerta que tiene la mesa —el sonido, las reglas y la salida están todos
+     adentro—, y medía 40×36: menos que el mínimo cómodo para un dedo (44) y menos que
+     todo lo que tiene al lado. Ahora es un cuadrado franco, del alto de la chapa de la
+     marca, y las rayas crecen con él: a 17×2 se leían como una textura, a 22×3 se leen
+     como tres rayas. */
+  width: 52px; height: 48px; padding: 0;
+  border-radius: 14px;
+  background: rgba(11, 16, 36, .46); border-color: rgba(255, 255, 255, .1);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: none;
 }
-.crest-row { display: flex; gap: 3px; }
-.crest-btn {
-  position: relative; width: 54px; padding: 4px 4px 2px; line-height: 0; cursor: pointer;
-  background: transparent; border: 1px solid transparent; border-radius: 9px;
-  opacity: .45; filter: grayscale(.7);
-  transition: opacity .15s ease, filter .15s ease, background .15s ease;
+.btn-burger:hover:not(:disabled) { background: rgba(26, 34, 68, .72); }
+.btn-burger i {
+  display: block; width: 22px; height: 3px; margin: 0 auto;
+  border-radius: 2px; background: var(--ink-dim);
+  transition: background .15s ease;
 }
-.crest-btn:hover { opacity: .9; filter: none; }
-.crest-btn[data-on="true"] {
-  opacity: 1; filter: none;
-  background: color-mix(in srgb, var(--c) 22%, transparent);
-  border-color: color-mix(in srgb, var(--c) 60%, transparent);
+.btn-burger:hover i { background: var(--ink); }
+/* Abierto, el botón se queda encendido: es lo que ata el panel al lugar de donde salió. */
+.btn-burger[aria-expanded="true"] { background: rgba(26, 34, 68, .92); border-color: var(--accent); }
+.btn-burger[aria-expanded="true"] i { background: var(--accent); }
+
+/* El panel, colgado debajo de su botón. Va absoluto adentro de la barra —que ya está
+   clavada a la ventana— para que salga de ahí y no de un costado de la pantalla. */
+.hud-menu {
+  position: absolute; z-index: 1;
+  top: calc(100% - 4px); right: clamp(12px, 2.2vw, 24px);
+  width: min(320px, calc(100vw - 24px)); padding: 14px;
+  display: flex; flex-direction: column; gap: 8px;
+  border-radius: 14px; border: 1px solid var(--line);
+  background: rgba(10, 14, 28, .97);
+  box-shadow: 0 22px 50px -16px rgba(0, 0, 0, .9);
+  animation: hud-in .16s cubic-bezier(.2, .9, .3, 1) backwards;
 }
-/* El Axie que le tocó a la CPU: visible pero marcado como ajeno. */
-.crest-btn[data-taken="true"] { opacity: .75; filter: none; border-style: dashed; border-color: var(--line); }
-/* El crest sigue estando: es el símbolo con el que puntúa ese Axie. */
-.crest-btn .crest { width: 15px; height: 15px; position: absolute; right: 1px; bottom: 1px; }
+@keyframes hud-in {
+  from { opacity: 0; translate: 0 -8px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+.hud-label {
+  margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--ink-faint);
+}
+/* Un interruptor, su nombre, su perilla y el número. La perilla se lleva el espacio
+   que sobra: es lo único de la fila que se puede estirar sin romperse. */
+.hud-row { display: flex; align-items: center; gap: 10px; }
+.hud-name { font-size: 13px; color: var(--ink-dim); width: 52px; flex: 0 0 auto; }
+.hud-pct {
+  font-family: var(--mono); font-size: 11px; color: var(--ink-faint);
+  width: 34px; text-align: right; flex: 0 0 auto;
+}
+.hud-vol {
+  flex: 1 1 auto; min-width: 0; height: 4px; margin: 0;
+  -webkit-appearance: none; appearance: none;
+  border-radius: 2px; background: var(--line); cursor: pointer;
+}
+.hud-vol::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); border: 0; cursor: pointer;
+}
+.hud-vol::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); border: 0; cursor: pointer;
+}
+/* Con el sonido apagado la perilla sigue puesta —dice a qué volumen va a volver— pero
+   deja de ser lo que hay que mirar. */
+.btn-sound[data-on="false"] ~ .hud-vol { opacity: .4; }
+.hud-sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
+/* Los botones de adentro son renglones de un menú, no botones sueltos sobre el cielo:
+   se les saca el cuerpo que `.topbar .btn-ghost` les pone para que se lean contra la
+   ilustración. Acá abajo hay un panel opaco y no hace falta. */
+.hud-menu .btn-ghost { background: transparent; border-color: transparent; }
+.hud-menu .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, .07); }
+.hud-item { text-align: left; }
+.hud-menu .hud-quit { color: #ffb3ab; }
+.hud-menu .hud-quit:hover:not(:disabled) { background: #3a2038; color: #ffd0ca; }
 
 .select {
   display: flex; align-items: center; gap: 6px;
@@ -124,17 +413,55 @@ body {
 
 /* ---------- botones ---------- */
 
+/* Un botón es una tabla del Origins y no un rectángulo de color.
+
+   El asset kit no trae botones —ni una tipografía: adentro no hay un solo archivo de
+   fuente—, pero sí las **cintas talladas** con las que Sky Mavis arma el HUD del
+   combate: una plancha de borde redondeado con chevrones grabados, en azul, en rojo y
+   en verde. Estirada al tamaño del botón, una cinta *es* un botón, y uno que ya viene
+   con el redondeo, la textura y el desgaste pintados adentro.
+
+   El azul es el botón de siempre; el verde el que empieza algo —"Atacar", "Jugar de
+   nuevo"— y el rojo el que arriesga —"Robar carta"—. Los tres colores salen del kit y
+   no de un gradiente inventado.
+
+   Cada uno lleva su color debajo, que es el promedio del dibujo, por lo mismo que el
+   cartel: el día que el CDN no conteste, el botón se ve peor en vez de quedarse en un
+   hueco transparente.
+
+   Los estados no vienen del kit —no hay una versión "apretada" de cada cinta—, así que
+   se hacen con luz y con espesor: el borde de abajo grueso lo convierte en una tecla y
+   apretarlo la hunde, igual que el botón grande de la portada.
+
+   El borde queda declarado en 1px transparente y no en cero porque los fantasmas de la
+   barra y de la elección se dibujan pisándole el `border-color`; sin ancho, esa línea
+   no tendría dónde aparecer. */
 .btn {
-  font: inherit; font-weight: 600;
-  border-radius: 10px; padding: 9px 16px;
-  border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
-  cursor: pointer; transition: transform .08s ease, background .15s ease, border-color .15s ease;
+  font: inherit; font-weight: 700;
+  border-radius: 11px; padding: 10px 18px;
+  border: 1px solid transparent;
+  background: #00527c url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_blue.png") center / 100% 100% no-repeat;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  box-shadow: 0 4px 0 -1px rgba(0, 0, 0, .45), 0 14px 22px -14px rgba(0, 0, 0, .9);
+  cursor: pointer;
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s ease;
 }
-.btn:hover:not(:disabled) { background: #2a3563; border-color: #3d4b85; }
-.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:hover:not(:disabled) { filter: brightness(1.15) saturate(1.06); }
+.btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 -1px rgba(0, 0, 0, .45), 0 6px 12px -10px rgba(0, 0, 0, .9);
+}
 .btn:disabled { opacity: .35; cursor: not-allowed; }
-.btn-ghost { background: transparent; font-size: 13px; padding: 7px 12px; color: var(--ink-dim); }
-.btn-ghost:hover:not(:disabled) { color: var(--ink); }
+
+/* El botón que no es una tabla. "Cómo se juega", "Volver", los interruptores de sonido:
+   son texto que se puede apretar. Si también fueran cintas, la pantalla sería una pila
+   de cintas y ninguna diría nada. */
+.btn-ghost {
+  background: transparent; box-shadow: none; text-shadow: none;
+  font-size: 13px; font-weight: 600; padding: 7px 12px; color: var(--ink-dim);
+}
+.btn-ghost:hover:not(:disabled) { color: var(--ink); filter: none; }
+.btn-ghost:active:not(:disabled) { box-shadow: none; }
 /* Los dos interruptores de sonido. Apagados no solo se atenúan: les cruza una raya,
    que es lo que se lee de un vistazo y lo único que funciona sin distinguir colores. */
 .btn-sound { position: relative; padding: 7px 10px; font-size: 15px; line-height: 1; }
@@ -144,17 +471,34 @@ body {
   border-top: 2px solid currentColor; transform: rotate(-24deg);
 }
 
+/* Las otras dos cintas del kit. Solo se les cambia el dibujo y el color de abajo: el
+   tamaño, el espesor y el hundirse los pone `.btn`, que es lo que hace que los tres se
+   lean como el mismo objeto en tres colores y no como tres botones distintos. */
 .btn-primary {
-  background: linear-gradient(180deg, #5ee7c6, #33bfa0);
-  border-color: #2ba98d; color: #07231d; padding: 12px 26px; font-size: 15px;
+  background-color: #00766c;
+  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-fill.png");
+  padding: 12px 26px; font-size: 15px;
 }
-.btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, #6ff0d1, #3ccdac); }
-.btn-danger { border-color: #6b3340; color: #ffb3ab; padding: 12px 26px; font-size: 15px; }
-.btn-danger:hover:not(:disabled) { background: #3a2038; border-color: #8d4453; }
+.btn-danger {
+  background-color: #bb0035;
+  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_red.png");
+  padding: 12px 26px; font-size: 15px;
+}
 
 /* ---------- el arena ---------- */
 
-.table { display: flex; min-width: 0; }
+/* La mesa es la ventana. Todo el combate —el terreno, los dos que pelean, las cartas
+   y los botones— vive adentro de este cuadro, y este cuadro es la pantalla entera: por
+   eso el fondo llega hasta los cuatro bordes y no hasta el borde de un panel.
+
+   Va sin `z-index` a propósito. Si lo tuviera armaría una capa propia y se llevaría
+   adentro al centro —el panel del reparto—, que tiene que salir por encima de la barra
+   y de la columna. Sin él, cada pieza de adentro compite en la misma pila que las
+   secciones de afuera, que es justo lo que hace falta acá. */
+.table {
+  position: fixed; inset: 0;
+  display: flex; min-width: 0;
+}
 
 /* Todo el combate pasa acá adentro: los dos Axies enfrentados con su vida encima, la
    mesa compartida abajo y los botones al pie. No hay un panel por jugador —lo único
@@ -165,28 +509,34 @@ body {
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  /* La primera fila es el escenario: la chapa, el Axie y el aire que necesitan para no
-     pisarse. Va con un mínimo propio —`--escena`— y no con uno cualquiera, porque un
-     `minmax()` con mínimo fijo **no crece con su contenido**: si lo dejás corto, en una
-     ventana baja las cartas le ganan el espacio y la chapa y el bicho terminan uno
-     encima del otro. Con el mínimo puesto en lo que de verdad miden, el frente puede
-     empujar todo lo que quiera: el escenario ya no se deja apretar. */
-  grid-template-rows: minmax(var(--escena), 1fr) auto auto;
+  /* Cuatro filas: el escenario, el aire, la mesa y los botones.
+
+     El escenario mide **exactamente** lo que hay de la barra a las patas, y por eso ya
+     no es `1fr`: la línea de suelo dejó de ser lo que sobra y pasó a ser una medida
+     elegida (ver `--patas`). Lo que sobra se lo lleva la segunda fila, que está vacía
+     y no es un descuido: es el suelo entre las patas y la primera carta —el pedazo de
+     terreno delante del bicho, que es la mitad de lo que lo hace ver apoyado— y es lo
+     que mantiene las cartas y los botones contra el borde de abajo en vez de dejarlos
+     colgados en el medio. */
+  grid-template-rows: var(--escena) 1fr auto auto;
   gap: 10px 0;
-  min-height: 470px;
-  /* Lo que mide el escenario sale del alto de la ventana, no de un número suelto: en
-     una pantalla baja un mínimo fijo y grande le termina empujando los botones fuera
-     del cuadro, que es peor que tener poco cielo. El Axie se achica con la misma
-     cuenta, así que la chapa y el bicho siempre entran en la fila. */
-  --escena: clamp(210px, 42vh, 320px);
+  /* El escenario es lo que va de la barra a las patas. El mínimo es para la ventana
+     ridículamente baja, donde ya no queda nada que repartir. */
+  --escena: max(120px, calc(var(--patas) - var(--barra)));
   --pad: 16px;
-  padding: var(--pad);
-  border-radius: var(--radius);
+  /* Arriba se reserva la barra: está apoyada encima de la escena, y lo que se juega no
+     puede quedar debajo de ella. El terreno sí pasa por abajo —se lo devuelven los
+     márgenes negativos de `.arena-art` y del piso—, que de eso se trata todo esto.
+
+     Ojo: la fila del escenario apoya su contenido abajo, así que este padding no baja a
+     nadie. Lo único que hace es no dejar que la chapa se meta debajo de la barra cuando
+     la ventana es baja y la escena se aprieta. */
+  padding: var(--barra) var(--pad) var(--pad);
   overflow: hidden;
-  /* El dibujo no va acá: va en `.arena-art`. Lo que queda es el color con el que
-     sigue el suelo cuando el dibujo se termina antes que el cuadro. */
+  /* Ya no es una tarjeta: es la pantalla, sin borde ni sombra que la despeguen de
+     nada. Lo único que queda del fondo es el color con el que sigue el suelo cuando el
+     dibujo se termina antes que la ventana. */
   background: var(--piso, var(--bg-2));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07), var(--shadow);
 }
 
 /* Un fondo por clase, del Origins Asset Kit: el terreno es el del Axie que jugás.
@@ -194,14 +544,31 @@ body {
 
    `--horizonte` es en qué altura del dibujo —de 0 arriba a 1 abajo— está su línea de
    suelo: el borde del agua en la laguna, el filo de la meseta, el techo de las nubes.
-   `--piso`, el color promedio de su franja de abajo, que es con lo que se estira el
-   terreno más allá del dibujo. */
-.arena[data-arena="beast"]   { --arena: url("Backgrounds/beast-meseta.jpg");    --horizonte: .45; --piso: #362a12; }
-.arena[data-arena="aquatic"] { --arena: url("Backgrounds/aquatic-laguna.jpg");  --horizonte: .47; --piso: #094c41; }
-.arena[data-arena="bird"]    { --arena: url("Backgrounds/bird-cielo.jpg");      --horizonte: .66; --piso: #d69288; }
-.arena[data-arena="plant"]   { --arena: url("Backgrounds/plant-jungla.jpg");    --horizonte: .48; --piso: #07241f; }
-.arena[data-arena="bug"]     { --arena: url("Backgrounds/bug-canon.jpg");       --horizonte: .70; --piso: #7d3332; }
-.arena[data-arena="reptile"] { --arena: url("Backgrounds/reptile-caverna.jpg"); --horizonte: .75; --piso: #682a4e; }
+   `--piso` y `--cielo` son los colores promedio de sus dos franjas, la de abajo y la
+   de arriba: con esos dos se estira la escena más allá del dibujo, para abajo cuando
+   el terreno se termina antes que la pantalla y para arriba cuando el cielo no llega.
+   Salen de medir la imagen, no de elegirlos a ojo — de ahí que sean números feos.
+
+   Los seis son **cuadrados**, y eso es a propósito: ver `.arena-art i`. El kit los da
+   apaisados —16:9— y así venían, pero un dibujo apaisado no tiene cielo suficiente
+   para una pantalla, y la única manera de que alcance es agrandarlo hasta que se
+   pixele. Así que se los extendió hacia arriba hasta 1:1 (`scripts/cuadrar` en el
+   README): el cielo nuevo sale de estirar la franja de arriba del propio dibujo,
+   desenfocándola y apagándola contra el fondo a medida que se aleja. `--horizonte`
+   está medido sobre el archivo extendido, que por eso quedó tan abajo.
+
+   `--nativo` es cuánto mide el archivo, y le pone el techo a cuánto se lo puede
+   agrandar: pasado eso no hay píxeles que dar. Los seis coinciden en 3840 porque
+   `scripts/agrandar.py` los deja ahí: es lo que mide de alto el dibujo en una pantalla
+   4K apaisada, así que en la más grande que se piensa jugar se dibuja a su tamaño. Los
+   archivos son AVIF por eso mismo — a 3840 los seis en JPEG pesaban 4,2 MB y en AVIF
+   pesan 662 KB, menos que los de 1600 que había antes. */
+.arena[data-arena="beast"],   .lobby[data-arena="beast"],   .netbox[data-arena="beast"]   { --arena: url("Backgrounds/beast-meseta.avif");    --horizonte: .6908; --piso: #362a12; --cielo: #7c94a8;  --nativo: 3840px; }
+.arena[data-arena="aquatic"], .lobby[data-arena="aquatic"], .netbox[data-arena="aquatic"] { --arena: url("Backgrounds/aquatic-laguna.avif");  --horizonte: .7019; --piso: #094c41; --cielo: #307e3e;  --nativo: 3840px; }
+.arena[data-arena="bird"],    .lobby[data-arena="bird"],    .netbox[data-arena="bird"]    { --arena: url("Backgrounds/bird-cielo.avif");      --horizonte: .8087; --piso: #d69288; --cielo: #9c8a72;  --nativo: 3840px; }
+.arena[data-arena="plant"],   .lobby[data-arena="plant"],   .netbox[data-arena="plant"]   { --arena: url("Backgrounds/plant-jungla.avif");    --horizonte: .7075; --piso: #07241f; --cielo: #0d4538;  --nativo: 3840px; }
+.arena[data-arena="bug"],     .lobby[data-arena="bug"],     .netbox[data-arena="bug"]     { --arena: url("Backgrounds/bug-canon.avif");       --horizonte: .8313; --piso: #7d3332; --cielo: #793232;  --nativo: 3840px; }
+.arena[data-arena="reptile"], .lobby[data-arena="reptile"], .netbox[data-arena="reptile"] { --arena: url("Backgrounds/reptile-caverna.avif"); --horizonte: .8594; --piso: #682a4e; --cielo: #611c45;  --nativo: 3840px; }
 
 /* ---------- el terreno ---------- */
 
@@ -223,36 +590,142 @@ body {
 .arena-art {
   grid-area: 1 / 1 / 2 / -1;
   position: relative; z-index: 0;
-  /* el terreno llega hasta el borde del cuadro, no hasta el padding */
-  margin: calc(var(--pad) * -1) calc(var(--pad) * -1) 0;
+  /* El terreno llega hasta el borde de la **ventana**, no hasta el padding: los cuatro
+     márgenes negativos le devuelven lo que el arena reservó para la barra de arriba.
+     Como el arena está clavado a la ventana, esta capa
+     termina midiendo exactamente de borde a borde a lo ancho, y de arriba de todo
+     hasta la línea donde apoyan los Axies.
+
+     Y ahí está la gracia de hacerlo con márgenes y no con un `position: fixed` propio:
+     el borde de abajo de esta capa sigue siendo el borde de abajo de la fila del
+     escenario, o sea la línea de suelo. El dibujo se estira hasta llenar la pantalla
+     sin que su horizonte se despegue de las patas. */
+  margin: calc(var(--barra) * -1) calc(var(--pad) * -1) 0
+          calc(var(--pad) * -1);
 }
-.arena-art i {
+.arena-art i, .lobby-art i, .netbox-art i {
   position: absolute; left: 50%; translate: -50% 0;
-  height: calc(100% / var(--horizonte, .5));
-  bottom: calc(-100% * (1 - var(--horizonte, .5)) / var(--horizonte, .5));
-  /* El ancho sale del alto: los seis dibujos son 1400×787. `min-width` es el seguro
-     para un cuadro rarísimo de ancho —antes de dejar un vacío al costado, prefiere
-     recortar el dibujo de arriba y abajo—. */
-  aspect-ratio: 1400 / 787; min-width: 100%;
+  /* El alto del dibujo. De acá sale el ancho —la proporción se respeta siempre, porque
+     estirar un lado solo hace que el `cover` recorte el otro y con el recorte la línea
+     de suelo pintada se despega de las patas— y de acá salía, también, el zoom que
+     dejaba la escena hecha un mosaico.
+
+     Hay tres números y se leen de adentro para afuera:
+
+     `100% / --horizonte` es lo que mide el dibujo si su parte de arriba del horizonte
+     llena **todo** el cielo que hay hasta el borde de la ventana. Con los dibujos
+     apaisados esto era un pedido carísimo —el horizonte quedaba a mitad de la imagen y
+     en la pantalla va a dos tercios de alto, o sea agrandarlo casi al doble, o sea
+     pixelado—. Con los dibujos cuadrados el horizonte está a dos tercios del archivo,
+     que es justo donde lo quiere la pantalla: en una ventana apaisada este número
+     queda **por debajo** del piso de abajo y no manda nada. Ese es todo el truco de
+     haberlos extendido.
+
+     `100.5vw × --recorte` es el techo de encuadre. 100.5vw es lo que mide de alto un
+     cuadrado que cruza la ventana de lado a lado, o sea el mínimo para que el dibujo
+     llegue a los dos bordes; `--recorte` es cuánto más ancho que la ventana se le
+     permite ser,
+     o sea cuánto del dibujo se resigna por los costados. Tiene que ser relativo al
+     ancho y no un número fijo: con un techo en píxeles, un teléfono parado terminaría
+     con el dibujo cinco veces más ancho que la pantalla y se vería una astilla del
+     terreno.
+
+     Apaisada va en 1.3 —se ve el 76% del dibujo, que es casi todo—. Parada sube a 2.4,
+     y es al revés de lo que parece: en una ventana angosta el dibujo entra tan chico
+     que agrandarlo sale gratis —sigue estando por debajo de su tamaño natural—, así
+     que conviene gastar ese margen en tapar cielo. Ver el `@media` de orientación.
+
+     `--nativo × 1.3` es el otro techo, el de la imagen: su tamaño natural más un 30%
+     de tolerancia. Pasado eso ya no hay original que alcance y agrandar solo agranda
+     los defectos. Con los seis archivos en 3840 este techo queda en 4992 y ya casi no
+     manda —solo en una ventana muy parada, donde igual pega antes el del encuadre—,
+     pero se deja escrito: es lo que ata el zoom al archivo y no al gusto.
+
+     El `max(100.5vw, …)` de afuera es el piso, y no se negocia: el dibujo tiene que
+     llegar de un costado al otro. En cualquier ventana apaisada es este piso el que
+     manda, y por eso el dibujo se ve **a su tamaño o más chico**: en una pantalla de
+     1440 se dibuja a 1447 de ancho contra los 3840 del archivo, y en una 4K a 3859
+     contra 3840, que es un aumento de 1,005. Esa cuenta es la que antes daba 2,4 —el
+     archivo medía 1600— y era todo el motivo de que en 4K se vieran los píxeles.
+
+     Lo que quede de cielo sin cubrir lo pinta la capa de atrás con `--cielo`, que es
+     el promedio de la franja de arriba del propio dibujo. Es el mismo truco que ya
+     hacía `--piso` para abajo, y es lo que permite dejar de agrandar. */
+  --alto: max(100.5vw, min(calc(100% / var(--horizonte, .5)),
+                           calc(100.5vw * var(--recorte, 1.3)),
+                           calc(var(--nativo, 1400px) * 1.3)));
+  height: var(--alto);
+  /* Lo que le sobra al dibujo por debajo de su horizonte, colgando fuera de la capa:
+     así su línea de suelo cae justo en el borde de abajo. */
+  bottom: calc(var(--alto) * (var(--horizonte, .5) - 1));
+  aspect-ratio: 1 / 1;
   /* Los dibujos con la línea de suelo alta —el cielo, el cañón, la caverna— tienen
      poco terreno pintado por debajo, y en un cuadro alto se les termina antes que la
      pantalla. El degradé apaga el dibujo contra `--piso` desde la mitad de su parte de
      abajo, así que cuando la imagen se acaba ya venía siendo ese color y el suelo
      sigue sin junta. */
   background:
+    /* La juntura de arriba. Los primeros píxeles del dibujo se apagan contra el color
+       del cielo de atrás: en el borde de arriba la imagen **es** ese color, así que
+       donde termina no hay línea, hay cielo. Va larga porque una juntura corta se ve
+       igual: lo que delata el corte no es el salto de color, es que el degradé termine
+       antes de que el ojo deje de buscarlo.
+
+       El 40% no es un número de gusto: `cuadrar.py` extendió los seis terrenos de 16:9
+       a 1:1 agregándoles cielo arriba, así que **el 43,75% de arriba del archivo
+       (`1 - 9/16`) no es dibujo** — es una línea de píxeles promediada, estirada y
+       desenfocada. La juntura llega hasta justo antes de esa costura, y con eso ese
+       pedazo deja de ser una mancha borrosa y pasa a ser el color plano del cielo del
+       propio terreno, que es lo que la juntura ya venía haciendo con la punta.
+
+       En 21% —donde estaba— la mancha se veía: 231 píxeles de pantalla en una ventana
+       de 725×1014, o sea el cuarto de arriba. Estirarla no cuesta nada: el degradé no
+       llega a tocar la foto, que arranca casi cuatro puntos más abajo. */
+    linear-gradient(180deg,
+      var(--cielo, transparent) 0%,
+      color-mix(in srgb, var(--cielo, transparent) 55%, transparent) 13%,
+      transparent 40%),
     linear-gradient(180deg, transparent calc((var(--horizonte, .5) + 1) * 50%),
       var(--piso) 100%),
     var(--arena, none) center / cover no-repeat;
 }
 
+/* El cielo, que es lo que hay arriba de donde llega el dibujo.
+
+   Es una franja de color y no una foto porque no puede ser una foto: la escena es más
+   alta que el dibujo estirado a lo ancho de la ventana, y cuanto más vertical la
+   pantalla, más lo es. La alternativa era agrandar la imagen hasta taparlo todo, que
+   es lo que se venía haciendo y lo que la dejaba pixelada.
+
+   Un color plano, y esto es lo importante: **plano**. Acá había un degradé que se
+   hundía hacia arriba para dar profundidad, y era el degradé el que cortaba el fondo.
+   La cuenta no cierra: el relleno se oscurece contando desde el borde de arriba de la
+   pantalla, y la imagen se apaga contra el color puro; donde se encuentran, uno viene
+   por la mitad de su recorrido y la otra llega entera, y esa diferencia es una línea
+   cruzando el cielo. Y se mueve, porque la juntura cae a distinta altura según el
+   terreno y el tamaño de la ventana.
+
+   La profundidad la pone la viñeta del arena (`.arena::before`), que pasa por encima
+   del relleno y de la imagen por igual y por eso no puede cortar nada. */
+.arena-art, .lobby-art, .netbox-art {
+  background: var(--cielo, var(--bg));
+}
+
 /* El fondo es una ilustración con luz propia: se apaga lo justo para que las cartas y
-   las chapas se lean, y se deja limpio el medio, que es donde pelean. */
+   las chapas se lean, y se deja limpio el medio, que es donde pelean.
+
+   Arriba el apagón dura un poco más que antes, y eso es a propósito: las dos chapas
+   viven ahí ahora (ver `.plate`), colgadas justo debajo de la barra, y lo que las hace
+   legibles es que la franja donde caen siga siendo la franja oscura. Se sostiene apenas
+   pasado el alto de la barra y recién ahí se abre; de la mitad para abajo es el mismo
+   degradé de siempre y el cielo vuelve a ser cielo. */
 .arena::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
   background:
     linear-gradient(180deg,
-      rgba(9, 12, 26, .5) 0%, rgba(9, 12, 26, .04) 22%,
-      rgba(9, 12, 26, .22) 50%, rgba(9, 12, 26, .58) 88%),
+      rgba(9, 12, 26, .56) 0%, rgba(9, 12, 26, .34) 14%,
+      rgba(9, 12, 26, .05) 28%,
+      rgba(9, 12, 26, .22) 52%, rgba(9, 12, 26, .58) 88%),
     radial-gradient(130% 85% at 50% 34%, transparent 44%, rgba(9, 12, 26, .55) 100%);
 }
 
@@ -273,11 +746,24 @@ body {
      cortes del degradé se miden desde ahí, así que la línea cae siempre pegada a las
      patas por más que el arena se achique — y cambiar de tamaño es cambiar `--air`.
      Para abajo se estira de más a propósito: sobra el `overflow: hidden` del arena y
-     así el suelo llega al borde en cualquier pantalla. */
-  --air: 84px; --under: 460px; --caida: 1; --niebla: .14;
+     así el suelo llega al borde en cualquier pantalla.
+
+     Y `--under` es una altura de ventana entera, no una medida fija. Con los 460px que
+     había, el suelo se terminaba **antes** que la pantalla en cuanto la línea de las
+     patas subía —una ventana angosta y alta la sube, porque la manda `--mitad`— y
+     abajo de los botones quedaba una franja del color pelado del terreno, más clara,
+     cortada en una línea recta de lado a lado. Ninguna cuenta fija sirve acá: lo que
+     hay debajo de las patas depende de la ventana. Como todos los cortes del degradé
+     se miden en píxeles desde arriba, alargar la caja no cambia nada de lo que dibuja
+     —el último color, el del fondo del escalón, sigue solo hasta abajo—; lo único que
+     hace es que no se acabe antes de tiempo. */
+  --air: 84px; --under: max(460px, 100vh); --caida: 1; --niebla: .14;
   content: ""; grid-area: 1 / 1 / 2 / -1; align-self: end;
   height: calc(var(--air) + var(--under));
-  margin: 0 calc(var(--pad) * -1) calc(var(--under) * -1);
+  /* A los costados se estira hasta el borde de la ventana, igual que el terreno: el
+     suelo y el dibujo terminan en la misma línea o se ve la junta. */
+  margin: 0 calc(var(--pad) * -1) calc(var(--under) * -1)
+          calc(var(--pad) * -1);
   pointer-events: none; z-index: 1;
   background:
     /* La neblina que se junta contra el suelo. Es el truco viejo de la perspectiva
@@ -350,12 +836,43 @@ body {
   position: relative; z-index: 2; min-width: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
   gap: 10px;
-}
-.fighter--human { grid-area: 1 / 1; }
-.fighter--cpu   { grid-area: 1 / 2; }
+  /* Con la escena ocupando la pantalla entera hay aire de sobra, y el bicho es lo que
+     se vino a ver: crece con la ventana hasta donde el dibujo aguanta.
 
-/* La chapa: clase, nombre y la barrita de vida, flotando sobre su Axie. */
+     Vive acá arriba y no en `.board-axie`, que es de quien habla, porque el aro del
+     piso es **hermano** del Axie y no hijo suyo (ver `.fighter::after`), y las
+     variables de CSS solo bajan. Puesta en el peleador la miden los dos, y el `100%`
+     sigue siendo el mismo ancho: `.board-axie` mide justo el peleador entero. */
+  --axie-w: min(100%, clamp(160px, 30vh, 290px));
+}
+/* El lugar en la pantalla es del **lado**, no del asiento: en red cada uno se ve a sí
+   mismo a la izquierda, así que el mismo `p2` cae de un lado o del otro según quién
+   esté mirando (ver `sideOf` en ui.js). Lo que sigue colgando del asiento es el color,
+   que es su identidad y tiene que ser el mismo en las dos pantallas. */
+.fighter[data-side="left"]  { grid-area: 1 / 1; }
+.fighter[data-side="right"] { grid-area: 1 / 2; }
+
+/* La chapa: clase, nombre y la barrita de vida.
+
+   Va clavada arriba de todo, contra la barra, y no colgando de la cabeza del Axie.
+
+   Colgando se movía. La chapa era el primer hijo de una columna apoyada abajo, así que
+   su altura la decidía el dibujo que tenía debajo: dos Axies de proporciones distintas
+   son dos chapas a distinta altura —en la pantalla se veía, una arriba de la otra por
+   veinticinco píxeles—, y encima el par entero subía y bajaba con el tamaño de la
+   ventana. Una barra de vida es lo que se mira de reojo en el medio de un turno: tiene
+   que estar siempre en el mismo lugar, y las dos en el mismo renglón para poder
+   compararlas de un vistazo.
+
+   Ese lugar es la franja de arriba: lo que la barra oscurece y desenfoca, que es la
+   parte de la escena donde no pelea nadie —el cielo— y donde un texto chico se lee sin
+   pelearle a la ilustración. Sale del flujo para llegar ahí; el Axie se queda solo en
+   la columna, apoyado en el piso como estaba. Y va por encima suyo, que en una ventana
+   baja es lo único que hay: si la escena se aprieta, la cabeza le pasa por detrás del
+   vidrio en vez de empujar la chapa fuera de su renglón. */
 .plate {
+  position: absolute; z-index: 3;
+  top: 0; left: 50%; transform: translateX(-50%);
   display: grid; gap: 5px; width: min(100%, 236px);
   padding: 7px 11px 8px;
   background: rgba(9, 13, 30, .58);
@@ -365,11 +882,102 @@ body {
   border-radius: 11px;
   transition: border-color .2s ease, box-shadow .2s ease;
 }
+/* De quién es el turno. Es lo único de la pantalla que se prende de color, y por eso
+   se entiende de un vistazo y sin leer: la chapa del que está jugando queda rodeada
+   por un aro del color de su clase, latiendo despacio, y la del otro se queda apagada.
+   Antes esto lo decía un cartelito —"cargando", y otra vez abajo en la mesa—, o sea
+   dos renglones de texto para algo que el ojo agarra por el color. */
 .fighter[data-active="true"] .plate {
-  border-color: var(--accent-2);
-  box-shadow: 0 0 0 1px rgba(124, 139, 255, .35), 0 10px 30px -12px rgba(124, 139, 255, .7);
+  border-color: color-mix(in srgb, var(--c) 75%, transparent);
+  background: color-mix(in srgb, var(--c) 9%, rgba(9, 13, 30, .58));
+  animation: plate-turn 2s ease-in-out infinite;
+}
+@keyframes plate-turn {
+  0%, 100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 32%, transparent),
+      0 8px 34px -12px color-mix(in srgb, var(--c) 80%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 42%, transparent),
+      0 8px 44px -8px color-mix(in srgb, var(--c) 100%, transparent);
+  }
 }
 .fighter[data-busted="true"] .plate { border-color: #8d4453; }
+
+/* La última chance: al que lo dejaron sin vida le queda un turno, y si en ese golpe
+   se lleva puesto al otro la partida termina empatada. Se marca con un halo de luz
+   detrás del bicho, latiendo más rápido que la respiración —es urgencia, no calma—.
+
+   Va en el peleador y no en el Axie porque adentro del Axie no queda lugar: sus dos
+   pseudoelementos son las sombras que lo apoyan en el piso, y sus capas ya las usan
+   los pulsos de robar y atacar. Desde acá el halo cae **debajo** de todo eso, así que
+   la sombra de contacto le sigue pasando por encima: el bicho brilla sin despegarse
+   del suelo, que es justo lo que le pasó al charco de luz que se probó para el turno
+   (ver `.board-axie::before`). Por lo mismo el degradé se apaga antes de llegar a las
+   patas, en vez de terminar en el piso. */
+.fighter[data-last-chance="true"]::before {
+  content: ""; position: absolute; z-index: 0; pointer-events: none;
+  left: 50%; bottom: 10px;
+  width: min(100%, 340px); height: min(74%, 290px);
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side ellipse at 50% 42%,
+    rgba(255, 247, 216, .52) 0%,
+    rgba(255, 208, 124, .32) 42%,
+    rgba(255, 172, 64, .11) 70%,
+    rgba(255, 172, 64, 0) 100%);
+  animation: last-chance 1.5s ease-in-out infinite;
+}
+@keyframes last-chance {
+  0%, 100% { opacity: .6; transform: translateX(-50%) scale(.93); }
+  50%      { opacity: 1;  transform: translateX(-50%) scale(1.07); }
+}
+
+/* El aro del piso: `BattleUis/base.png` del asset kit, el disco de cuatro puntas sobre
+   el que se para cada peleador en el Origins. Viene blanco —el juego lo pinta— así que
+   acá entra como máscara y el color lo pone la clase del Axie, el mismo `--c` que ya
+   llevan la chapa y el número del daño.
+
+   Va aplastado, que es lo único que lo apoya: el dibujo es un círculo visto desde
+   arriba y esta escena se mira casi de costado. El achatamiento no es a ojo —`.16`
+   es la proporción que ya tiene la sombra de contacto (44 px de alto sobre 1,12 anchos
+   de Axie), o sea el plano del piso que la escena ya venía dibujando—.
+
+   `z-index: -1` es la otra mitad. Acá abajo vive la sombra de contacto, que es lo que
+   planta al bicho, y un charco de luz por encima de ella ya se probó una vez: le comía
+   el contraste hasta dejar flotando justo al que estaba jugando (ver
+   `.board-axie::before`). Desde el fondo del peleador el aro queda **debajo** de la
+   sombra: la mancha oscura le pasa por encima y lo que se ve es la vuelta que sobra
+   alrededor de las patas, que es donde un aro de piso tiene que estar. Por eso también
+   mide 1,45 anchos de Axie y no menos: el círculo del dibujo ocupa el 80% de su cuadro,
+   así que recién ahí la vuelta cae por fuera de la sombra en vez de adentro.
+
+   Y de paso el turno se dice una segunda vez sin una palabra: el aro del que juega se
+   enciende y gira despacio, el del otro se queda quieto y apagado. El giro va adentro
+   del aplastado —las transformaciones se leen de derecha a izquierda—, así que el aro
+   gira sobre el piso y no sobre la pantalla.
+
+   Si alguna vez estorba, se apaga con `opacity: 0` acá y no hay nada más que tocar. */
+.fighter::after {
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  left: 50%; bottom: 0;
+  width: calc(var(--axie-w) * 1.45); aspect-ratio: 1;
+  transform: translate(-50%, 50%) scaleY(.16);
+  background: var(--c);
+  -webkit-mask: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleUis/base.png") center / 100% 100% no-repeat;
+  mask: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleUis/base.png") center / 100% 100% no-repeat;
+  opacity: .26;
+  transition: opacity .35s ease;
+}
+.fighter[data-active="true"]::after {
+  opacity: .6;
+  animation: base-turn 16s linear infinite;
+}
+/* La vuelta entera se escribe en los dos cuadros porque `transform` es una sola
+   propiedad: animar el giro por su cuenta borraría el aplastado y el centrado. */
+@keyframes base-turn {
+  from { transform: translate(-50%, 50%) scaleY(.16) rotate(0deg); }
+  to   { transform: translate(-50%, 50%) scaleY(.16) rotate(360deg); }
+}
 
 .plate-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .plate-top .crest { width: 17px; height: 17px; flex: 0 0 auto; }
@@ -395,26 +1003,60 @@ body {
 .plate-hp { display: flex; align-items: center; gap: 8px; }
 .plate-hp b { font-size: 14px; font-weight: 600; width: 28px; text-align: right; }
 .plate-hp[data-low="true"] b { color: var(--danger); }
+/* El canal es el del Origins: `BattleHud/HpBar2/hp-bar-big.png` del asset kit —la
+   madera con el chaflán en punta de un lado y la flecha naranja del otro—. Entra casi a
+   escala 1:1: el dibujo mide 528×32 y acá cae en unos 178×12, así que los dos remates
+   se leen enteros en vez de aplastarse contra los bordes.
+
+   El relleno sigue siendo nuestro, que es el color con el que cada jugador se reconoce
+   en el resto de la pantalla. Lo único que cambió es dónde apoya, y de ahí sale el
+   padding: en el dibujo el canal oscuro empieza 12 px adentro por la izquierda y
+   termina 22 px antes de la flecha; llevadas a esta escala, esas dos medidas son los
+   4 y los 8 píxeles de los costados. Sin eso el relleno se sube al marco.
+
+   El color de fondo queda abajo de todo a propósito: si el CDN no contesta, la barra
+   sigue siendo una barra en vez de desaparecer. */
 .hpbar {
-  flex: 1 1 auto; height: 8px; border-radius: 4px; overflow: hidden;
-  background: rgba(5, 8, 20, .8);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1);
+  flex: 1 1 auto; height: 12px; border-radius: 3px; overflow: hidden;
+  padding: 3px 8px 3px 4px;
+  background: rgba(5, 8, 20, .8)
+    url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/HpBar2/hp-bar-big.png") center / 100% 100% no-repeat;
 }
-.hpbar i { display: block; height: 100%; transition: width .45s ease; }
-.fighter--human .hpbar i { background: linear-gradient(90deg, #3fc4a6, var(--accent)); }
-.fighter--cpu .hpbar i { background: linear-gradient(90deg, #6070e8, var(--accent-2)); }
+/* El ancho no viene del HTML: viene de `--hp`, que la pantalla le cuelga a la chapa
+   —el nodo de afuera, que no se repinta— justo después de escribirla (ver `mount` en
+   `ui.js`). Escrito adentro, cada golpe rehacía esta barrita con el ancho nuevo ya
+   puesto y la transición no tenía de dónde salir: la vida saltaba de un número al otro
+   y este renglón era decorativo. Heredado de afuera, la barrita nace donde estaba la
+   anterior y de ahí se vacía. */
+.hpbar i {
+  display: block; height: 100%; width: var(--hp, 100%);
+  transition: width .45s cubic-bezier(.25, .8, .3, 1), background-color .3s ease;
+}
+.fighter--p1 .hpbar i { background: linear-gradient(90deg, #3fc4a6, var(--accent)); }
+.fighter--p2 .hpbar i { background: linear-gradient(90deg, #6070e8, var(--accent-2)); }
 .plate-hp[data-low="true"] .hpbar i { background: var(--danger); }
 
 /* El Axie ocupa el aire que sobra y se apoya abajo, así los dos quedan sobre la misma
    línea de piso por más que sus dibujos tengan proporciones distintas.
 
-   `--axie-w` es el ancho del dibujo y también la medida de todo lo que lo acompaña:
-   la sombra que lo apoya y el charco de luz del turno salen de acá, así que achicar
-   el Axie en una pantalla angosta les cambia el tamaño a los tres de una. */
+   `--axie-w` —que lo declara `.fighter`— es el ancho del dibujo y también la medida de
+   todo lo que lo acompaña: la sombra que lo apoya y el aro del piso salen de acá, así
+   que achicar el Axie en una pantalla angosta les cambia el tamaño a los tres de una. */
 .board-axie {
-  --axie-w: min(100%, clamp(150px, 27vh, 254px));
   position: relative;
-  flex: 1 1 auto; min-height: 130px; width: 100%;
+  /* No ocupa el aire que sobra: mide lo que mide el dibujo.
+
+     Antes era `flex: 1 1 auto` y estaba bien, porque la fila del escenario medía media
+     pantalla y el aire que sobraba era poco. Ahora la fila va del borde de arriba de
+     la ventana hasta el piso, y llenarla dejaba la chapa colgada allá arriba, contra
+     la barra, a media pantalla de su Axie. Midiendo el dibujo, la chapa vuelve a
+     quedar donde tiene que estar: sobre la cabeza.
+
+     Los dos siguen apoyando en la misma línea, que es lo que importaba: la columna
+     acomoda su contenido contra el borde de abajo (`justify-content: flex-end`), así
+     que las patas caen en el piso por más que los dibujos tengan proporciones
+     distintas — lo único que ahora cuelga de cada uno es su propia chapa. */
+  flex: 0 1 auto; min-height: 130px; width: 100%;
   display: flex; align-items: flex-end; justify-content: center;
 }
 
@@ -471,27 +1113,143 @@ body {
 
 .board-axie .axie { position: relative; z-index: 1; width: var(--axie-w); }
 
-/* ---------- el medidor de la próxima carta ---------- */
+/* ---------- los dos instrumentos: lo que vale el ataque y lo que tiene de seguir ---------- */
 
-/* Un aro colgado en el hueco que dejan los dos Axies, a la altura de la línea del
-   horizonte. Va como celda de la grilla —la misma fila que los peleadores, centrada—
-   y no en `position: absolute`, así queda siempre en el mismo lugar de la escena por
-   más que el arena se estire o se achique.
+/* La columna, colgada en el hueco que dejan los dos Axies, a la altura de la línea del
+   horizonte. Va como celda de la grilla —la misma fila que los peleadores, centrada— y
+   no en `position: absolute`, así queda siempre en el mismo lugar de la escena por más
+   que el arena se estire o se achique.
 
-   `pointer-events: none` porque no se toca: es un instrumento, no un control. */
-.odds {
+   Adentro van los dos números de la decisión, uno encima del otro: cuánto vale el
+   ataque que se está armando, y qué chance tiene la próxima carta de no romperlo. Antes
+   estaban a media pantalla de distancia —el daño arriba de las cartas, el aro acá— y
+   eran dos miradas para una sola pregunta.
+
+   `--dial` es la medida de la que cuelga todo: el diámetro del aro y, por lo tanto, el
+   ancho de la columna entera. Vive acá y no en el aro porque el número de arriba se
+   mide contra ella —tiene que dar la misma vuelta—, y el aro de abajo se va de la
+   pantalla cuando no te toca decidir.
+
+   `pointer-events: none` porque no se toca: son instrumentos, no controles. */
+.gauge {
   grid-area: 1 / 1 / 2 / -1;
   justify-self: center; align-self: center;
-  /* Un empujón para arriba: centrado a secas el aro le queda apoyado en la cabeza del
-     Axie, y el hueco de cielo está un poco más alto que el medio de la fila. */
+  /* Un empujón para arriba: centrada a secas la columna le queda apoyada en la cabeza
+     del Axie, y el hueco de cielo está un poco más alto que el medio de la fila. */
   margin-bottom: 26px;
   position: relative; z-index: 3; pointer-events: none;
   display: flex; flex-direction: column; align-items: center; gap: 7px;
   --dial: 122px;
 }
-/* Sin turno propio no hay nada que medir y `oddsHtml` no devuelve nada: que el hueco
-   vacío tampoco empuje. */
-.odds:empty { display: none; }
+
+/* ---------- lo que vale el ataque ---------- */
+
+/* El número grande de la pantalla: los puntos que lleva cargados la cadena.
+
+   Mide lo que mide la rueda, y de ahí sale todo su tamaño. `--dmg-base` y `--dmg-tope`
+   son fracciones de `--dial`, no píxeles: la rueda ya se achica sola en cada pantalla
+   (ver los `@media` del final) y el número se achica con ella sin que haya que
+   repetirlo en cada lugar.
+
+   Entre esas dos fracciones crece con la cadena, que es lo que lo hace un medidor y no
+   una etiqueta: arranca en el 70% de la rueda con la cadena en cero y llega al 83% con
+   `DMG_TOPE` puntos, que es exactamente donde dos dígitos ocupan el ancho entero del
+   aro. Un ataque grande se ve grande antes de leerse.
+
+   El `min` es el que lo mantiene adentro: la letra es monoespaciada —cada dígito ocupa
+   .6 de su cuerpo— así que `--chars` dígitos miden `--chars * .6` cuerpos de ancho, y
+   pedir que eso no pase de `--dial` es una división. Solo muerde con tres dígitos, que
+   es una cadena enorme; con uno y con dos manda el crecimiento, y por eso pasar de 9 a
+   10 lo ensancha en vez de achicarlo. */
+.swing {
+  display: flex; flex-direction: column; align-items: center;
+  --dmg-base: .7;
+  --dmg-tope: .833;
+}
+/* El ancho es el del aro, y de ahí para adentro cada cosa se centra sola: el número y
+   la palabra son las dos que tienen que dar la misma vuelta que la rueda. */
+.swing-dmg, .swing-cap { width: var(--dial); text-align: center; }
+.swing-dmg {
+  /* El alto está reservado en el número más grande que puede salir, y el número se
+     apoya en el piso de ese cajón: la cadena lo hace crecer hacia arriba —hacia el
+     cielo, que está vacío— y no hacia abajo, así el aro y la palabra no se corren un
+     pixel en toda la ronda. Sin esto el número engorda con cada carta (ver la cuenta de
+     acá abajo) y la columna entera, que está centrada, se acomodaba con él. */
+  display: flex; align-items: flex-end; justify-content: center;
+  min-height: calc(var(--dial) * var(--dmg-tope) * .9);
+  font-size: min(
+    calc(var(--dial) * (var(--dmg-base)
+      + var(--n, 0) * (var(--dmg-tope) - var(--dmg-base)) / 20)),
+    calc(var(--dial) / (var(--chars, 1) * .6)));
+  font-weight: 600; line-height: .9;
+  color: var(--ink);
+  /* Sobre el terreno hay dibujo, no franja oscura: el número se lo saca de encima con
+     su propia sombra —negra y pegada para el contraste, y del color de la clase y
+     abierta para que se lea como algo que se está cargando—. */
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .85),
+    0 0 26px color-mix(in srgb, var(--c) 45%, transparent);
+}
+.swing-dmg[data-busted="true"] { color: var(--danger); text-shadow: 0 2px 14px rgba(0, 0, 0, .85); }
+/* El salto del momento en que sube. Va sobre el nodo recién puesto —el número se
+   repinta entero—, así que la animación arranca sola y no hace falta reiniciarla. */
+.swing-dmg[data-up="true"] { animation: dmg-up .32s cubic-bezier(.2, .9, .3, 1.4); }
+@keyframes dmg-up {
+  from { transform: scale(.7); }
+  55% { transform: scale(1.14); }
+  to { transform: scale(1); }
+}
+/* La palabra, debajo del número y del ancho de la rueda. El tamaño no se elige: sale
+   de que tiene que medir eso. Son cuatro letras monoespaciadas con su separación, o
+   sea `4 * (.6 + .12)` = 2,88 cuerpos, así que el cuerpo es el ancho dividido 2,88. El
+   margen negativo se come el aire que la separación deja colgando después de la última
+   letra, que si no la corre medio espacio a la izquierda. */
+.swing-cap {
+  font-size: calc(var(--dial) / 2.88);
+  font-weight: 500; line-height: 1.1;
+  letter-spacing: .12em; margin-right: -.12em;
+  color: var(--ink-faint);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .9);
+}
+/* De dónde sale el número grande cuando no es solo la cadena. Renglón propio, y el
+   único de la columna que se permite ser más ancho que la rueda: el desglose largo —el
+   del caracol— en 122 px entraría en seis renglones.
+
+   El 1,6 es hasta dónde puede ensancharse sin chocar con nada. La columna vive en el
+   hueco que dejan las dos chapas de vida, y ese hueco es lo más angosto justo antes de
+   que la columna se baje al costado de la mesa (940 px de ventana): ahí la chapa mide
+   236 px de tope y sobran 218 en el medio, contra los 195 que llega a medir esto. */
+.swing-mods {
+  margin-top: 4px; max-width: calc(var(--dial) * 1.6);
+  text-align: center; text-wrap: balance;
+  font-size: 11px; line-height: 1.35;
+  color: var(--ink-faint); text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
+}
+
+/* ---------- lo que tiene de seguir: el medidor de la próxima carta ---------- */
+
+/* El aro. Solo existe mientras te toca decidir: cuando juega la CPU no hay nada que
+   medir, y un aro apagado en el medio de la pantalla sería un adorno. */
+.odds {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  /* Sin turno propio `oddsHtml` no devuelve nada, y el aro desaparece: es correcto —no
+     hay nada que medir— pero el lugar se queda. Antes el hueco se cerraba
+     (`.odds:empty { display: none }`) y la columna entera se reacomodaba dos veces por
+     turno: el número grande caía medio aro cuando empezaba a jugar la CPU y volvía a
+     subir cuando te tocaba. Lo que se ve prendido y apagado es el aro; el instrumento
+     no se mueve. El renglón de arriba entra en la cuenta porque también se va con él. */
+  min-height: calc(var(--dial) + 20px);
+}
+
+/* Aparece y desaparece con el turno, así que entra como los botones: con ellos y con
+   la misma marca (ver `.controls[data-enter]`). Lo que se enciende junto se lee como
+   una sola cosa que se enciende —"te toca"— y no como tres cosas sueltas. */
+.odds[data-enter="turn"] {
+  animation: gauge-in .4s cubic-bezier(.2, .9, .3, 1.14) backwards;
+}
+@keyframes gauge-in {
+  from { opacity: 0; transform: translateY(10px) scale(.86); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* El aro es un `conic-gradient` cortado por un disco: el degradé cónico pinta la
    vuelta hasta `--p`, y el radial de arriba tapa el centro y deja a la vista nada más
@@ -540,68 +1298,287 @@ body {
 /* Una sola zona de juego: la usa el que está jugando. Sin marco ni panel — las cartas
    se apoyan sobre el terreno, y la franja oscura del fondo alcanza para leerlas. */
 .field {
-  grid-area: 2 / 1 / 3 / -1;
-  /* Aire entre las patas y la primera línea de la mesa. No es respiro tipográfico:
-     la sombra de contacto asoma por debajo del Axie y necesita piso donde caer —sin
-     esto le pisaba el renglón—, y ese pedazo de suelo vacío es la mitad de lo que
-     hace que el bicho se lea apoyado. */
-  margin-top: 28px;
+  grid-area: 3 / 1 / 4 / -1;
+  /* Un piso de aire entre las patas y la primera línea de la mesa: la sombra de
+     contacto asoma por debajo del Axie y necesita suelo donde caer. El resto del aire
+     lo pone la fila vacía de arriba, que se lleva todo lo que sobra. */
+  margin-top: 14px;
   position: relative; z-index: 2; min-width: 0;
   display: flex; flex-direction: column; align-items: center; gap: 7px;
+  /* Todo apoyado contra abajo. La fila puede quedar más alta que las cartas —en una
+     ventana angosta el medidor comparte la fila y a veces es él el más alto—, y sin
+     esto la cadena se iría al techo de la fila y el renglón de las rachas la seguiría:
+     dos cosas que se moverían solas con cada carta que sale. Apoyadas contra abajo, la
+     línea donde descansan las cartas es siempre la misma y la cadena crece hacia
+     arriba, que es de donde vienen. */
+  justify-content: flex-end;
 }
 
-.field-head {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center;
+/* La mesa es de los dos y cambia de mano en cada turno: las cartas del que atacaba se
+   van y el número grande vuelve a cero. Que lo que queda puesto **entre** —y no que
+   esté ahí de un cuadro para el otro— es lo que hace que se lea como un cambio de turno.
+
+   La marca la pone la pantalla solo cuando la mesa cambia de dueño (ver `mount`), por
+   lo mismo que la entrada del pie: en cada repintado sería un temblequeo. Las cartas
+   que salen ya tienen su propio reparto (ver `deal`), así que esto es para lo otro —el
+   renglón de las rachas, el número grande— y para el momento en que la mesa queda
+   vacía esperando la primera carta del que abre. */
+.field[data-swap="true"] .strip,
+.field[data-swap="true"] .runs,
+.swing[data-swap="true"] .swing-dmg,
+.swing[data-swap="true"] .swing-cap {
+  animation: swap-in .3s ease-out backwards;
 }
-.field-who {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 13px; color: var(--ink-dim);
-}
-.field-who b { color: var(--c); font-weight: 700; }
-/* Los puntos que lleva cargados el ataque: el número grande de la pantalla. */
-.field-dmg {
-  display: flex; align-items: baseline; gap: 5px;
-  font-size: 30px; font-weight: 600; line-height: 1;
-  color: var(--ink); text-shadow: 0 2px 12px rgba(0, 0, 0, .8);
-}
-.field-dmg small {
-  font-size: 10px; font-weight: 500; letter-spacing: .14em; color: var(--ink-faint);
-}
-.field-dmg[data-busted="true"] { color: var(--danger); }
-/* De dónde sale el número grande cuando no es solo la cadena. Renglón propio. */
-.field-mods {
-  flex-basis: 100%; text-align: center;
-  font-size: 11px; color: var(--ink-faint); text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
+@keyframes swap-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ---------- los botones, al pie del arena ---------- */
 
-.controls {
-  grid-area: 3 / 1 / 4 / -1;
-  position: relative; z-index: 3;
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  min-height: 52px;
-}
-.controls-msg { color: var(--ink-dim); font-size: 14px; text-shadow: 0 1px 6px rgba(0, 0, 0, .9); }
-.controls-msg b { color: var(--ink); }
-.controls-spacer { flex: 1; }
+/* Al pie del arena hay dos cosas, y van una encima de la otra y las dos en el eje de la
+   pantalla: el cartel de lo que está pasando, y los botones.
 
-.banner {
-  display: flex; align-items: center; gap: 10px;
-  font-family: var(--display); font-size: 19px; font-weight: 800; letter-spacing: -.01em;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, .9);
+   Antes era un renglón con el cartel pegado al borde izquierdo y los botones al
+   derecho, separados por un elástico. Eso los dejaba en la esquina —el lugar de las
+   cosas que se apoyan, no de las que se aprietan— y hacía que la mesa se leyera torcida:
+   el número del ataque en el medio, las cartas en el medio, y lo único que hay que
+   apretar corrido a un costado. Acá abajo el eje es uno solo, de arriba a abajo. */
+.controls {
+  grid-area: 4 / 1 / 5 / -1;
+  position: relative; z-index: 3;
+  /* Dos casilleros de alto fijo, y el alto de la franja entera también fijo: ver
+     `--pie` en `:root`, que es donde está contada la historia. Lo que hay que respetar
+     acá es que ninguna de las dos medidas dependa del contenido — ni un `auto`, ni un
+     `min-height`, ni un `gap` que solo aparezca cuando hay dos cosas. */
+  display: grid; grid-template-rows: var(--aviso) var(--botones) var(--zocalo);
+  justify-items: center;
+  height: var(--pie);
 }
-.banner[data-result="human"] { color: var(--accent); }
-.banner[data-result="cpu"] { color: var(--danger); }
-.banner[data-result="tie"] { color: var(--ink-dim); }
+
+/* El casillero de arriba: lo que dice el turno, y nada más — el cierre de la ronda ya
+   no pone nada acá (ver `controlsHtml`).
+
+   Apoyado contra abajo y no centrado, y esa es toda la gracia: lo que tiene que quedar
+   quieto es el renglón, que sale siempre a la misma distancia de lo que se aprieta —dos
+   líneas de texto en vez de una lo hacen crecer hacia el aire de arriba y no hacia los
+   botones—. Y si alguna vez no entra, se sale por arriba sobre el terreno en vez de
+   empujar la pantalla entera. */
+.controls-say {
+  align-self: end;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding-bottom: 8px;
+}
+.controls-msg {
+  color: var(--ink-dim); font-size: 14px; text-align: center;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
+}
+.controls-msg b { color: var(--ink); }
+
+/* Los dos botones del turno, que son la partida entera: robar otra carta o soltar el
+   golpe. Todo lo demás de esta pantalla se mira; esto se aprieta.
+
+   Se reparten el ancho de la caja en partes iguales (`flex: 1 1 0`) y no lo que mide
+   cada palabra. Sin eso, "Robar carta" sale casi el doble de largo que "Atacar" y la
+   pantalla ofrece la decisión más arriesgada en el botón más grande — que es
+   exactamente al revés de lo que uno quiere leer al elegir. Son dos caminos del mismo
+   peso y tienen que verse del mismo tamaño; lo que los distingue es el color, que ya
+   dice cuál es cuál.
+
+   Y son grandes porque esto se juega con el pulgar: 54px de alto es el mínimo con el
+   que un botón se acierta sin mirar. El tope de ancho es para que en un monitor no se
+   estiren de acá a la esquina — un botón de media pantalla deja de leerse como botón. */
+.controls-acts {
+  display: flex; justify-content: center; gap: 12px;
+  width: 100%; max-width: 460px;
+}
+.controls-acts .btn {
+  flex: 1 1 0; min-width: 0;
+  min-height: 64px; padding: 14px 16px; font-size: 18px;
+}
+
+/* Cuando el turno vuelve a ser tuyo, el pie no aparece: entra. Los dos botones suben a
+   su lugar uno detrás del otro y el renglón de arriba los acompaña.
+
+   Cuelga de `data-enter`, que la pantalla pone **solo** en el momento en que el turno
+   pasa a ser de este lado (ver `mount`) y se saca sola medio segundo después. Puesto a
+   secas sobre `.btn`, la entrada se repetiría en cada repintado —o sea con cada carta
+   que sale, y con el ida y vuelta de apretar— y eso no es una entrada, es un
+   temblequeo. */
+.controls[data-enter="turn"] .controls-acts .btn {
+  animation: act-in .36s cubic-bezier(.2, .9, .3, 1.12) backwards;
+}
+.controls[data-enter="turn"] .controls-acts .btn:nth-child(2) { animation-delay: .07s; }
+.controls[data-enter="turn"] .controls-msg { animation: say-in .34s ease-out backwards; }
+@keyframes act-in {
+  from { opacity: 0; transform: translateY(16px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes say-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* El cartel del final, el grande.
+
+   Este no es un cartel más de la fila: es cómo terminó la partida, y por eso no vive
+   en el pie ni sobre la cinta tallada. Abajo, apoyado sobre la cinta y pegado al botón
+   de "Jugar de nuevo", parecía **otro botón** —dos rectángulos verdes uno encima del
+   otro, y el de arriba no se apretaba—. Acá es letra sola en el medio de la escena,
+   encima de los dos bichos: el que festeja y el que quedó tirado.
+
+   Sin caja, entonces: ni fondo, ni borde, ni radio. Lo único que hay detrás es un
+   resplandor redondo que se apaga contra la nada mucho antes de llegar a un borde, y
+   está solo para que la letra blanca se lea igual sobre el cielo claro del terreno de
+   los pájaros que sobre la caverna. Un halo no tiene forma; una caja sí, y la forma es
+   lo que invita a apretar.
+
+   `pointer-events: none` porque tapa media pantalla: los botones de abajo y los Axies
+   —que abren su mazo— siguen ahí abajo y se tienen que poder tocar. */
+.finale {
+  position: absolute; inset: 0; z-index: 6;
+  display: grid; place-items: center;
+  /* Juntos en el medio: con la nota del abandono abajo, sin esto la grilla les daría
+     media pantalla a cada uno y quedarían separados. */
+  align-content: center; row-gap: 14px;
+  padding: 0 var(--pad);
+  pointer-events: none;
+  /* El color de la noticia, y son dos. Ganar es el verde de la casa, encendido. Lo
+     otro es un violeta apagado y no el rojo del peligro: el cartel no dice "te
+     equivocaste", dice que la suerte fue para el otro lado, y el rojo es el color con
+     el que este juego avisa que algo salió mal —el ataque que se desarma, la vida en
+     rojo—. Perder una partida no es un error. */
+  --tono: var(--accent);
+}
+.finale[data-won="false"] { --tono: #aab4e2; }
+
+/* Quién se fue, cuando la partida terminó por abandono. Chica y debajo: el título dice
+   cómo terminó y esto solo explica por qué se cortó de golpe. */
+.finale-note {
+  max-width: 28em;
+  font-size: clamp(14px, 1.6vw, 18px); font-weight: 600;
+  text-align: center; text-wrap: balance;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .8);
+  animation: finale-in .72s cubic-bezier(.16, 1, .3, 1) .15s both;
+}
+
+.finale-text {
+  position: relative;
+  /* El resplandor de atrás, en su propia capa: puesto en la letra sería una sombra
+     más y lo que hace falta es luz **alrededor** del bloque entero. */
+  display: block; max-width: 9em;
+  font-family: var(--display);
+  font-size: clamp(34px, 7.4vw, 86px);
+  font-weight: 800; letter-spacing: -.025em; line-height: 1.02;
+  text-align: center; text-wrap: balance;
+  color: #fff;
+  /* Tres sombras y cada una hace algo: la de color tiñe el aire alrededor de la letra,
+     la negra grande la despega del fondo y la corta le da el filo. */
+  text-shadow:
+    0 0 34px color-mix(in srgb, var(--tono) 70%, transparent),
+    0 6px 30px rgba(0, 0, 0, .75),
+    0 2px 0 rgba(0, 0, 0, .35);
+  animation: finale-in .72s cubic-bezier(.16, 1, .3, 1) both;
+}
+.finale-text::before {
+  content: ""; position: absolute; z-index: -1; inset: -55% -30%;
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--tono) 26%, transparent) 0%,
+    rgba(9, 12, 26, .42) 45%,
+    transparent 100%);
+  animation: finale-halo 3.4s ease-in-out 0.7s infinite;
+}
+
+/* Entra de golpe y frena: llega grande y borrosa —como algo que se acerca— y se
+   asienta en su tamaño. Es el único momento de la partida donde la pantalla se permite
+   un gesto así, y es el que corresponde: se acabó. */
+@keyframes finale-in {
+  0%   { opacity: 0; transform: scale(1.55); filter: blur(14px); }
+  45%  { opacity: 1; }
+  62%  { transform: scale(.965); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+/* Y después respira, apenas: lo justo para que la pantalla no quede congelada mientras
+   el que ganó festeja atrás. */
+@keyframes finale-halo {
+  0%, 100% { opacity: .82; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.06); }
+}
+
+/* Los papelitos de la victoria.
+
+   Son papel y no luz, y por eso viven en el HTML y no en el canvas de los golpes: ese
+   canvas está en `plus-lighter` —los efectos del kit se suman a la pantalla—, y un
+   papelito sumado se convierte en un destello. Estos tapan lo que pasa por atrás, que
+   es lo único que hace que se lean como papel cayendo.
+
+   Cada uno trae sus números de `confettiHtml`: de dónde sale, cuánto tarda, cuánto se
+   corre y cuánto gira. Acá está la caída, que es la misma para todos.
+
+   Caen y se terminan: nada de `infinite`. Una lluvia que no para deja la pantalla del
+   final ocupada para siempre —y al compositor trabajando— cuando lo que hay que hacer
+   ahí es leer dos botones y elegir. Dura lo que dura el festejo. */
+.confetti {
+  position: absolute; inset: 0; overflow: hidden;
+}
+.confetti i {
+  position: absolute; top: 0; left: var(--x);
+  width: var(--w); height: calc(var(--w) * 1.5);
+  background: var(--c);
+  border-radius: 1px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+  opacity: 0;
+  animation: confetti-fall var(--dur) cubic-bezier(.35, .12, .62, 1) var(--delay) both;
+}
+/* La vuelta de campana la hace `scaleY`, no una rotación en 3D: un papelito que gira
+   de canto **desaparece** un instante y vuelve, y eso es lo que lo hace parecer una
+   hojita y no un cuadradito girando en su lugar. Sale gratis y engaña igual. */
+@keyframes confetti-fall {
+  0%   { opacity: 0; transform: translate(0, -12vh) rotate(0deg) scaleY(1); }
+  7%   { opacity: 1; }
+  25%  { transform: translate(calc(var(--sway) * .6), 18vh)
+                    rotate(calc(var(--spin) * .28)) scaleY(.25); }
+  50%  { transform: translate(calc(var(--sway) * -.45), 46vh)
+                    rotate(calc(var(--spin) * .55)) scaleY(1); }
+  75%  { transform: translate(calc(var(--sway) * .85), 74vh)
+                    rotate(calc(var(--spin) * .8)) scaleY(.4); }
+  92%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(0, 112vh) rotate(var(--spin)) scaleY(1); }
+}
 
 /* ---------- cartas ---------- */
 
 /* La cadena se apoya en el medio de la mesa y crece hacia los costados; si se hace
    larga, se desplaza sola sin empujar nada. */
 .strip {
-  display: flex; gap: 8px; align-items: stretch;
-  max-width: 100%; overflow-x: auto; padding-bottom: 6px; min-height: 150px;
+  display: flex; gap: clamp(4px, .8vw, 8px); align-items: stretch;
+  /* El alto lo ponen las cartas y nada más: el que va acá abajo es el piso para que la
+     mesa vacía no se cierre del todo, y está puesto en lo que mide una carta de dos
+     símbolos.
+
+     Estuvo un rato clavado en `--mesa` —el alto de la carta más alta que existe— para
+     que la mesa no cambiara de tamaño al salir una carta con poder, y era un error que
+     se veía justo cuando la cadena se hacía larga: las cartas se angostaban pero la
+     fila las seguía estirando a lo alto, así que quedaban flacas y altas, con el
+     símbolo chiquito adentro y aire abajo. Se leía como que se achicó el símbolo y no
+     la carta, que es exactamente lo contrario de lo que tiene que pasar.
+
+     Y no hacía falta: la línea del horizonte no depende de lo que mida esto. La fila
+     del escenario tiene su alto propio (`--escena`) y la fila vacía de abajo se come
+     todo lo que sobre, así que la mesa puede crecer y achicarse sin mover el piso ni
+     un pixel. Lo único que `--mesa` sigue haciendo es **reservar** el lugar de la carta
+     más alta al calcular `--frente`, que es una cuenta aparte. */
+  max-width: 100%; overflow-x: auto; min-height: calc(var(--carta) * 1.6);
+  /* El costado no es decoración: la cadena mide exactamente lo que miden sus cartas
+     —es un hijo centrado de `.field`, o sea que se achica hasta el contenido—, así que
+     no le sobra ni un pixel. La carta que entra llega girada cuatro grados, y esos dos
+     pixeles que se salen del borde alcanzaban para que el navegador decidiera que la
+     cadena no entra y encendiera la barra de scroll: seis pixeles de barra que
+     aparecían con cada carta, se comían el alto de las cartas y se iban sola. El aire
+     de los lados es donde cae ese vuelo, y el de abajo es donde vive la barra cuando
+     la cadena de verdad se pasa de largo. */
+  padding: 0 14px 6px;
   /* `safe` es lo que hace que una cadena larga se pueda desplazar entera: centrada a
      secas, lo que se pasa por la izquierda queda fuera del alcance del scroll. */
   justify-content: center;
@@ -610,9 +1587,28 @@ body {
 .strip::-webkit-scrollbar { height: 6px; }
 .strip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 
+/* La carta se achica sola cuando se juntan.
+
+   Son anchas —se vinieron a ver— y una cadena larga no entra: siete de estas en un
+   teléfono parado se pasan de la pantalla, y antes eso encendía la barra de scroll y
+   había que arrastrar para ver la cadena propia.
+
+   `flex-shrink: 1` las deja apretarse entre ellas: la cadena entra siempre, cada carta
+   un poco más angosta, hasta el `min-width` —que es más o menos la mitad, y de ahí sí
+   se desplaza—. Y lo de adentro las sigue, porque el símbolo está en porcentaje del
+   ancho útil y no en píxeles: al apretarse la carta se achica el crest, y con él el
+   alto. Una cadena larga ocupa menos a lo ancho **y** a lo alto, que es justo lo que
+   hace falta cuando ya no entra. */
 .card {
-  position: relative; flex: 0 0 auto;
-  width: 62px; padding: 20px 6px 7px;
+  position: relative; flex: 0 1 auto;
+  width: var(--carta); min-width: calc(var(--carta) * .4);
+  /* El relleno sale del tamaño de la carta con una cuenta y no con un porcentaje, y la
+     diferencia no es de estilo: **un padding en porcentaje se mide contra el ancho del
+     padre**, no contra el propio. Puesto en `8%` acá, el relleno de cada carta era el
+     8% del ancho de la fila entera — así que cada carta que salía ensanchaba la fila,
+     el relleno crecía con ella y el símbolo de adentro se achicaba solo, con la cadena
+     entrando cómoda en la pantalla y la carta midiendo siempre lo mismo. */
+  padding: calc(var(--carta) * .24) calc(var(--carta) * .07) 7px;
   display: flex; flex-direction: column; gap: 5px;
   background: linear-gradient(165deg, #26305c, #1a2044);
   border: 1px solid #38437a; border-radius: 11px;
@@ -628,6 +1624,14 @@ body {
   position: absolute; top: 6px; left: 0; right: 0; text-align: center;
   font-size: 10px; color: var(--ink-faint); font-variant-numeric: tabular-nums;
 }
+
+/* Lo de adentro va en porcentaje del ancho útil de la carta —el que le quedó después
+   de apretarse—. Los dos números son distintos porque el símbolo vive adentro de un
+   casillero con su propio padding y el poder no: así los dos terminan igual de
+   grandes. */
+.card .sym { padding: 6%; }
+.card .crest { width: 68%; height: auto; }
+.card .power { width: 57%; height: auto; }
 
 /* ---------- el Axie ---------- */
 
@@ -675,9 +1679,10 @@ body {
    mirando a la izquierda, así que el de la izquierda de la mesa se da vuelta para
    enfrentar al otro; `--fwd` es "hacia el rival" y `--knock`, su opuesto, es hacia
    dónde lo mandan de un golpe —que siempre llega desde el medio—. */
-.fighter--human { --knock: -1; --fwd: 1; }
-.fighter--cpu   { --knock: 1; --fwd: -1; }
-.fighter--human .axie-body { transform: scaleX(-1); }
+.fighter[data-side="left"]  { --knock: -1; --fwd: 1; }
+.fighter[data-side="right"] { --knock: 1; --fwd: -1; }
+/* Los Axies vienen mirando a la izquierda: el de este lado se da vuelta para enfrentar. */
+.fighter[data-side="left"] .axie-body { transform: scaleX(-1); }
 
 /* ---------- estar vivo ---------- */
 
@@ -815,8 +1820,56 @@ body {
   100% { transform: translateX(-50%) scale(1); }
 }
 
-/* Cadena cortada: el golpe sale y se le desarma encima. Trastabilla hacia adelante,
-   se frena y retrocede — el mismo cuerpo que iba a atacar, pero sin nada que pegar. */
+/* La carta que corta la cadena: el cuerpo se desinfla.
+
+   Es el único momento del fallo que se actúa. La carta caía, sonaba, y el Axie seguía
+   respirando como si nada; el fallo lo contaba después el ataque desarmado, con un
+   fogonazo y un trastabillar que se leían como un golpe recibido. Ahora se cuenta acá,
+   cuando la carta cae, y el ataque desarmado se quedó solo con su cartelito.
+
+   Lo importante es lo que **no** hace: no hay retroceso, no hay fogonazo y no hay
+   sacudón de cámara. Los tres son de recibir un golpe, y a este no le pegó nadie. Hay
+   un respingo corto —el susto de ver la carta— y después el peso: se hunde sobre sus
+   patas, se le va el color y la sombra se abre debajo, que es lo que hace un cuerpo
+   que dejó de empujar. Los ojos cerrados y el resoplar los pone el clip `sad` del kit
+   (ver `scripts/poses.mjs`); esto pone el peso, que el kit no conoce porque no sabe
+   dónde está el piso. */
+.board-axie[data-react="slump"] .axie-rig { animation: axie-slump 1.6s ease-out; }
+@keyframes axie-slump {
+  0%   { transform: none; }
+  9%   { transform: translateY(-3%) scale(.97, 1.04); }
+  30%  { transform: translateY(4%) scale(1.06, .92); }
+  62%  { transform: translateY(3%) scale(1.04, .95); }
+  100% { transform: none; }
+}
+/* El color se va y vuelve despacio: se apaga en el medio segundo del hundimiento y
+   tarda el resto del clip en recuperarse, que es al revés que el fogonazo del golpe
+   —fuerte y corto—. Va sobre `.axie-body`, la caja del espejo, para no darlo vuelta. */
+.board-axie[data-react="slump"] .axie-body { animation: axie-gloom 1.6s ease-out; }
+@keyframes axie-gloom {
+  0%   { filter: none; }
+  30%  { filter: grayscale(.6) brightness(.7); }
+  62%  { filter: grayscale(.5) brightness(.76); }
+  100% { filter: none; }
+}
+/* Al hundirse apoya más piso, no menos: la sombra se ensancha y se aplasta, que es lo
+   contrario de lo que hace al saltar. */
+.board-axie[data-react="slump"]::after,
+.board-axie[data-react="slump"]::before { animation: axie-slump-shadow 1.6s ease-out; }
+@keyframes axie-slump-shadow {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  9%       { transform: translateX(-50%) scale(.93); opacity: .8; }
+  30%      { transform: translateX(-50%) scale(1.16, .88); opacity: 1; }
+  62%      { transform: translateX(-50%) scale(1.11, .92); opacity: 1; }
+}
+
+/* El ataque que se desarma en el aire: trastabilla hacia adelante, se frena y
+   retrocede — el mismo cuerpo que iba a atacar, pero sin nada que pegar.
+
+   Es solo para el que se plantó y quedó en cero igual, con el caracol comiéndole el
+   mordisco: ese fallo no se vio venir y este es el único momento en que se cuenta. La
+   cadena que se corta no pasa por acá — esa ya se desplomó cuando cayó la carta, y
+   repetirle un trastabillón encima era lo que la hacía parecer un golpe. */
 .board-axie[data-react="whiff"] .axie { animation: axie-whiff .75s ease-out; }
 .board-axie[data-react="whiff"] .axie-body { animation: axie-dizzy .75s ease-out; }
 @keyframes axie-whiff {
@@ -845,20 +1898,46 @@ body {
 .crest-btn:hover .axie { transform: translateY(-3px) scale(1.04); }
 .crest-btn .axie { transition: transform .18s ease; }
 
+/* El número cae encima del dibujo del Axie, que abajo puede ser cualquier cosa:
+   un fondo claro, una plantita amarilla, el brillo de un efecto. Así que el número va
+   blanco —lo más lejos que hay de todo lo que puede haber debajo— y el contraste lo
+   pone el halo: tres sombras negras sin desplazar, de la más cerrada a la más abierta,
+   que oscurecen el fondo justo alrededor de la letra y se disuelven enseguida. Nada de
+   contorno duro; el número se lee entero, con su forma. */
 .dmg {
   position: absolute; left: 0; right: 0; top: 4%; z-index: 4;
   text-align: center; pointer-events: none;
-  font-family: var(--mono); font-weight: 700; font-size: 34px;
-  color: var(--danger); text-shadow: 0 2px 10px rgba(0, 0, 0, .8);
+  font-family: var(--mono); font-weight: 700; font-size: 38px; line-height: 1.1;
+  --halo: 0 0 4px rgba(0, 0, 0, .95), 0 0 12px rgba(0, 0, 0, .9), 0 0 26px rgba(0, 0, 0, .75);
+  color: #fff;
+  text-shadow: var(--halo);
   animation: dmg-float .9s ease-out forwards;
 }
-.dmg[data-kind="whiff"] { color: var(--ink-dim); font-size: 17px; letter-spacing: .1em; }
-/* La cáscara. Más chica que un ataque porque lo es —un tercio del golpe— y con el
-   color del huevo, que es lo único que dice de dónde salió ese número: no hay
-   embestida ni efecto de clase que lo expliquen. */
+.dmg[data-kind="whiff"] { color: #e8e4e2; font-size: 21px; letter-spacing: .1em; }
+
+/* La cáscara. Es el único número de la pantalla que no tiene una embestida ni un
+   efecto de clase que lo expliquen: aparece sobre el que acaba de atacar, en contra
+   de la dirección en la que venía pasando todo. Así que se dice con todas las letras
+   —el huevo dibujado y "Huevo roto" arriba del número— y en el amarillo del huevo,
+   que es lo que lo ata a la carta que lo puso. Antes era un `−5` chiquito y suelto. */
 .dmg[data-kind="thorns"] {
-  color: #ffd98a; font-size: 20px;
-  text-shadow: 0 0 10px rgba(255, 190, 90, .55), 0 2px 3px rgba(0, 0, 0, .6);
+  color: #ffd98a; font-size: 32px; line-height: 1;
+  text-shadow: var(--halo), 0 0 14px rgba(255, 190, 90, .45);
+}
+.dmg-label {
+  display: block; margin-bottom: 2px;
+  font-size: 14px; letter-spacing: .08em; text-transform: uppercase;
+  color: #ffe9b8; text-shadow: var(--halo);
+}
+.dmg-label .power--sm { width: 15px; height: 15px; }
+
+/* El huevo que se come el golpe: va debajo del número del ataque, no encima —son dos
+   cuentas distintas del mismo instante y encimadas se leen como una sola mal sumada—.
+   Más chico, porque lo que cuenta es el golpe; el huevo solo explica por qué entró
+   menos de lo que decía. */
+.dmg[data-kind="egg"] {
+  top: 27%; color: #ffd98a; font-size: 21px;
+  text-shadow: var(--halo), 0 0 12px rgba(255, 190, 90, .4);
 }
 @keyframes dmg-float {
   0%   { opacity: 0; transform: translateY(10px) scale(.7); }
@@ -936,7 +2015,7 @@ body {
 
 /* ---------- rachas ---------- */
 
-.runs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; min-height: 26px; }
+.runs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; min-height: var(--rachas); }
 .run, .runs-empty, .runs-zero { text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
 .run {
   display: flex; align-items: center; gap: 5px;
@@ -955,15 +2034,18 @@ body {
 
 /* No es un panel más de la página: aparece encima del combate recién cuando alguien
    cierra su turno —que es cuando hay algo que elegir— y se va al terminar el reparto. */
+/* Tapa la pantalla, no la mesa: va clavado a la ventana y por encima de la barra y de
+   la columna (`z-index: 20`), que ahora son secciones apoyadas sobre la escena y no un
+   marco alrededor. Por eso el nodo vive afuera de la mesa en el HTML — adentro no hay
+   `z-index` que lo saque, ver el comentario de `#market` en `index.html`. */
 .overlay {
-  position: absolute; inset: 0; z-index: 6;
+  position: fixed; inset: 0; z-index: 25;
   display: grid; place-items: center; padding: 16px;
   background: rgba(6, 9, 20, .74);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   animation: overlay-in .22s ease-out;
 }
-.overlay[hidden] { display: none; }
 @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 
 .overlay-panel {
@@ -974,6 +2056,25 @@ body {
 @keyframes overlay-rise {
   from { opacity: 0; transform: translateY(14px) scale(.97); }
   to   { opacity: 1; transform: none; }
+}
+
+/* Y cómo se va, que hasta acá no era de ninguna manera: el nodo se escondía en un
+   cuadro y en ese mismo instante aparecían los dos botones del turno, el aro y la mesa
+   vacía. Media pantalla cambiando de golpe se lee como un parpadeo y no como un cambio
+   de turno. Ahora el panel se hunde un poco y se apaga, y recién cuando terminó el nodo
+   se guarda —los 200 ms son los de `OVERLAY_OUT` en `ui.js`—.
+
+   Y mientras se va no se puede tocar: una carta que ya no está no se elige. */
+.overlay[data-closing="true"] {
+  pointer-events: none;
+  animation: overlay-out .2s ease-in forwards;
+}
+@keyframes overlay-out { to { opacity: 0; } }
+.overlay[data-closing="true"] .overlay-panel {
+  animation: overlay-sink .2s ease-in forwards;
+}
+@keyframes overlay-sink {
+  to { opacity: 0; transform: translateY(10px) scale(.98); }
 }
 
 .overlay-head { text-align: center; }
@@ -990,13 +2091,36 @@ body {
 .overlay-note b { color: var(--ink); }
 .overlay-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
-.market-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+/* Las seis cartas del centro cuelgan de **una** medida: `--mkt`, el ancho de la carta.
+   Todo lo de adentro —el símbolo, el relleno, los huecos, el alto— es una fracción de
+   ese número, así que agrandar la carta agranda la carta entera y no le deja los
+   símbolos flotando en un cuadro grande. Cambiar de tamaño en un `@media` es escribir
+   un renglón.
+
+   Y el número no es fijo: es el menor de tres. Cuánto ancho hay (seis cartas y sus
+   cinco huecos adentro de la ventana, descontando el margen del panel), cuánto alto
+   hay (una fila de cartas más el cartel de arriba y los botones de abajo, que son los
+   190px), y 76px de techo, que es lo que medían siempre. En cualquier pantalla de
+   escritorio manda el techo y esto se ve exactamente como se veía; los otros dos solo
+   aparecen cuando la ventana de verdad no da, y ahí la carta se achica sola en vez de
+   salirse del cuadro. El teléfono parado tiene su propia cuenta más abajo. */
+.market-row {
+  --mkt: min(calc((100vw - 82px) / 6), calc((100vh - 190px) / 1.95), 76px);
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+}
 
 .market-card, .market-slot {
-  flex: 0 0 auto; width: 76px; min-height: 148px; border-radius: 12px;
+  flex: 0 0 auto;
+  width: var(--mkt); min-height: calc(var(--mkt) * 1.95);
+  border-radius: calc(var(--mkt) * .16);
 }
+.market-card .sym { padding: calc(var(--mkt) * .053); }
+.market-card .crest, .market-card .power { width: calc(var(--mkt) * .342); height: auto; }
+.market-card .card-power { padding-top: calc(var(--mkt) * .079); }
 .market-card {
-  display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 10px 8px;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: calc(var(--mkt) * .079);
+  padding: calc(var(--mkt) * .132) calc(var(--mkt) * .105);
   background: linear-gradient(165deg, #2b3668, #1a2044);
   border: 1px solid #454f8c; box-shadow: var(--shadow);
   cursor: pointer; transition: transform .12s ease, border-color .15s ease, box-shadow .15s ease;
@@ -1006,48 +2130,98 @@ body {
   transform: translateY(-6px);
   border-color: var(--accent); box-shadow: 0 14px 30px -12px var(--accent);
 }
+/* Y se hunde al apretarla, como los botones: es lo que dice que el toque llegó, en el
+   único momento del reparto en que hay algo que tocar. */
+.market-card:active:not([disabled]) {
+  transform: translateY(-2px) scale(.98);
+  box-shadow: 0 6px 14px -10px var(--accent);
+  transition-duration: .06s;
+}
 /* Las que no te tocan por tamaño siguen a la vista: sirven para decidir. */
 .market-card[disabled] { cursor: default; opacity: .3; filter: grayscale(.8); }
 /* Hueco vacío cuando la reserva se agotó. */
 .market-slot { border: 1px dashed var(--line); opacity: .4; }
 
-/* ---------- sidebar ---------- */
+/* ---------- lo que se mira entre rondas ---------- */
 
-.sidebar {
-  display: flex; flex-direction: column; align-content: start; gap: 12px; min-height: 0;
+/* El mazo y el historial vivían en una columna clavada al borde derecho de la pantalla.
+   Se fueron los dos, y no por gusto: esa columna se llevaba un cuarto de la ventana en
+   un monitor, y en un teléfono no entraba —se la mandaba una pantalla más abajo, con lo
+   cual para leer el historial había que **scrollear el juego**—. Un juego no se
+   scrollea. La escena es la pantalla y nada la empuja fuera de ella.
+
+   Así que las dos cosas pasaron a ser lo que en realidad son: pantallas que se piden.
+   El mazo se abre tocando un Axie —el control es el bicho, que es lo único que hay ahí
+   para apretar— y el historial, desde el menú de las tres rayitas. Las dos son
+   `<dialog>`, así que se abren por encima de todo sin pelear ningún `z-index` y se
+   cierran con Escape. */
+
+/* El botón que abre el mazo: transparente y calzado sobre el bicho.
+
+   Mide lo que mide el Axie y se apoya donde se apoya él —abajo de la celda del
+   escenario, centrado, del ancho de `--axie-w`— y no `inset: 0`, que sería el peleador
+   entero. La diferencia es todo: la celda del escenario va de la barra a las patas, así
+   que estirado ahí el botón se lleva media pantalla de cielo vacío y tocar el aire
+   abriría un mazo. Lo que se toca es el bicho, que es lo que se dijo.
+
+   No se dibuja nunca —lo que se ve es el Axie, y ponerle un marco encima sería ensuciar
+   la escena para explicar algo que se descubre tocando— salvo cuando hay que
+   contestarle a alguien: al pasar el mouse y al llegar con el teclado. El foco tiene que
+   verse sí o sí; sin eso el botón existe para el teclado y es invisible. */
+.peek {
+  position: absolute; z-index: 3;
+  left: 50%; bottom: 0; transform: translateX(-50%);
+  width: var(--axie-w); height: min(100%, calc(var(--axie-w) * .95));
+  padding: 0; cursor: pointer;
+  background: none; border: 2px solid transparent; border-radius: 18px;
+  transition: background .18s ease, border-color .18s ease;
 }
+.peek:hover { background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .14); }
+.peek:focus-visible { border-color: var(--accent); background: rgba(255, 255, 255, .05); }
 
-/* Todo lo que no es la mesa vive acá y se lee como apoyo, no como protagonista. */
-.aside-label {
-  font-size: 10px; text-transform: uppercase; letter-spacing: .14em;
-  color: var(--ink-faint); margin: 2px 0 -4px 2px;
-}
-
-/* El mazo, en un renglón. Los números de la decisión ya no viven acá —se leen en el
-   aro del arena—: lo que queda es el inventario, que se mira entre rondas. */
+/* Los dos números del mazo, en el renglón de arriba del panel: lo que juntó y lo que
+   todavía no salió esta ronda. */
 .deck {
   display: flex; justify-content: space-between;
-  padding: 9px 12px;
-  background: rgba(20, 26, 48, .55);
-  border: 1px solid rgba(255, 255, 255, .07); border-radius: 10px;
+  padding: 9px 12px; margin-bottom: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px;
   font-size: 12px; color: var(--ink-dim);
 }
 
-/* El historial no compite con la mesa: alto fijo y chico, con scroll propio. */
+/* Cada mitad del mazo con su título: las de fábrica y las ganadas. */
+.sheet-label {
+  margin: 16px 0 8px;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--ink-dim);
+}
+/* Las cartas, en una fila que corta. Miden lo mismo que en la pantalla de elegir Axie
+   —son las mismas cartas— y el mazo entero de una partida larga son unas cuarenta:
+   entran en cuatro o cinco renglones sin que haya que achicarlas. */
+.sheet-row {
+  --carta: clamp(44px, 5vw, 72px);
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.sheet-empty { margin: 0; color: var(--ink-faint); font-size: 13px; }
+
+/* El historial, adentro de su panel: crece con lo que tiene y corta contra el alto de
+   la ventana, no contra un número fijo. Es la única lista larga del juego. */
 .log {
-  flex: 0 1 auto; max-height: 136px; overflow-y: auto;
+  max-height: 52vh; overflow-y: auto;
   margin: 0; padding: 8px 12px; list-style: none;
-  background: rgba(20, 26, 48, .55);
-  border: 1px solid rgba(255, 255, 255, .07); border-radius: var(--radius);
-  font-size: 12px; line-height: 1.45; color: var(--ink-dim);
+  background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  font-size: 13px; line-height: 1.5; color: var(--ink-dim);
 }
 .log::-webkit-scrollbar { width: 6px; }
 .log::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 .log li { padding: 3px 0; border-bottom: 1px solid rgba(44, 55, 99, .4); }
 .log li:last-child { border-bottom: 0; }
-.log li[data-kind="good"] { color: var(--accent); }
+/* Cada línea del registro se pinta del asiento que la provocó, no de si la noticia es
+   buena: con dos personas mirando la misma pantalla, "buena" es de quién. */
+.log li[data-kind="p1"] { color: var(--accent); }
+.log li[data-kind="p2"] { color: #9fb0ff; }
 .log li[data-kind="bad"] { color: var(--danger); }
-.log li[data-kind="cpu"] { color: #9fb0ff; }
 .log li[data-kind="muted"] { color: var(--ink-faint); }
 .log li[data-kind="round"] {
   color: var(--ink); font-weight: 600;
@@ -1063,7 +2237,26 @@ body {
   border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: 0 30px 80px -20px #000;
 }
+/* Los dos paneles que se abren desde la mesa —el mazo y el historial— no son un texto
+   que se lee: son una lista que se mira. Van más anchos que las reglas, cortan contra
+   la ventana y lo que sobra se desliza adentro del panel, que es donde tiene que
+   deslizarse: la página de atrás no se mueve. */
+.modal--sheet {
+  width: min(100% - 24px, 620px); max-width: none;
+  max-height: min(86vh, 860px);
+  /* Los navegadores ya se lo ponen al `<dialog>`, pero acá es la razón de ser del
+     panel: lo que no entra se desliza **adentro**, y el juego de atrás no se mueve. */
+  overflow: auto;
+}
 .modal::backdrop { background: rgba(5, 7, 18, .72); }
+/* Se abren de un salto y no de una aparición: son paneles que tapan la mesa, y algo que
+   tapa la mesa tiene que verse llegar. El oscurecido de atrás entra con ellos. */
+.modal[open] { animation: modal-in .22s cubic-bezier(.2, .9, .3, 1.12); }
+.modal[open]::backdrop { animation: overlay-in .22s ease-out; }
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
 .modal h2 { margin: 0 0 14px; font-size: 20px; }
 .modal h3 { margin: 20px 0 6px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
 .modal p { margin: 0 0 8px; color: var(--ink-dim); }
@@ -1071,6 +2264,7 @@ body {
 .modal .warn { color: #ffb3ab; }
 .modal p.muted { color: var(--ink-faint); font-size: 13px; }
 .modal form { margin-top: 22px; text-align: right; }
+.modal form .btn + .btn { margin-left: 8px; }
 .example {
   margin: 10px 0; padding: 12px 14px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
@@ -1084,61 +2278,302 @@ body {
 .example .muted { color: var(--ink-faint); font-size: 13px; }
 .example .total { margin-top: 6px; color: var(--accent); }
 
-/* ---------- responsive ---------- */
+/* ---------- `hidden` oculta de verdad ---------- */
 
-@media (max-width: 1200px) {
-  .app { grid-template-columns: minmax(0, 1fr) 260px; }
-  .table { grid-column: 1; }
-  .sidebar { grid-column: 2; }
-}
+/* El navegador trae `[hidden] { display: none }` en su propia hoja, y **cualquier**
+   `display` que pongamos nosotros la pisa: las reglas del autor le ganan siempre a las
+   del navegador, sin importar la especificidad. Así que un `.panel { display: flex }`
+   convierte `el.hidden = true` en una instrucción que no hace nada.
+   
+   Pasó: el panel de la sala en red tapaba la mesa para siempre, y la partida arrancaba
+   detrás de un cartel que decía "Empezando…". El bug no se ve en ningún test que no
+   dibuje de verdad —en un DOM de mentira `hidden` es una propiedad y nada más— y por eso
+   la regla va acá, una sola vez y para todo, en vez de acordarse de escribir un
+   `.loquesea[hidden]` cada vez que se agrega un panel. `styles.test.js` la vigila. */
+[hidden] { display: none !important; }
+
+/* ---------- responsive ---------- */
 
 /* Angosto no significa apilado: que los dos se sigan viendo enfrentados es el punto
    de la pantalla. Se achica todo —el Axie, la chapa, las cartas— y una cadena larga
    se desplaza de costado como siempre. */
 @media (max-width: 940px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; }
-  .table, .sidebar { grid-column: 1; grid-row: auto; }
-  .log { max-height: 120px; }
-  .arena { min-height: 400px; --pad: 12px; --escena: 250px; }
-  .board-axie { min-height: 100px; --axie-w: min(100%, 190px); }
+  /* La barra reserva de más, a propósito: lo que se pone acá es el **techo**. Debajo de
+     esta medida cuelgan las dos chapas de vida (ver `.plate`), y una barra más alta que
+     lo reservado se las come. La barra es un solo renglón —marca, ronda y rayitas, lo
+     mismo jugando solo que en una sala—, pero lo que mide ese renglón depende del logo,
+     que crece con la ventana, así que el número se deja holgado. */
+  :root { --barra: 132px; }
+  .arena { --pad: 12px; }
+  .board-axie { min-height: 100px; }
+  .fighter { --axie-w: min(100%, 200px); }
   .arena::after { --air: 62px; --caida: .82; --niebla: .18; }
 
   /* Se acabó el cielo: de acá para abajo, entre la chapa y la cabeza del Axie no queda
      hueco donde colgar el aro sin taparle la cara a alguien. Baja al costado de la
      mesa —adelante de la escena, apoyado sobre el piso, al lado de las cartas— y la
      mesa se corre para dejarle el lugar. */
-  .odds {
-    grid-area: 2 / 1 / 3 / -1;
-    justify-self: end; align-self: center; margin-bottom: 0;
+  .gauge {
+    grid-area: 3 / 1 / 4 / -1;
+    /* Apoyado en la misma línea que las cartas, y no centrado contra la fila. La fila
+       la mide la cadena, y la cadena cambia de alto sola —una carta de tres símbolos es
+       más alta que una de dos, y una cadena larga achica todas—: centrado ahí adentro,
+       el instrumento subía y bajaba con cada carta que salía. La cuenta es lo que hay
+       debajo de las cartas dentro de la mesa: el renglón de las rachas y el aire que lo
+       separa (el `gap` de `.field`). */
+    justify-self: end; align-self: end;
+    margin-bottom: calc(var(--rachas) + 7px);
     --dial: 84px;
   }
-  .odds-cap { display: none; }
+  /* Acá el aro va sin su renglón, así que lo que reserva es el aro y nada más. */
+  .odds { min-height: var(--dial); }
+  .odds-cap, .swing-mods { display: none; }
   .field { padding-right: 96px; }
   .plate { padding: 6px 9px; }
   .plate-name { font-size: 14px; }
-  .field-dmg { font-size: 25px; }
-  .scoreboard { margin-left: 0; }
-  .topbar-actions { margin-left: auto; }
 }
 
 @media (max-width: 640px) {
-  .arena { min-height: 360px; --escena: 208px; }
-  .board-axie { min-height: 80px; --axie-w: min(100%, 148px); }
+  /* La barra, en un teléfono: los tres objetos siguen en su renglón —marca, ronda,
+     rayitas— y lo que se achica es cada uno, que es lo que hay que pagar para que el
+     cielo siga siendo cielo y no un panel de controles. Las rayitas son lo único que no
+     baja de 44: es el único botón de la pantalla y se aprieta con el dedo. La reserva
+     de alto sigue siendo holgada por lo mismo que arriba: es el techo de las chapas.
+
+     Esto es el teléfono **acostado**: angosto y bajo al mismo tiempo, donde cada píxel
+     de barra se lo saca a la pelea. Parado manda el bloque de `orientation: portrait`
+     de más abajo, que va al revés —ahí sobra alto y la barra crece—. */
+  :root { --barra: 112px; }
+  .brand-logo { height: 32px; }
+  .sb-round { font-size: 14px; letter-spacing: .16em; text-indent: .16em; }
+  .btn-burger { width: 46px; height: 44px; }
+  .btn-burger i { width: 20px; }
+  .topbar { gap: 8px; padding: 8px 10px 10px; }
+  .topbar .btn-ghost { padding: 6px 9px; font-size: 12px; }
+  .btn-sound { padding: 6px 8px; font-size: 14px; }
+  .crest-btn { width: 44px; }
+
+  /* Sin las cartas, el frente de un teléfono mide menos: menos letra, menos botón. */
+  :root { --resto: 240px; }
+  .board-axie { min-height: 80px; }
+  .fighter { --axie-w: min(100%, 155px); }
   .arena::after { --air: 46px; --caida: .62; --niebla: .24; }
   .plate-who { display: none; }
-  .card { width: 54px; }
-  .market-card, .market-slot { width: 62px; min-height: 126px; }
-
   /* El frente se aprieta todo lo que puede: en un teléfono cada píxel que le sobra a
      las cartas se lo está sacando a la pelea, que es lo que se vino a ver. */
   .field { margin-top: 12px; padding-right: 74px; }
-  .strip { min-height: 118px; }
-  .controls { min-height: 44px; gap: 8px; }
+  /* El pie de un teléfono: los botones crecen (se aprieta con el dedo) y el aviso se
+     achica con la letra y con la cinta, que también son más chicas acá. */
+  :root { --aviso: 62px; --botones: 74px; --zocalo: 16px; }
   .controls-msg { font-size: 13px; }
+  /* En un teléfono la letra grande tiene que caber en dos renglones, no en cinco. */
+  .finale-text { font-size: clamp(30px, 11vw, 52px); max-width: 8em; }
   .btn-danger, .btn-primary { padding: 10px 15px; font-size: 14px; }
+  /* En un teléfono los dos botones se toman el ancho entero y crecen en vez de
+     achicarse: es la única pantalla donde se juega con el dedo y no con el mouse, y
+     apretar sin mirar necesita blanco alrededor, no menos relleno. Se salvan del
+     renglón de arriba —que achica todas las cintas— porque lo pide una regla más
+     específica, no porque venga después. */
+  .controls-acts { max-width: none; gap: 10px; }
+  .controls-acts .btn { min-height: 70px; padding: 16px 12px; font-size: 18px; }
 
-  .odds { --dial: 66px; }
+  .gauge { --dial: 66px; }
   .odds-frac { display: none; }
+
+  /* El centro, en un teléfono parado.
+
+     Antes las cinco cartas se metían a la fuerza en **un** renglón: la fila no se podía
+     partir (`nowrap`) y cada carta se achicaba hasta caber, con un tope de 58px. Eso
+     resolvía el ancho y arruinaba la pantalla. Un teléfono parado tiene poquísimo ancho
+     y muchísimo alto, y esa regla gastaba lo que falta para ahorrar lo que sobra: las
+     cartas quedaban del tamaño de una uña —tres símbolos de 22px apilados— con media
+     pantalla vacía arriba y otra media abajo. Y esta es *la* elección del juego, la que
+     arma tu mazo: es lo último que tiene que verse chico.
+
+     Ahora se parten en dos renglones, tres arriba y dos abajo, y cada carta se lleva un
+     tercio del ancho en vez de un quinto. En un teléfono de 390 eso son 118px por carta
+     en vez de 58: el doble.
+
+     La segunda fila era lo que el `nowrap` estaba evitando, y el miedo ya no corre. Ese
+     comentario es de cuando el centro se dibujaba adentro del arena y una fila de más
+     empujaba los botones fuera del cuadro. El centro hace rato que es una capa clavada a
+     la ventana y centrada en ella (ver `.overlay`): crece para los dos lados desde el
+     medio y no tiene a quién empujar.
+
+     Lo único que hay que respetar es que el panel entero entre en el alto, y de eso ya
+     se encarga la misma cuenta de siempre: acá el ancho se divide por 3 en vez de por
+     6, y el alto por 3.9 en vez de por 1.95, que son dos filas de cartas en vez de una
+     —y 200 en vez de 190, que es el hueco que trae la segunda fila—. El techo sube a
+     130px: un tercio de una tableta angosta da de sobra, y una carta más grande que eso
+     deja de leerse como una carta. */
+  .overlay { padding: 10px; }
+  .overlay-panel { gap: 10px; }
+  .overlay-note { font-size: 13px; }
+
+  .market-row {
+    --mkt: min(calc((100vw - 36px) / 3), calc((100vh - 200px) / 3.9), 130px);
+    gap: 8px; width: 100%;
+  }
+
+  /* Y los botones del reparto, del mismo tamaño con que se juega el resto: acá también
+     se aprieta con el dedo, y "No agarrar" es una decisión —cerrar el reparto sin nada—
+     y no una salida de emergencia en letra chica. */
+  .overlay-actions { gap: 8px; }
+  .overlay-actions .btn { min-height: 50px; padding: 14px 22px; font-size: 15px; }
+}
+
+/* Con la ventana parada, el dibujo entra tan chico que agrandarlo no cuesta nitidez:
+   se le deja pisar más ancho —2.4 veces la ventana en vez de 1.3— y con eso el terreno
+   sube y el cielo pintado baja de media pantalla a un tercio. Ver `--alto`. */
+@media (orientation: portrait) {
+  :root { --recorte: 2.4; }
+
+  /* Y los dos suben un escalón. Parada la pantalla el cielo es lo que sobra: entre las
+     chapas de vida —clavadas debajo de la barra— y las cabezas quedaba un hueco de
+     terreno vacío del alto de un Axie, y la pelea se leía apoyada en el borde de abajo
+     en vez de en el medio. Cuatro puntos de ventana menos en la línea de las patas los
+     acercan a su chapa sin comerse el suelo: el terreno sigue estando entero y la mesa
+     de abajo no se mueve, porque la manda `--frente` y no esto. */
+  :root { --mitad: 46vh; }
+
+  /* La barra, en una ventana parada, y acá va al revés que en todos los demás casos:
+     crece.
+
+     Venía con la medida del teléfono acostado —el caso angosto—, y esa medida está
+     pensada para una ventana donde el alto es lo que falta. Parado es al revés: el alto
+     sobra y lo que falta es ancho, así que achicar la barra no compra nada y solo deja
+     tres objetos chiquitos perdidos en un renglón enorme. En un teléfono era el
+     problema que se veía a simple vista: el logo del tamaño de una uña arriba de una
+     pantalla de seis pulgadas.
+
+     Las tres medidas van en `vw` y no en píxeles porque acá el ancho **es** el tamaño de
+     la pantalla: un teléfono de 375 y una tableta de 800, los dos parados, no quieren la
+     misma barra. Los topes del `clamp` son los dos extremos —que en el chico siga
+     entrando y que en el grande no se vuelva un cartel—.
+
+     Y baja del canto: el renglón arranca más abajo, que es lo que lo despega de la barra
+     de direcciones del navegador. Con eso la barra deja de ser el borde de la ventana y
+     pasa a ser lo de arriba del juego.
+
+     La reserva de alto sube con todo lo demás: lo que se reserva es el techo de la
+     barra, así que si crece el renglón tiene que crecer el techo, o las chapas de vida
+     terminan debajo de la barra. */
+  :root { --barra: clamp(124px, 30vw, 172px); }
+  .topbar { padding: clamp(12px, 3.4vw, 26px) clamp(14px, 4vw, 30px) 14px; }
+  .brand-logo { height: clamp(38px, 9.6vw, 58px); }
+  .sb-round {
+    font-size: clamp(16px, 4.2vw, 23px);
+    letter-spacing: .2em; text-indent: .2em;
+  }
+  .btn-burger {
+    width: clamp(52px, 13vw, 68px); height: clamp(48px, 12vw, 62px);
+    border-radius: clamp(14px, 3.4vw, 18px);
+    /* El hueco entre rayas crece con las rayas: quietas en 5px, tres rayas más gordas
+       y más largas se juntan y el botón vuelve a leerse como una textura. */
+    gap: clamp(5px, 1.3vw, 7px);
+  }
+  .btn-burger i { width: clamp(24px, 5.6vw, 30px); height: clamp(3px, .7vw, 4px); }
+}
+
+/* Una ventana baja es el caso que se puso delicado al clavar la mesa a la pantalla:
+   antes, si no entraba, la página se estiraba y se bajaba con la rueda; ahora no hay a
+   dónde estirarse y lo que no entra se recorta contra el borde —y lo primero que se
+   recorta son los botones, que están al pie—.
+
+   Así que todo lo que mide la escena se achica de una: la barra de arriba, el mínimo
+   del escenario, el bicho y el alto de las cartas. La cuenta que hay que respetar es
+   que la barra, el mínimo del escenario, la mesa y los botones entren en el alto de la
+   ventana. */
+@media (max-height: 760px) {
+  :root { --resto: 260px; }
+  .board-axie { min-height: 90px; }
+  .fighter { --axie-w: min(100%, clamp(130px, 26vh, 210px)); }
+  .arena::after { --air: 62px; --caida: .82; }
+  .field { margin-top: 16px; }
+}
+
+@media (max-height: 600px) {
+  :root { --resto: 239px; }
+  .board-axie { min-height: 70px; }
+  .fighter { --axie-w: min(100%, clamp(110px, 22vh, 170px)); }
+  .arena::after { --air: 46px; --caida: .62; }
+  /* Una ventana baja es el único lugar donde el pie se resigna: acá cada píxel que se
+     lleva se lo saca a la pelea, que está apretada contra el borde de arriba. Los
+     botones siguen siendo del mismo tamaño entre sí y siguen en el medio —solo bajan un
+     escalón de alto— y el aviso se queda con lo justo para el renglón y la cinta, que
+     acá se pisan un poco: mejor eso que mover la mesa. */
+  :root { --aviso: 50px; --botones: 58px; --zocalo: 10px; }
+  .controls-acts .btn { min-height: 54px; padding: 11px 14px; font-size: 16px; }
+}
+
+/* El teléfono parado, otra vez, y va acá abajo a propósito: después de los `@media` de
+   alto. Un teléfono parado mide unos 700 de alto una vez que el navegador se lleva lo
+   suyo, así que entra en el de 760 —que va después del de 640— y ese le devolvía al
+   Axie su medida por alto: `26vh`, unos 180px, que en una columna de 180 es la columna
+   entera. Los dos bichos quedaban pegados cachete con cachete y las chapas de punta a
+   punta de la pantalla.
+
+   Parado, lo que manda es el ancho, así que el Axie se mide por `vw`: un tercio de la
+   ventana deja aire entre los dos y el piso se ve. Y las chapas bajan un escalón con
+   él: son para mirar de reojo, no un panel, y a lo ancho de la columna se comían el
+   cielo que la barra de arriba recién había ganado. */
+@media (max-width: 640px) and (orientation: portrait) {
+  .fighter { --axie-w: min(100%, 34vw, 150px); }
+  .plate {
+    width: min(calc(100% - 8px), 188px);
+    gap: 4px; padding: 6px 9px 7px; border-radius: 10px;
+  }
+  .plate-top { gap: 6px; }
+  .plate-top .crest { width: 16px; height: 16px; }
+  .plate-name { font-size: 14px; }
+  .plate-tag { font-size: 9px; padding: 1px 6px; }
+  .plate-hp { gap: 7px; }
+  .plate-hp b { font-size: 13px; width: 26px; }
+  .hpbar { height: 11px; padding: 3px 7px 3px 4px; }
+
+  /* El reloj crece con la barra, que parada también crece (ver el `@media` de
+     orientación). */
+  .clock { font-size: clamp(13px, 3.6vw, 17px); }
+  .clock-bar { width: clamp(64px, 20vw, 110px); height: 6px; }
+}
+
+/* La barra y el aro se achican por alto **y** solo en una ventana ancha. Angosta ya
+   tienen su propia medida más arriba, y es más grande: los botones se acomodan en dos
+   renglones y hace falta el lugar. Sin esta condición el `@media` de alto —que va
+   después— se la comería, y la chapa del Axie terminaría debajo de la barra. */
+@media (max-height: 760px) and (min-width: 941px) {
+  :root { --barra: 78px; }
+  .brand-logo { height: 38px; }
+  .btn-burger { width: 48px; height: 44px; }
+  .gauge { --dial: 96px; }
+}
+@media (max-height: 600px) and (min-width: 941px) {
+  :root { --barra: 66px; }
+  .brand-logo { height: 32px; }
+  .btn-burger { width: 46px; height: 40px; }
+  .gauge { --dial: 76px; }
+}
+
+/* El teléfono acostado, que es la única ventana donde la pantalla completa no entra:
+   angosta —la barra necesita dos renglones— y baja al mismo tiempo. Ahí se resigna y
+   se vuelve a lo de antes: la mesa deja de estar clavada a la ventana, es un pedazo de
+   página con su alto, y lo que no entra se baja con el dedo. El terreno sigue siendo
+   el fondo de esa mesa —el recorte y la línea de suelo salen igual—, nada más que la
+   mesa ya no es toda la pantalla. */
+@media (max-height: 540px) and (max-width: 940px) {
+  :root { --barra: 12px; }
+  .topbar {
+    position: static;
+    background: rgba(7, 10, 24, .72);
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+  }
+  /* Acá arriba ya no hay cielo que ensuciar: la barra es una barra. */
+  .topbar::before { display: none; }
+  .table { position: static; height: 76vh; min-height: 300px; }
+  /* Y el pie al mínimo: es la única ventana donde la pantalla completa no entra. */
+  :root { --aviso: 40px; --botones: 54px; --zocalo: 8px; }
+  /* Sin ventana que repartir, las patas vuelven a caer donde caigan. */
+  :root { --patas: 58%; }
 }
 
 /* Nada de movimiento para quien lo pidió: las cartas aparecen sin repartirse. */
@@ -1149,4 +2584,967 @@ body {
     transition-duration: .01ms !important;
   }
   .market-card:hover:not([disabled]) { transform: none; }
+}
+
+/* ---------- la sala en red ---------- */
+
+/* La sala es una pantalla del juego, no un cartel del navegador.
+
+   Era lo segundo: un rectángulo azul oscuro centrado sobre un vidrio esmerilado, con
+   un rombo por título y la lista de salas hecha de renglones con borde de un píxel. Al
+   lado de la portada —el terreno pintado, el logo, las cintas talladas— parecía otro
+   programa. Y es la **primera** pantalla del juego para el que entra con el link del
+   otro desde el celular: la única que no se parecía al juego era justamente la puerta.
+
+   Ahora está hecha con las piezas que ya estaban:
+
+     el terreno   el de tu Axie, colgado igual que en la mesa y en la portada. Lo pone
+                  `net.js` en `data-arena` (ver `.arena-art i`)
+     el logo      la marca arriba, en la versión con contorno, como en la portada
+     la tabla     `frame_back`, la plancha de madera clara con la que el Origins arma
+                  el fondo de sus paneles
+     el cartel    `name_panel`, el cartel de madera colgado del borde de arriba
+     la madera    `player_name_bg`, la misma de las opciones del menú: cada sala y cada
+                  asiento es un cartel con un nombre puesto
+     las cintas   las de siempre para lo que se aprieta, y la gris (`slider-bg`) para
+                  lo que no se puede o para desdecirse
+
+   El material vuelve a decir qué es cada cosa, igual que en el menú de la portada: la
+   madera es un lugar con un nombre puesto —una sala, un asiento— y la cinta es algo que
+   se hace. De ahí que la lista entera sea de madera y el único verde de la pantalla sea
+   el de entrar.
+
+   Y la letra se da vuelta: sobre la tabla clara la tinta es marrón oscura y no el
+   `--ink` del resto del juego, que ahí no se leería. Los renglones, que son madera
+   oscura, siguen en blanco. */
+
+.netbox {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(10px, 2.4vh, 28px) clamp(12px, 3vw, 28px);
+  overflow: hidden;
+  /* Cuánto terreno queda por debajo del horizonte, como en la portada: es lo que hace
+     que el dibujo caiga encuadrado y no como un cielo pelado. */
+  --suelo: clamp(140px, 30vh, 300px);
+  /* La tinta sobre la tabla, que es lo único de acá que se declara como variable: la
+     usan el renglón que avisa, las etiquetas y los fantasmas, y las tres tienen que
+     cambiar juntas el día que la madera cambie de color.
+
+     El color que va **debajo** de cada dibujo del kit, en cambio, va escrito en su
+     regla: es el promedio medido de ese archivo, es la red de seguridad del día que el
+     CDN no conteste, y es lo que mira `test/styles.test.js` regla por regla. */
+  --tinta: #2b1809;
+  --tinta-dim: #53331a;
+  background: var(--piso, var(--bg));
+}
+.netbox-art { position: absolute; left: 0; right: 0; top: 0; bottom: var(--suelo); }
+/* La escena se apaga contra los bordes, igual que en la portada: acá lo que hay que
+   leer es el panel, y el terreno es el escenario donde está apoyado. */
+.netbox::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(9, 12, 26, .58) 0%, transparent 34%, transparent 56%,
+      rgba(9, 12, 26, .62) 100%),
+    radial-gradient(115% 78% at 50% 46%, transparent 34%, rgba(9, 12, 26, .68) 100%);
+}
+
+/* El logo y el panel, en una columna centrada. `max-height: 100%` con el `min-height: 0`
+   de adentro es lo que deja que la lista se desplace sola en una ventana baja en vez de
+   empujar los botones fuera de la pantalla. */
+.netbox-stack {
+  position: relative; z-index: 2;
+  width: min(100%, 520px); max-height: 100%;
+  display: flex; flex-direction: column; align-items: center;
+}
+/* La marca, en la versión con contorno blanco: es la que se apoya sobre un dibujo. Más
+   chica que en la portada —acá lo que hay que mirar son las salas— y con el margen
+   justo para que el cartel del panel le pase por debajo sin tocarla. */
+.netbox-logo {
+  display: block; width: clamp(150px, 26vw, 250px); max-width: 100%; height: auto;
+  margin-bottom: 32px;
+  filter: drop-shadow(0 8px 20px rgba(3, 5, 14, .8));
+}
+
+/* La tabla. El dibujo del kit es casi liso —una plancha de madera clara con vetas
+   apenas marcadas—, así que estirarlo a lo que mida el panel no lo deforma: no hay
+   redondeo pintado adentro que se pueda achatar, como sí le pasaba a la cinta verde
+   grande (ver el README). El canto y el espesor los pone el CSS. */
+.netbox-panel {
+  position: relative;
+  width: 100%; min-height: 0;
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+  padding: 6px clamp(12px, 2.4vw, 20px) clamp(14px, 2vh, 20px);
+  border-radius: 20px;
+  border: 3px solid #5e3a22;
+  background: #ac8a68 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/frame_back.png") center / 100% 100% no-repeat;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 246, 232, .3),
+    inset 0 -18px 30px -14px rgba(60, 32, 14, .5),
+    0 6px 0 -1px #46280f,
+    0 30px 60px -18px rgba(0, 0, 0, .8);
+}
+
+/* El cartel con el nombre de la pantalla, colgado del borde de arriba del panel: es
+   donde el Origins pone los suyos, y es lo que hace que el panel se lea como un objeto
+   y no como una caja de texto. Sale para arriba con margen negativo y no con `position`
+   para que siga midiendo su lugar en la columna. */
+.netbox-banner {
+  align-self: center; margin: -28px 0 2px;
+  min-width: min(300px, 82%); padding: 13px 32px 15px;
+  background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/name_panel.png") center / 100% 100% no-repeat;
+  font: 800 clamp(16px, 2.2vw, 23px)/1 var(--display);
+  text-align: center; text-transform: uppercase; letter-spacing: .05em;
+  color: #fff; text-shadow: 0 2px 4px rgba(0, 0, 0, .6);
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55));
+}
+/* Si se cortó el cable, el cartel es el que lo dice: la cinta roja del kit, la misma
+   del botón que arriesga. Un cartel de madera que dice "Se cortó la conexión" se lee
+   como un título; en rojo se lee como lo que es. */
+.netbox[data-state="down"] .netbox-banner {
+  background-color: #bb0035;
+  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_red.png");
+}
+
+/* La cruz de la esquina, en madera y con el dibujo del kit adentro. Es la puerta de
+   salida de la sala y solo existe adentro de una: atrás está la lista, que es a donde
+   vuelve. Sale un poco del panel, como en el Origins, así que no le come lugar a nada
+   de lo que hay adentro. */
+.netbox-x {
+  position: absolute; z-index: 3; top: -16px; right: -10px;
+  width: 46px; height: 46px; padding: 0; border: 0; border-radius: 13px;
+  display: grid; place-items: center; cursor: pointer;
+  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
+  box-shadow: 0 5px 0 -1px #46280f, 0 14px 22px -12px rgba(0, 0, 0, .9);
+  transition: filter .15s ease, transform .08s ease, box-shadow .08s ease;
+}
+.netbox-x::before {
+  content: ""; width: 24px; height: 24px;
+  background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/icon_close.png") center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5));
+}
+.netbox-x:hover { filter: brightness(1.14) saturate(1.05); }
+.netbox-x:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 -1px #46280f, 0 6px 12px -10px rgba(0, 0, 0, .9);
+}
+
+/* Lo que la pantalla tiene que decir: a qué se está esperando. Sobre la tabla clara va
+   en tinta marrón, que es la letra de todo lo que se apoya en ella. */
+.netbox-note {
+  margin: 0 2px; text-align: center;
+  color: var(--tinta-dim); font-size: 14px; font-weight: 600; line-height: 1.45;
+}
+.netbox-view { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.netbox-actions { display: flex; gap: 8px; align-items: center; justify-content: center; }
+/* Los fantasmas de acá adentro van en tinta, no en el `--ink-dim` del resto del juego:
+   sobre la tabla clara un texto claro no se lee. */
+.netbox .btn-ghost { color: var(--tinta-dim); }
+.netbox .btn-ghost:hover:not(:disabled) { color: var(--tinta); }
+
+/* El hueco de la tabla donde se apoyan los renglones. Es lo que hace que la lista se
+   lea como una lista y no como cosas sueltas encima de la madera, y es también lo que
+   se desplaza cuando hay más salas que lugar. */
+.netbox-rooms, .netbox-seats {
+  margin: 0; padding: 5px; list-style: none;
+  display: flex; flex-direction: column; gap: 6px;
+  min-height: 0; overflow-y: auto;
+  border-radius: 14px;
+  background: rgba(58, 32, 14, .3);
+  box-shadow: inset 0 2px 7px rgba(45, 24, 10, .5);
+}
+.netbox-rooms { max-height: min(46vh, 360px); }
+
+/* Cada sala es un cartel de madera, y el cartel entero es el botón: en un teléfono lo
+   que se toca tiene que ser el renglón y no dos palabras adentro del renglón. */
+.netbox-room {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 11px; border: 0; border-radius: 12px;
+  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+  font: inherit; text-align: left; cursor: pointer;
+  transition: filter .15s ease, transform .08s ease;
+}
+.netbox-room:hover { filter: brightness(1.14) saturate(1.05); }
+.netbox-room:active { transform: translateY(2px); }
+/* El número de la sala en la lista, adentro del aro tallado del kit —el mismo con el
+   que el Origins enmarca los avatares—. El aro es un dibujo con el centro
+   transparente, así que lo que se ve adentro es la madera del renglón. */
+.room-no {
+  flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center;
+  background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/avatar_frame.png") center / 100% 100% no-repeat;
+  font: 700 14px/1 var(--mono); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+}
+.room-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.room-id b { font-size: 15px; font-weight: 700; }
+.netbox-code {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+  color: rgba(255, 240, 228, .7);
+}
+/* Los dos asientos de la sala, vistos desde afuera: dos huecos, y en el que está
+   ocupado el crest del bicho con el que entró. Es lo que uno quiere saber antes de
+   entrar —si hay lugar, y contra qué— y son dos dibujos, no un renglón de texto.
+
+   Van con la cuenta al lado y no en su lugar: el hueco se ve de lejos y el "1/2" se
+   lee de cerca, y con dos asientos las dos cosas entran en el mismo renglón. */
+.room-seats { display: flex; gap: 4px; margin-left: auto; }
+.room-seats i {
+  width: 23px; height: 23px; display: grid; place-items: center; border-radius: 50%;
+  background: rgba(36, 17, 7, .55);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .65);
+}
+.room-seats i[data-here="true"] {
+  background: color-mix(in srgb, var(--c, #d9a05b) 38%, rgba(36, 17, 7, .55));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, #d9a05b) 65%, transparent);
+}
+.room-seats .crest { width: 15px; height: 15px; }
+.netbox-count {
+  font: 700 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase;
+  color: rgba(255, 240, 228, .72);
+}
+/* Qué pasa si toco. Es una etiqueta y no un botón —el botón es el renglón entero—, así
+   que no lleva espesor: lleva el color de lo que va a pasar. Verde si hay asiento,
+   gris si la sala está llena o ya jugando, que ahí se entra a mirar. */
+.room-go {
+  flex: 0 0 auto; padding: 8px 14px; border-radius: 9px;
+  font: 700 13px/1 var(--display);
+  background: #00766c url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-fill.png") center / 100% 100% no-repeat;
+  box-shadow: 0 3px 0 -1px rgba(0, 0, 0, .4);
+}
+.room-go[data-watch="true"] {
+  background-color: #6e696d;
+  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-bg.png");
+}
+.netbox-empty {
+  padding: 18px 8px; text-align: center;
+  font-size: 14px; color: rgba(255, 240, 228, .82); text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+
+/* Los dos asientos de la sala propia: quién está, con qué bicho y si dijo que sí.
+
+   El bicho va dibujado y no nombrado: es lo que se está esperando cuando se espera al
+   otro, y de paso es la primera vez que se ve al rival. El asiento vacío muestra su
+   número en el mismo aro tallado, que es lo que dice que ahí falta alguien. */
+.netbox-seats li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 11px; border-radius: 12px;
+  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+}
+.netbox-seats li[data-here="false"] { filter: saturate(.45) brightness(.82); }
+/* El que ya dijo que sí, con el aro de la casa: es el único dato de esta pantalla que
+   cambia mientras la mirás. */
+.netbox-seats li[data-ready="true"] {
+  box-shadow: 0 0 0 2px var(--accent), 0 6px 14px -8px rgba(0, 0, 0, .8);
+}
+.seat-art { flex: 0 0 auto; width: 56px; display: grid; place-items: center; }
+.seat-art .axie { width: 100%; }
+.seat-empty {
+  width: 44px; height: 44px; display: grid; place-items: center;
+  background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/avatar_frame.png") center / 100% 100% no-repeat;
+  font: 700 17px/1 var(--mono); color: rgba(255, 240, 228, .85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+}
+.seat-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+/* Quién es y, si sos vos, la chapita que lo dice: van en el mismo renglón porque son
+   la misma respuesta. */
+.seat-who { display: flex; align-items: center; gap: 7px; }
+.seat-id b { font-size: 15px; font-weight: 700; }
+.seat-state {
+  margin-left: auto; text-align: right;
+  font: 700 11px/1.3 var(--display); letter-spacing: .06em; text-transform: uppercase;
+  color: rgba(255, 240, 228, .72);
+}
+.netbox-seats li[data-ready="true"] .seat-state { color: var(--accent); }
+.netbox-you {
+  padding: 1px 7px; border-radius: 20px; background: var(--accent); color: #06210f;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  text-shadow: none;
+}
+/* Con qué Axie entra cada uno, al lado de quién es. El color es el de su clase, que es
+   su mazo: dos asientos con el mismo bicho se leen de un vistazo, y está permitido. */
+.netbox-axie {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: color-mix(in srgb, var(--c) 42%, #fff);
+}
+.netbox-axie .crest { width: 15px; height: 15px; }
+
+/* Tu Axie, adentro de la sala: es **el mismo botón** que el de la portada —la cinta
+   azul, la de lo que se puede apretar antes de jugar— con el cuerpo acostado. Lleva la
+   clase `btn`, así que el material, el espesor y el hundirse los hereda de ahí y acá
+   solo queda cómo se reparte lo que tiene adentro. Abre esa misma pantalla de elección
+   encima de la sala, y por eso dice qué hace —"Cambiar"—: lo que muestra es lo que ya
+   tenés puesto, no una lista para tocar. */
+.netbox-mine {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 13px; border-radius: 12px; text-align: left;
+}
+.netbox-mine-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .1em;
+  color: rgba(255, 255, 255, .58);
+}
+.netbox-mine-now { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.netbox-mine-now .crest { width: 18px; height: 18px; }
+.netbox-mine-cta { margin-left: auto; font-size: 13px; color: var(--accent); }
+/* Desdecirse no es lo mismo que confirmar: el botón se pasa a la cinta gris, que es la
+   del kit para lo que no empieza nada. */
+#net-ready[data-on="true"] {
+  background-color: #6e696d;
+  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-bg.png");
+}
+
+/* Las direcciones para entrar desde el otro aparato. Van al pie de la lista, separadas
+   por una costura, y cada una es para copiarla a mano en el celular: grande, en mono y
+   seleccionable de un toque. */
+.netbox-urls { padding-top: 10px; border-top: 2px dashed rgba(94, 58, 34, .45); }
+.netbox-label {
+  display: block; margin-bottom: 7px;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-dim);
+}
+.netbox-urls ul { margin: 0; padding: 0; list-style: none; }
+.netbox-urls li {
+  padding: 7px 10px; margin-bottom: 5px; border-radius: 8px;
+  background: rgba(48, 26, 12, .5);
+  font-family: var(--mono); font-size: 14px; color: #ffe9c9;
+  user-select: all; overflow-wrap: anywhere;
+}
+
+/* En una ventana baja el logo es lo primero que sobra: el panel tiene que entrar
+   entero, y la marca ya está en la portada y en la barra de la mesa. */
+@media (max-height: 560px) {
+  .netbox-logo { display: none; }
+}
+/* En un teléfono los renglones se apilan: el nombre de la sala arriba y lo demás
+   debajo, que en 320 de ancho no entra todo en una línea. */
+@media (max-width: 420px) {
+  .netbox-room { flex-wrap: wrap; }
+  .room-id { flex: 1 0 auto; }
+  .room-go { margin-left: auto; }
+  .seat-state { flex: 1 0 100%; margin-left: 0; text-align: left; }
+}
+
+/* ---------- la portada ---------- */
+
+/* Lo primero que se ve. Es una pantalla entera y no un panel encima de la mesa: la
+   mesa atrás está vacía —no hay partida hasta que se elija contra quién— y dejarla
+   asomar por los costados sería mostrar un tablero sin nada.
+
+   El escenario se arma con las mismas piezas del arena, que ya sabía apoyar Axies
+   sobre un dibujo: el terreno de una clase (`--arena`), su línea de suelo pintada
+   (`--horizonte`) y el color con el que sigue el piso cuando el dibujo se termina
+   (`--piso`). Lo único distinto es dónde cae esa línea: en el arena está al borde de
+   la primera fila y acá está arriba de la franja por la que se pasean, que es una
+   banda con profundidad y no un renglón. */
+.lobby {
+  /* Encima de todo, la sala incluida (`.netbox`, 40). Jugando solo eso da igual —la
+     portada tapa una mesa y nada más—, pero en una sala la pantalla de elección de
+     Axie se abre **sobre** el cartel de la sala (ver `main.js`): con 30 se abría
+     detrás, y tocar "Tu Axie" no hacía nada visible. */
+  position: fixed; inset: 0; z-index: 45;
+  overflow: hidden;
+  /* Cuánto terreno queda por debajo del horizonte: es el piso por el que caminan.
+     Sale del alto de la ventana, como el escenario del arena, así en una pantalla
+     baja el paseo se achica en vez de comerse el botón. */
+  --suelo: clamp(150px, 32vh, 300px);
+  --axie-w: clamp(88px, 11.5vw, 164px);
+  background: var(--piso, var(--bg));
+  animation: lobby-in .5s ease backwards;
+}
+@keyframes lobby-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* El dibujo, colgado igual que en el arena: se le da el alto que haga falta para que
+   su cielo llene lo que hay de cielo, y su línea de suelo cae en el borde de abajo
+   de esta capa —que es donde arranca la banda por la que caminan—. */
+.lobby-art { position: absolute; left: 0; right: 0; top: 0; bottom: var(--suelo); }
+
+/* El piso, de la línea del horizonte para abajo: la franja por la que se pasean.
+
+   Acá había el mismo truco que en el arena —una neblina pálida apoyada contra la línea
+   del horizonte y una luz tendida sobre la superficie—, y acá no servía. En el arena la
+   neblina mide 12 píxeles y está cortada en seco contra las patas de los dos que
+   pelean: es una línea, y se lee como el aire que hay sobre un suelo. Repetida en la
+   portada terminó siendo otra cosa: 46 píxeles de blanco cruzando la pantalla de lado a
+   lado más un resplandor de 70% de ancho encima, sobre una franja que ocupa el tercio
+   de abajo. Eso no dibuja una superficie, dibuja **una niebla** — y peor, dibuja el
+   borde de la franja caminable, que es una cuenta interna que el que juega no tiene por
+   qué ver.
+
+   No hace falta ninguna de las dos. El dibujo ya se apaga solo contra `--piso` desde la
+   mitad de su parte de abajo (ver `.lobby-art i`) y `--piso` es el color medido del
+   propio archivo, así que donde termina la ilustración y empieza la franja no hay
+   juntura que tapar: es el mismo color de los dos lados.
+
+   Queda el oscurecimiento contra el borde de abajo, que no pinta ninguna superficie:
+   es lo que hace que los dos botones de las esquinas se lean contra el terreno. */
+.lobby::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: var(--suelo); pointer-events: none; z-index: 1;
+  background: linear-gradient(180deg, transparent 40%, rgba(6, 9, 22, .72) 100%);
+}
+
+/* La escena es una ilustración con luz propia: se apaga en los bordes para que el
+   título y el botón se lean sin taparla. */
+.lobby::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background:
+    linear-gradient(180deg, rgba(9, 12, 26, .62) 0%, transparent 26%, transparent 58%,
+      rgba(9, 12, 26, .5) 100%),
+    radial-gradient(120% 80% at 50% 40%, transparent 46%, rgba(9, 12, 26, .6) 100%);
+}
+
+/* ---------- los que se pasean ---------- */
+
+/* La franja caminable: dónde pueden pisar.
+
+   Los dos límites son por lo mismo, que es no tener que compartir el lugar con los
+   botones. Va **arriba** del piso, contra el horizonte, y deja todo el primer plano
+   libre: un Axie parado al borde de abajo de la pantalla queda a la altura del botón
+   y los dos se estorban. Y termina antes de la columna del panel, así que por más que
+   uno camine hasta la derecha del todo nunca se le mete atrás —el panel es opaco y se
+   lo comería entero—. Lo que queda es lo mismo que se ve en cualquier lobby: los
+   bichos en el medio del terreno y los botones adelante, cada cosa en su lugar.
+
+   Los dos costados están recortados por lo mismo y no por igual: a la derecha está el
+   botón de jugar, que es alto y ancho, y a la izquierda el de tu Axie, que es más
+   chico. En una ventana alta ninguno de los dos llega a la altura de la franja; en una
+   baja la franja se apoya casi encima de ellos, y ahí es donde estos dos límites
+   evitan que un bicho quede cortado atrás de un botón. */
+.lobby-cast {
+  position: absolute; z-index: 2;
+  left: min(24%, 260px); right: min(44%, 520px);
+  bottom: calc(var(--suelo) * .5); height: calc(var(--suelo) * .44);
+}
+
+/* Un Axie paseándose. `--x` es dónde está a lo ancho y `--lane` a qué profundidad, de
+   0 —contra el horizonte— a 1 —adelante de todo—; las dos las escribe `lobby.js` y de
+   ahí sale todo lo demás: dónde se para, cuánto mide, cuánta luz le llega y a quién
+   tapa. `--dur` es cuánto tarda en llegar, y es lo que convierte un cambio de
+   variable en una caminata.
+
+   El movimiento va en `left`/`bottom` y no en `translate` porque `translate` ya lo
+   está usando el centrado, y porque la transición tiene que ser lineal de punta a
+   punta: un bicho que arranca y frena con suavidad se lee como si patinara. */
+.lobby-axie {
+  position: absolute;
+  --w: calc(var(--axie-w) * (.68 + .44 * var(--lane, .5)));
+  left: calc(var(--x, .5) * 100%);
+  bottom: calc((1 - var(--lane, .5)) * 100%);
+  width: var(--w);
+  translate: -50% 0;
+  transition: left var(--dur, 0ms) linear, bottom var(--dur, 0ms) linear;
+  /* Perspectiva aérea: lo que está lejos recibe menos luz y menos contraste. Es lo
+     que separa las capas sin tener que dibujar nada en el medio. */
+  filter: brightness(calc(.74 + .26 * var(--lane, .5)));
+}
+/* Los Axies vienen mirando a la izquierda: el que camina para el otro lado se da
+   vuelta. Es el mismo espejo que usa la mesa, colgado del rumbo en vez del asiento. */
+.lobby-axie[data-face="right"] .axie-body { transform: scaleX(-1); }
+/* La sombra que lo apoya. Más chica y más suave que la de la mesa: acá no hay golpes
+   que seguir, solo hace falta que no parezcan calcomanías pegadas sobre el fondo. */
+.lobby-axie::after {
+  content: ""; position: absolute; z-index: -1;
+  left: 50%; bottom: -4px;
+  width: calc(var(--w) * .95); height: calc(var(--w) * .17);
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side,
+    rgba(2, 4, 11, .72) 0%, rgba(2, 4, 11, .5) 62%, rgba(2, 4, 11, 0) 100%);
+  filter: blur(4px);
+}
+
+/* ---------- el título y los botones ---------- */
+
+/* El cartel va centrado arriba: el logo es la marca de la portada y manda desde el
+   eje, no desde una esquina. Se estira de borde a borde y adentro se centra, así que
+   el ancho del dibujo no lo corre de lugar. Las dos esquinas de abajo —jugar y tu
+   Axie— siguen libres. */
+.lobby-head {
+  position: absolute; z-index: 3; top: clamp(18px, 4vh, 40px);
+  left: clamp(18px, 4vw, 44px); right: clamp(18px, 4vw, 44px);
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.lobby-title { margin: 0; line-height: 0; }
+/* El logo se mide por el ancho y no por el alto: es un cartel de dos renglones, y lo
+   que tiene que entrar es su renglón más largo. La sombra va como `drop-shadow` y no
+   como `box-shadow` porque sigue el recorte del dibujo —el contorno blanco— y no el
+   rectángulo del archivo. */
+.lobby-logo {
+  display: block; width: clamp(300px, 44vw, 520px); max-width: 100%; height: auto;
+  filter: drop-shadow(0 10px 26px rgba(3, 5, 14, .75));
+}
+
+/* La firma. Va debajo del logo y dice una sola cosa —quién lo hizo—, así que no
+   necesita ancho: necesita leerse. Y tiene que leerse **sobre cualquiera de los seis
+   fondos**, que van del cielo blanco de la meseta al agua oscura de la laguna: un
+   texto claro con sombra se pierde contra el cielo y uno oscuro se pierde contra el
+   agua. Por eso no se apoya en el fondo que le toque sino que se trae el suyo — una
+   chapita oscura, apenas translúcida, con el vidrio esmerilado detrás. Sobre eso el
+   blanco tiene el mismo contraste siempre, se pare donde se pare la portada. */
+.lobby-sub {
+  margin: 14px auto 0;
+  font: 700 clamp(12px, 1.5vw, 16px)/1 var(--display);
+  letter-spacing: .04em; color: #fff;
+  padding: 8px 18px; border-radius: 999px;
+  background: rgba(6, 10, 24, .62);
+  border: 1px solid rgba(255, 255, 255, .16);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .9);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .75);
+}
+
+.lobby-panel {
+  position: absolute; z-index: 3;
+  right: clamp(18px, 4vw, 44px); bottom: clamp(18px, 4vh, 44px);
+  display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+}
+.lobby-front { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+
+/* El botón. Es grande a propósito: es lo único que hay que apretar en toda la
+   pantalla, y un juego se abre con un botón que se ve desde la puerta. El borde de
+   abajo grueso lo hace un objeto con espesor —se hunde al apretarlo, como una tecla—
+   y no un rectángulo de color. */
+.lobby-play {
+  font: 800 clamp(24px, 3.6vw, 42px)/1 var(--display);
+  text-transform: uppercase; letter-spacing: .06em;
+  padding: 18px clamp(34px, 6vw, 64px);
+  border-radius: 18px; border: 0; cursor: pointer;
+  color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, .5), 0 1px 0 rgba(0, 0, 0, .35);
+  background: #00766c url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-fill.png") center / 100% 100% no-repeat;
+  box-shadow: 0 8px 0 -1px #00382f, 0 26px 40px -14px rgba(0, 0, 0, .85);
+  transition: transform .1s ease, box-shadow .1s ease, filter .2s ease;
+}
+.lobby-play:hover { filter: brightness(1.12) saturate(1.05); }
+.lobby-play:active {
+  transform: translateY(6px);
+  box-shadow: 0 2px 0 -1px #00382f, 0 12px 20px -12px rgba(0, 0, 0, .85);
+}
+
+/* ---------- tu Axie, en la esquina de enfrente ---------- */
+
+/* La otra puerta de la portada. Va abajo a la izquierda, en la esquina opuesta a la de
+   jugar: son dos cosas distintas —una empieza una partida y la otra no—, y separarlas
+   a lo ancho de la pantalla dice eso sin una sola palabra.
+
+   Solo existe en la tapa. Adentro del menú y de la elección no hay nada que elegir
+   desde acá, y un botón que sigue puesto en una pantalla que no es la suya es un botón
+   que alguien va a apretar por error. */
+.lobby-aside {
+  position: absolute; z-index: 3;
+  left: clamp(18px, 4vw, 44px); bottom: clamp(18px, 4vh, 44px);
+  display: flex;
+}
+.lobby:not([data-view="front"]) .lobby-aside { display: none; }
+
+/* Es el mismo botón que el de jugar con menos cuerpo: la misma cinta del kit, el mismo
+   espesor y el mismo hundirse al apretarlo, pero en la azul —la de todos los días— y no
+   en la verde. Jugar es lo que hay que apretar; esto es lo que se puede apretar antes.
+   Si los dos gritaran igual, la portada no tendría una respuesta obvia. */
+.lobby-play--alt {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  font-size: clamp(15px, 1.9vw, 24px);
+  padding: 14px clamp(18px, 3vw, 36px);
+  background-color: #00527c;
+  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_blue.png");
+  box-shadow: 0 8px 0 -1px #002338, 0 26px 40px -14px rgba(0, 0, 0, .85);
+}
+.lobby-play--alt:active {
+  box-shadow: 0 2px 0 -1px #002338, 0 12px 20px -12px rgba(0, 0, 0, .85);
+}
+.loadout-cta { line-height: 1.05; }
+/* Con cuál estás jugando ahora. Sin esto la elección se hunde apenas se cierra la
+   pantalla, y no queda dónde ver qué bicho tenés puesto hasta que empieza la partida.
+   Va en la letra del texto y no en la del cartel: es un dato, no un grito. */
+.loadout-now {
+  display: flex; align-items: center; gap: 6px;
+  font: 600 13px/1 var(--display); letter-spacing: 0; text-transform: none;
+  color: rgba(255, 255, 255, .82);
+}
+.loadout-now .crest { width: 17px; height: 17px; vertical-align: 0; }
+
+/* ---------- la letra chica, abajo en el medio ---------- */
+
+/* Las dos puertas son las dos esquinas; esto no es una tercera. "Cómo se juega" se
+   aprieta una vez —la primera— y después nunca más, así que va chico, apagado, y en el
+   único lugar que no es una esquina: abajo en el medio, más abajo que las dos.
+
+   Estaba apilado debajo del botón de jugar, y ahí hacía dos cosas mal: se leía como
+   media puerta, y **levantaba a jugar del piso** lo que mide un botón — las dos
+   esquinas de abajo dejaban de estar a la misma altura.
+
+   Solo existe en la tapa, igual que "Elegí tu Axie": adentro del menú y de la elección
+   las reglas se abren desde la barra. */
+.lobby-foot {
+  position: absolute; z-index: 3;
+  left: 50%; transform: translateX(-50%);
+  bottom: clamp(10px, 1.8vh, 18px);
+  display: flex;
+}
+.lobby:not([data-view="front"]) .lobby-foot { display: none; }
+/* Con cuerpo por lo mismo que los de la barra: un fantasma sobre un terreno pintado no
+   se lee como algo que se pueda apretar. Apenas el suficiente, que es la diferencia
+   entre esto y una cinta del kit. */
+.lobby-help {
+  font-size: 12px; padding: 6px 15px; border-radius: 999px;
+  background: rgba(11, 16, 36, .5); border-color: rgba(255, 255, 255, .1);
+  color: rgba(238, 241, 255, .7);
+}
+.lobby-help:hover:not(:disabled) { background: rgba(26, 34, 68, .82); color: var(--ink); }
+
+/* El menú: contra quién. Se abre en el mismo lugar donde estaba el botón —sale de
+   ahí, no de un costado— y por eso entra deslizándose desde abajo. */
+/* Opaco y sin `backdrop-filter`, por dos motivos que se ven los dos a la vez.
+
+   Uno: los seis fondos son JPEG de 1400×787 estirados a pantalla completa, así que
+   abajo de este panel hay una imagen ampliada al doble y con sus cuadraditos de
+   compresión. Un panel traslúcido no la disimula: la muestra.
+
+   Dos: `backdrop-filter` manda al elemento a una capa compuesta aparte, y en una
+   pantalla Retina esa capa se rasteriza a menos resolución que el resto de la página
+   — el texto del menú sale con los bordes escalonados—. Lo mismo hacía la entrada
+   cuando escalaba: un `scale()` con `fill: both` deja el panel dibujado al tamaño
+   chico y después estirado. Ahora entra solo desplazándose, que no rasteriza nada. */
+.lobby-menu {
+  width: min(420px, 88vw); padding: 16px;
+  border-radius: 18px; border: 1px solid var(--line);
+  background: rgba(10, 14, 28, .96);
+  box-shadow: 0 26px 60px -18px rgba(0, 0, 0, .9);
+  display: flex; flex-direction: column; gap: 10px;
+  animation: lobby-menu-in .22s cubic-bezier(.2, .9, .3, 1) backwards;
+}
+@keyframes lobby-menu-in {
+  from { opacity: 0; translate: 0 16px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+.lobby-menu-label {
+  margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--ink-faint);
+}
+.lobby-modes { display: flex; flex-direction: column; gap: 8px; }
+.lobby-mode { display: flex; flex-direction: column; gap: 6px; }
+/* Cada opción es un cartel de madera del kit —el mismo con el que el Origins rotula el
+   nombre del que juega—, y no una cinta como los botones: elegir contra quién no es
+   hacer algo, es poner un nombre en un lugar. La diferencia de material dice eso solo,
+   y de paso deja que la única cinta verde de esta pantalla siga siendo la de jugar. */
+.lobby-pick {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; padding: 12px 16px; text-align: left;
+  border-radius: 12px; border: 0;
+  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+  font: inherit; cursor: pointer;
+  transition: filter .15s ease, transform .1s ease;
+}
+.lobby-pick b { font-size: 16px; font-weight: 700; }
+.lobby-pick span { font-size: 12px; color: rgba(255, 244, 235, .85); }
+.lobby-pick:hover:not(:disabled) { filter: brightness(1.14) saturate(1.05); }
+.lobby-pick:active:not(:disabled) { transform: translateY(2px); }
+.lobby-pick:disabled { opacity: .45; cursor: not-allowed; }
+/* La dificultad cuelga de la opción con máquina adentro, corrida hacia adentro para
+   que se lea como parte de esa opción y no como una pregunta suelta. */
+.lobby-mode .select { padding-left: 14px; }
+#lobby-back { align-self: flex-start; }
+
+/* ---------- la elección de Axie ---------- */
+
+/* No es un cartel más apoyado en una esquina: es una pantalla, y ocupa la escena
+   entera. Elegir un Axie es elegir el mazo con el que vas a jugar —la clase es el
+   mazo—, así que la pregunta se hace en grande: el bicho de un lado, sus diez cartas
+   del otro, y la cuenta de cada símbolo debajo.
+
+   Cuatro zonas y una grilla: la barra de arriba cruza las dos columnas, el Axie se
+   queda con la columna izquierda entera y a la derecha van las cartas arriba y el
+   botón abajo. */
+.lobby-choose {
+  position: absolute; inset: 0; z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(210px, 30%) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "bar   bar"
+    "stage sheet"
+    "stage actions";
+  gap: clamp(8px, 1.6vh, 20px) clamp(12px, 2.4vw, 34px);
+  padding: clamp(10px, 2.2vh, 26px) clamp(14px, 3vw, 44px);
+  /* La escena sigue atrás pero deja de competir: es el escenario de la elección, no
+     lo que hay que mirar. */
+  background: rgba(6, 9, 20, .62);
+  animation: lobby-menu-in .22s cubic-bezier(.2, .9, .3, 1) backwards;
+}
+/* Con la elección puesta, la portada se guarda entera: el logo grande y los que se
+   pasean sobrarían al lado de un Axie de medio metro. */
+.lobby[data-view="choose"] .lobby-head,
+.lobby[data-view="choose"] .lobby-cast { display: none; }
+
+.choose-bar { grid-area: bar; display: flex; align-items: center; gap: clamp(10px, 2vw, 24px); }
+/* Igual que en la barra de la mesa: un fantasma sobre una ilustración no se lee como
+   algo que se pueda apretar, así que acá arriba lleva cuerpo. */
+.choose-bar .btn-ghost { background: rgba(11, 16, 36, .55); border-color: var(--line); }
+.choose-bar .btn-ghost:hover:not(:disabled) { background: rgba(26, 34, 68, .85); }
+.choose-step {
+  margin: 0; font: 700 clamp(15px, 2vw, 24px)/1.1 var(--display);
+  text-transform: uppercase; letter-spacing: .08em;
+  text-shadow: 0 2px 10px rgba(3, 5, 14, .9);
+}
+
+/* ---- el Axie, con una flecha de cada lado ---- */
+
+.choose-stage {
+  grid-area: stage; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: clamp(6px, 1.4vh, 16px);
+}
+.choose-hero { display: flex; align-items: center; justify-content: center; width: 100%; gap: 4px; }
+/* El dibujo manda el tamaño y las flechas se acomodan a los costados. La sombra va
+   como `drop-shadow` y no como `box-shadow` porque sigue el contorno del bicho. */
+.choose-art {
+  flex: 0 1 clamp(130px, 19vw, 280px); min-width: 0;
+  filter: drop-shadow(0 14px 26px rgba(3, 5, 14, .8));
+}
+.choose-arrow {
+  flex: 0 0 auto; width: 40px; height: 40px; padding: 0;
+  display: grid; place-items: center;
+  font: 400 30px/1 var(--display); color: var(--ink-dim);
+  background: rgba(11, 16, 36, .6); border: 1px solid var(--line); border-radius: 50%;
+  cursor: pointer; transition: background .15s ease, color .15s ease, transform .1s ease;
+}
+.choose-arrow:hover { background: rgba(26, 34, 68, .9); color: var(--ink); }
+.choose-arrow:active { transform: scale(.92); }
+
+.choose-id { display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+.choose-name {
+  font: 800 clamp(20px, 2.6vw, 32px)/1 var(--display);
+  text-shadow: 0 2px 12px rgba(3, 5, 14, .9);
+}
+/* La clase, con su crest y su color: es el símbolo con el que puntúa, o sea el mazo. */
+.choose-class {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px 4px 6px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  background: color-mix(in srgb, var(--c) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 60%, transparent);
+}
+.choose-class .crest { width: 20px; height: 20px; }
+.choose-of { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+
+/* ---- el mazo inicial ---- */
+
+/* El panel de las cartas. Opaco, porque abajo hay un JPEG estirado a pantalla completa
+   y una carta chica sobre eso no se lee (es el mismo motivo del menú, ver arriba). */
+.choose-sheet {
+  grid-area: sheet; min-height: 0; overflow-y: auto;
+  padding: clamp(10px, 1.6vh, 18px) clamp(12px, 1.6vw, 20px);
+  display: flex; flex-direction: column; gap: 8px;
+  border-radius: 18px; border: 1px solid var(--line);
+  background: rgba(10, 14, 28, .94);
+  box-shadow: 0 26px 60px -18px rgba(0, 0, 0, .9);
+}
+.choose-label {
+  margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--ink-faint);
+}
+/* Las diez cartas, en el mismo formato que en la mesa. `--carta` es la medida de la
+   que cuelga todo lo de adentro —el símbolo es un porcentaje del ancho útil—, así que
+   achicarla acá achica la carta entera sin tocar nada más. */
+.choose-deck {
+  --carta: clamp(46px, 5.4vw, 78px);
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  margin-bottom: 4px;
+}
+/* En la mesa la carta reserva un hueco arriba para su número de orden. Acá no hay
+   orden: se ve el mazo entero de una, así que el hueco sobra.
+
+   Y los símbolos van centrados a lo alto: el mazo tiene nueve cartas de dos símbolos y
+   una de uno solo, todas estiradas al mismo alto por la fila. Sin esto, la carta suelta
+   deja su símbolo arriba y un hueco abajo, y se lee como una carta a la que le falta
+   algo en vez de como una carta de un símbolo. */
+.card--deck {
+  padding-top: calc(var(--carta) * .07); justify-content: center;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+/* No se toca —el mazo se mira— pero se levanta bajo el puntero: es lo que dice que la
+   carta que estás mirando es esa y no la de al lado, con cuarenta apretadas en la
+   misma fila. Solo en el panel del mazo: en la portada estas mismas cartas van con su
+   botón de mejora debajo, y ahí lo que se aprieta es el botón, no la carta. */
+.sheet-row .card--deck:hover {
+  transform: translateY(-4px);
+  border-color: #59668f; box-shadow: 0 12px 24px -14px rgba(0, 0, 0, .95);
+}
+
+/* ---- el (+) de cada carta: la mejora del Axie ---- */
+
+/* La carta y su botón, uno debajo del otro. El ancho lo sigue poniendo la carta: el
+   botón se acomoda a él, no al revés. */
+.deck-slot { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+/* La fila estira todas las columnas al alto de la más alta —la carta de tres símbolos,
+   que es la mejorada—, y la carta se estira con su columna. Sin esto, cada carta mide
+   lo suyo y los botones quedan a diez alturas distintas: la fila se lee como diez cosas
+   sueltas en vez de como un mazo. */
+.deck-slot > .card { flex: 1 0 auto; }
+.card-boost { display: flex; gap: 4px; justify-content: center; }
+
+/* Chico y quieto: son diez botones al lado de diez cartas, y lo que hay que mirar en
+   esta pantalla son las cartas. El de la carta ya mejorada es el único que lleva
+   color, porque es el único que dice algo cuando no lo estás tocando. */
+.boost-btn {
+  display: flex; align-items: center; justify-content: center; gap: 2px;
+  min-width: 26px; height: 22px; padding: 0 5px;
+  background: rgba(20, 26, 52, .9); border: 1px solid var(--line); border-radius: 7px;
+  color: var(--ink-dim); cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, transform .1s ease;
+}
+.boost-btn:hover { background: rgba(38, 48, 92, .95); border-color: #4b578f; color: var(--ink); }
+.boost-btn:active { transform: scale(.92); }
+.boost-btn .crest { width: 15px; height: 15px; }
+.boost-sign { font: 700 14px/1 var(--mono); }
+
+/* Puesta. El aro es del color del símbolo que se sumó, así que la carta mejorada se
+   reconoce de lejos y sin leer nada. */
+.deck-slot[data-boosted="true"] .card { border-color: #59d09a; }
+.boost-btn.is-on {
+  background: rgba(48, 128, 96, .35); border-color: #59d09a; color: var(--ink);
+}
+.boost-btn.is-on:hover { background: rgba(180, 70, 70, .38); border-color: #e0736b; }
+
+/* La cuenta de cada símbolo, de mayor a menor. Es el número que dice para qué sirve un
+   Axie: los diez mazos tienen la misma forma y lo único que cambia es de qué color son
+   las repeticiones. */
+.choose-tally { display: flex; flex-wrap: wrap; gap: 6px; }
+.tally {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 10px 3px 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent);
+}
+.tally .crest { width: 19px; height: 19px; }
+.tally b { font-family: var(--mono); font-size: 13px; }
+
+/* ---- el botón ---- */
+
+.choose-actions {
+  grid-area: actions;
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: clamp(10px, 1.6vw, 20px);
+}
+.choose-note {
+  margin: 0; text-align: right; font-size: 13px; color: var(--ink-dim);
+  text-shadow: 0 2px 10px rgba(3, 5, 14, .9);
+}
+.choose-note b { color: var(--ink); }
+/* El mismo botón grande de la portada, un punto más chico: es el que cierra la
+   pregunta, y tiene que verse desde la puerta igual que el de "Jugar". */
+.choose-go {
+  font-size: clamp(17px, 2.1vw, 28px);
+  padding: 13px clamp(22px, 3.4vw, 46px);
+}
+
+/* La portada en una ventana alta: la escena, un poco más arriba.
+
+   El foco de la ilustración —el agua, las hojas, la línea por la que caminan— quedaba
+   apretado contra el borde de abajo: el horizonte al 70% de la pantalla y los Axies
+   paseándose entre el 72% y el 85%, o sea encima de los botones. Arriba, en cambio,
+   media pantalla de cielo.
+
+   Lo mueve un solo número. `--suelo` es cuánto terreno queda por debajo del horizonte,
+   y la franja por la que se pasean cuelga de él: pasarlo de 32vh a 44vh baja el
+   horizonte al 56% de la pantalla y sube a los Axies al 59%–78%.
+
+   De yapa el dibujo se dibuja **más chico**, porque queda menos cielo que llenar: en
+   una ventana de 725×1014 pasa de 1,40 a 1,12 veces el ancho de la pantalla, o sea la
+   mitad de su tamaño natural. Más arriba y más nítido, sin pagar nada.
+
+   Lo que **no** se hace es agrandar el dibujo para empujar el relleno de `cuadrar.py`
+   por arriba del borde. Se probó: pide 2,7 veces el ancho de la ventana, que son 1,23
+   veces el tamaño natural del archivo, y ahí el terreno se ve pixelado. El tope del
+   proyecto es 1,3 y la razón de haber extendido los fondos a 1:1 fue justamente dejar
+   de agrandar. Ese relleno se apaga contra el cielo en la juntura del propio dibujo
+   (ver `.arena-art i`), que no cuesta un píxel de nitidez y sirve igual en el arena.
+
+   Va en 5/4 y no en `orientation: portrait` porque el problema no es estar parado, es
+   ser alto: una ventana de 1200×1000 es apaisada y tenía el horizonte al 70% igual. De
+   5/4 para arriba el horizonte al 68% ya cae donde tiene que caer. */
+@media (max-aspect-ratio: 5/4) {
+  .lobby { --suelo: clamp(200px, 44vh, 460px); }
+}
+
+/* En una pantalla angosta —o en cualquiera parada— el título y el menú se apilan
+   contra los bordes: el paseo sigue estando, pero el que manda es el botón.
+
+   Va también por orientación y no solo por ancho porque una ventana parada de 800 de
+   ancho tiene el mismo problema que una de 600: las dos esquinas de abajo quedan lejos
+   una de otra y cada botón se encoge hasta su texto, así que el de tu Axie —que dice
+   tres palabras— salía del doble de largo que el de jugar. Repartido en dos mitades el
+   renglón de abajo es un par de puertas del mismo tamaño, que es lo que son. */
+@media (max-width: 720px), (orientation: portrait) {
+  /* Acá los botones ocupan todo el ancho de abajo, así que no hay columna que esquivar:
+     el paseo vuelve a ser de borde a borde, pero más arriba todavía. */
+  .lobby-cast { right: 5%; bottom: calc(var(--suelo) * .62); height: calc(var(--suelo) * .34); }
+  /* Las dos esquinas de abajo son las dos mitades del renglón de abajo: jugar a la
+     derecha y tu Axie a la izquierda, cada uno con la mitad del ancho. Siguen siendo
+     dos esquinas, que es lo que las separa. */
+  .lobby-panel { left: calc(50% + 5px); align-items: stretch; }
+  .lobby-aside { right: calc(50% + 5px); }
+  .lobby-front { align-items: stretch; }
+  .lobby-play { width: 100%; }
+  /* Con el menú abierto el otro botón no está —es de la tapa—, así que el panel se
+     queda con el ancho entero: las tres opciones son renglones de texto y no entran en
+     media pantalla. */
+  .lobby[data-view="menu"] .lobby-panel { left: clamp(18px, 4vw, 44px); }
+  .lobby-menu { width: auto; }
+  /* En media pantalla "Elegí tu Axie" no entra en un renglón: que corte, centrado. Y
+     que ocupe su mitad entera, como el de jugar la suya: si uno llena su lado y el
+     otro se encoge hasta el texto, el renglón de abajo queda desparejo. */
+  .lobby-play--alt { padding: 12px 14px; width: 100%; }
+  .loadout-cta { text-align: center; }
+  /* Las dos puertas ocupan las dos mitades del renglón de abajo, así que el medio ya no
+     está libre: el pie se queda con el renglón de abajo de todo y las dos suben lo que
+     mide. En el menú no sube nada —el pie no está— y el panel usa el alto entero. */
+  .lobby[data-view="front"] .lobby-panel,
+  .lobby-aside { bottom: calc(clamp(10px, 1.8vh, 18px) + 40px); }
+}
+
+/* La portada en vertical: las dos puertas, el mismo cajón.
+
+   En una ventana parada los dos botones se reparten el renglón de abajo, y ahí la
+   diferencia de tamaño que en apaisado ordena la portada —jugar grita, tu Axie
+   habla— dejaba de ordenar nada: dos cosas apoyadas en el mismo renglón y a la misma
+   altura se leen como un par, y un par desparejo se lee como un par mal armado.
+
+   Igualar la letra no alcanzaba: con la misma letra "Elegí tu Axie" son tres palabras
+   y "Jugar" es una, así que el cajón de la izquierda salía del doble de largo. Lo que
+   se iguala es **el cajón** —cada uno su mitad del renglón, los dos del mismo alto— y
+   lo que se acomoda adentro es la letra: el verde en grande, porque es lo que hay que
+   apretar, y el azul un punto más chico, que es todo lo que necesita para entrar en un
+   renglón sin empujar su lado. El que manda sigue siendo el verde; ahora lo dicen el
+   color y la letra, no el tamaño de la chapa.
+
+   Y el par sube del piso: apoyados contra el borde de abajo quedaban colgando de la
+   ventana. Levantados, el renglón de abajo tiene aire por debajo y "Cómo se juega"
+   —que no se mueve— queda en su propio renglón, más abajo y en el medio. */
+@media (orientation: portrait) {
+  .lobby-play, .lobby-play--alt {
+    font-size: clamp(20px, 5.4vw, 30px);
+    padding: 14px 10px;
+    min-height: clamp(92px, 22vw, 116px);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 7px;
+  }
+  /* La letra del azul, un punto más chica: es la que tiene que entrar en un renglón. */
+  .lobby-play--alt { font-size: clamp(15px, 3.4vw, 22px); }
+  .loadout-cta { text-align: center; }
+  /* Un escalón más arriba que el pie, que se queda donde estaba. */
+  .lobby[data-view="front"] .lobby-panel,
+  .lobby-aside { bottom: calc(clamp(10px, 1.8vh, 18px) + 62px); }
+}
+
+/* La elección en una pantalla angosta: las dos columnas no entran —el Axie grande al
+   lado de diez cartas necesita ancho—, así que se apila y se desplaza. El Axie arriba,
+   las cartas abajo, y el botón al pie de todo. */
+@media (max-width: 860px) {
+  .lobby-choose {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas: "bar" "stage" "sheet" "actions";
+  }
+  .choose-art { flex: 0 1 clamp(120px, 34vw, 200px); }
+  .choose-actions { justify-content: space-between; }
+  .choose-go { width: auto; }
 }

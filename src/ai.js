@@ -58,8 +58,9 @@ const STYLE = {
  * @param {object} chain      cadena actual de la CPU
  * @param {Array}  deck       cartas que todavía no se vieron
  * @param {object} opts
- * @param {number|null} opts.needs  puntaje mínimo que necesita para ganar el partido
- *                                  (solo en la última ronda jugando segunda)
+ * @param {number|null} opts.needs  puntaje de cadena que le alcanza para empatar en su
+ *                                  última chance (ver `cpuNeeds`); null el resto del
+ *                                  tiempo
  * @param {string} opts.difficulty
  */
 export function decideDraw(chain, deck, { needs = null, difficulty = 'normal' } = {}) {
@@ -67,8 +68,14 @@ export function decideDraw(chain, deck, { needs = null, difficulty = 'normal' } 
   const style = STYLE[difficulty] ?? STYLE.normal;
   const stand = scoreChain(chain).total;
 
-  // Si plantarse pierde el partido igual, no hay nada que conservar.
-  if (needs !== null && style.playsEndgame) return stand < needs;
+  // La última chance. Si con lo que ya tiene alcanza para empatar, se planta y lo
+  // asegura: robar una carta más no puede mejorar un empate y sí puede perderlo.
+  //
+  // Y si todavía no alcanza, sigue con su cabeza de siempre en vez de perseguir el
+  // número. Antes lo perseguía —robaba mientras la cadena estuviera por debajo—, y
+  // como el número suele ser la vida entera del rival, eso era robar hasta cortarse:
+  // el golpe final salía en 0 casi siempre. Juega su turno normal y pega lo que pueda.
+  if (needs !== null && style.playsEndgame && stand >= needs) return false;
 
   return drawEV(chain, deck, style.depth) > stand * style.margin;
 }
@@ -150,6 +157,15 @@ function bestCards(options, deck, n) {
  * veces la CPU elige cada poder —eso solo refleja estos pesos y nada más—, pero
  * conviene volver a correr el banco después de tocarlos. Por la misma razón, subir un
  * poder **baja** a los otros cinco: el rival también lo tiene.
+ *
+ * Y una advertencia de fecha: estos seis números salieron de un juego en el que la
+ * fuerza cobraba con la cadena rota, el veneno bajaba de a 2, la cáscara era un tercio
+ * del golpe y el caracol mordía un número fijo durante dos ataques. Cuatro reglas
+ * cambiaron, y la del caracol es la más grande: mordía la mitad del golpe con que se
+ * lo ponían, así que en manos del que venía pegando fuerte apagaba ataques enteros.
+ * Su 1.15 es de esa versión y casi seguro está alto para la de ahora. Siguen siendo la
+ * mejor estimación que hay, pero son de antes: hay que volver a correr el banco antes
+ * de tratarlos como medidos.
  */
 const POWER_WORTH = {
   poison: 1.7,

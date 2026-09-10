@@ -119,16 +119,20 @@ function fakeContext() {
   // La cadena cortada no sale al tono del archivo: cae, para despegarse de los golpes
   // de clase. `lead` lo tiene en cuenta sin que nadie se lo pida — si no, `playHit`
   // sincronizaría el impacto con un pico que ya no llega cuando llegaba.
+  //
+  // Y sale entera: es corta de fábrica y lo que cuenta es el final —la nota
+  // cayéndose—, así que cortarla sería quedarse con la mitad de arriba.
   audio.sfx('bust');
   for (let i = 0; i < 5; i++) await idle();
   const roto = started[started.length - 1];
   assert.ok(roto.rate < 1, 'la cadena cortada suena más grave que el archivo');
-  assert.ok(roto.duration < SOUNDS.bust.secs * 0.6, 'y es un corte, no un efecto largo');
+  assert.equal(roto.duration, SOUNDS.bust.secs, 'y suena entera, no cortada');
+  assert.ok(SOUNDS.bust.secs < 1, 'que para eso el archivo ya es corto');
   assert.equal(audio.lead('bust'), (SOUNDS.bust.lead * 1000) / roto.rate,
     'y el adelanto se estira con ella');
 
-  // La carta que entra al mazo tampoco se deja terminar: es un clic. Dura casi lo
-  // mismo que el corte de cadena en el archivo, y en el juego una cuarta parte.
+  // La carta que entra al mazo sí se corta: es un clic, y del archivo se usa la
+  // cuarta parte.
   audio.sfx('take');
   for (let i = 0; i < 5; i++) await idle();
   const carta = started[started.length - 1];
@@ -146,6 +150,31 @@ function fakeContext() {
   await idle();
   assert.equal(started.length, antes, 'apagado no se larga ni una fuente');
   audio.setSfx(true);
+
+  // La perilla es un multiplicador sobre la mezcla del juego, no un volumen absoluto:
+  // al 100% suena como está medido, que es como tiene que sonar.
+  assert.equal(audio.sfxVol, 1, 'de fábrica, la perilla arriba de todo');
+  audio.setSfxLevel(0.5);
+  assert.equal(sfxBus.gain.value, 0.75 * 0.5, 'la perilla multiplica la mezcla');
+  assert.match(store.get('axie-chance:audio'), /"sfxVol":0\.5/, 'y queda guardada');
+
+  // Apagar y volver a prender devuelve el volumen que había elegido, no el de fábrica:
+  // el interruptor y la perilla contestan dos preguntas distintas.
+  audio.setSfx(false);
+  assert.equal(sfxBus.gain.value, 0, 'apagado es silencio, sin importar la perilla');
+  audio.setSfx(true);
+  assert.equal(sfxBus.gain.value, 0.75 * 0.5, 'y al volver, el volumen que había');
+  audio.setSfxLevel(1);
+
+  // La de la música mueve su propio bus, que es lo que deja bajarla con el tema ya
+  // sonando: las vueltas programadas cuelgan de él.
+  const musicBus = gains[2];
+  assert.equal(musicBus.gain.value, 0.35);
+  audio.setMusicLevel(0.2);
+  assert.ok(Math.abs(musicBus.gain.value - 0.35 * 0.2) < 1e-9, 'la música también');
+  // Fuera de rango se recorta en vez de reventar el mezclador.
+  audio.setMusicLevel(4);
+  assert.equal(musicBus.gain.value, 0.35, 'un volumen imposible se recorta al máximo');
 
   // La música: pedir lo mismo dos veces no la reinicia.
   const bajados = pedidos.length;
@@ -210,7 +239,7 @@ async function listening(seed = 3) {
   game.subscribe((state) => cues.watch(state));
   game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
   await idle();
-  assert.equal(game.state.turn, 'human');
+  assert.equal(game.state.turn, 'p1');
   return { game, audio, cues, heard: audio.heard };
 }
 
@@ -228,8 +257,8 @@ async function listening(seed = 3) {
 {
   const { game, heard } = await listening();
   // Un mazo que no puede cortar la cadena: así las dos cartas salen sí o sí.
-  game.state.chains.human = chainOf(card(['aquatic', 'bird']));
-  game.state.decks.human = [card(['aquatic', 'plant']), card(['aquatic', 'beast'])];
+  game.state.chains.p1 = chainOf(card(['aquatic', 'bird']));
+  game.state.decks.p1 = [card(['aquatic', 'plant']), card(['aquatic', 'beast'])];
   heard.length = 0;
 
   await game.hit();
@@ -243,13 +272,13 @@ async function listening(seed = 3) {
 // de desarme: es lo contrario del tic que venía subiendo, y llega sin esperar nada.
 {
   const { game, heard } = await listening();
-  game.state.chains.human = chainOf(card(['aquatic', 'bird']));
-  game.state.decks.human = [card(['plant', 'beast'])]; // no comparte nada: corta seguro
+  game.state.chains.p1 = chainOf(card(['aquatic', 'bird']));
+  game.state.decks.p1 = [card(['plant', 'beast'])]; // no comparte nada: corta seguro
   game.refresh();
   heard.length = 0;
 
   await game.hit();
-  assert.ok(game.state.chains.human.busted, 'la cadena se cortó');
+  assert.ok(game.state.chains.p1.busted, 'la cadena se cortó');
   const golpes = heard.filter((h) => h.key);
   assert.equal(golpes[0].key, 'bust', 'lo primero que se oye es el corte');
   assert.equal(golpes[0].delay, 0, 'y sin esperar al efecto');
@@ -261,7 +290,7 @@ async function listening(seed = 3) {
 // El ataque: los poderes esperan a que el golpe llegue, y salen de a uno.
 {
   const { game, heard } = await listening();
-  game.state.chains.human = chainOf(
+  game.state.chains.p1 = chainOf(
     card(['aquatic', 'bird']),
     card(['aquatic', 'plant'], 'strength'),
     card(['aquatic', 'reptile'], 'poison'),
@@ -297,9 +326,9 @@ async function listening(seed = 3) {
   const { game, heard } = await listening();
   // Al jugador le queda el 20% de la vida, y su golpe deja sin vida a la CPU: con la
   // partida resuelta no hay reparto, la CPU devuelve el golpe y ahí cierra.
-  game.state.totals.cpu = TARGET * 0.8;
-  game.state.totals.human = TARGET - 1;
-  game.state.chains.human = chainOf(card(['aquatic', 'bird']));
+  game.state.totals.p2 = TARGET * 0.8;
+  game.state.totals.p1 = TARGET - 1;
+  game.state.chains.p1 = chainOf(card(['aquatic', 'bird']));
   await game.stand();
   assert.ok(heard.some((h) => h.music === 'boss'), 'con alguien en las últimas cambia el tema');
 
@@ -308,7 +337,7 @@ async function listening(seed = 3) {
   assert.equal(heard[heard.length - 1].music, null, 'la música se apaga para el remate');
   const remate = heard.find((h) => h.key === 'win' || h.key === 'lose');
   assert.ok(remate, 'y suena el resultado');
-  assert.equal(remate.key, hpOf(game.state, 'human') > 0 ? 'win' : 'lose');
+  assert.equal(remate.key, hpOf(game.state, 'p1') > 0 ? 'win' : 'lose');
   assert.ok(remate.delay > 0, 'después del último golpe, no encima');
 }
 

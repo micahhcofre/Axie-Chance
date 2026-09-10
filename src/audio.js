@@ -40,20 +40,25 @@ const MIX = {
  * Sonidos que no se dejan terminar, en segundos de archivo.
  *
  * El tic de robar dura 1.8 s y las cartas salen cada 700 ms: se queda con el arranque,
- * que es lo que se oye como golpecito, y se va. La cadena cortada es lo mismo por otro
- * motivo: es un corte, y un corte que dura un segundo y medio deja de ser un corte. Se
- * queda con el golpe —que llega a los 165 ms— y con un pedazo de su cola. Y la carta
- * que entra al mazo es un clic: 0,25 s, lo que tarda una carta en apoyarse.
+ * que es lo que se oye como golpecito, y se va. Y la carta que entra al mazo es un
+ * clic: 0,25 s, lo que tarda una carta en apoyarse.
+ *
+ * La cadena cortada estuvo acá mientras fue un impacto —había que sacarle la cola para
+ * que un corte durara lo que dura un corte—. Ya no lo es: `doubt` son 0,75 s enteros y
+ * lo que cuenta es el final, la nota cayéndose. Cortada a la mitad se queda con la
+ * pregunta y se pierde la respuesta.
  */
-const CUT = { draw: 0.5, bust: 0.45, take: 0.25 };
+const CUT = { draw: 0.5, take: 0.25 };
 
 /**
  * Sonidos que no salen al tono del archivo.
  *
  * La cadena cortada llega después de una seguidilla de tics que suben, así que lo que
- * tiene que hacer es caer. Bajarla un 10% le agrega peso sin estirarla —de eso se
- * encarga `CUT`—. Va acá y no en quien la larga porque es parte de la elección del
- * sonido: `lead` se estira con ella y lo que se sincronice con su pico sigue dando.
+ * tiene que hacer es caer — y el archivo ya cae solo, tres semitonos entre que empieza
+ * y se apaga (ver `bust` en `scripts/sfx.mjs`). Bajarlo un 10% más lo deja empezando
+ * abajo del último tic que sonó, que es de donde tiene que arrancar la caída, y lo
+ * estira a 0,83 s. Va acá y no en quien lo larga porque es parte de la elección del
+ * sonido: `lead` se estira con él y lo que se sincronice con su pico sigue dando.
  */
 const RATE = { bust: 0.9 };
 
@@ -69,13 +74,25 @@ const overlapOf = (clip) => Math.max(clip.tail, 2);
 /** Lo que el jugador dejó elegido la última vez. */
 const PREFS = 'axie-chance:audio';
 
+/**
+ * Una perilla de volumen: de 0 a 1, y el valor de fábrica si lo guardado es basura.
+ * Es un multiplicador sobre la mezcla del juego (`SFX_BUS`, `MUSIC_BUS`), no un
+ * volumen absoluto: al 100% suena como está medido, que es como tiene que sonar.
+ */
+const level = (n) => (typeof n === 'number' && n >= 0 && n <= 1 ? n : 1);
+
 function loadPrefs() {
   try {
     const saved = JSON.parse(globalThis.localStorage?.getItem(PREFS) ?? '{}');
-    return { sfx: saved.sfx !== false, music: saved.music === true };
+    return {
+      sfx: saved.sfx !== false,
+      music: saved.music === true,
+      sfxVol: level(saved.sfxVol),
+      musicVol: level(saved.musicVol),
+    };
   } catch {
     // Sin localStorage —o con basura adentro— se juega con los valores de fábrica.
-    return { sfx: true, music: false };
+    return { sfx: true, music: false, sfxVol: 1, musicVol: 1 };
   }
 }
 
@@ -94,6 +111,9 @@ function savePrefs(prefs) {
  */
 export function createAudio() {
   const prefs = loadPrefs();
+  /** El volumen de cada bus: la mezcla del juego por la perilla del jugador. */
+  const sfxGain = () => (prefs.sfx ? SFX_BUS * prefs.sfxVol : 0);
+  const musicGain = () => MUSIC_BUS * prefs.musicVol;
   const Ctx = globalThis.AudioContext ?? globalThis.webkitAudioContext;
   /** Qué tema se querría estar escuchando, aunque todavía no haya con qué. */
   let wanted = null;
@@ -198,6 +218,13 @@ export function createAudio() {
     get musicOn() {
       return prefs.music;
     },
+    /** Dónde quedaron las dos perillas, de 0 a 1. Las pinta el menú (ver `ui.js`). */
+    get sfxVol() {
+      return prefs.sfxVol;
+    },
+    get musicVol() {
+      return prefs.musicVol;
+    },
     /** Si ya hay con qué sonar. Los tests y los navegadores sin Web Audio dan `false`. */
     get live() {
       return Boolean(ctx);
@@ -221,10 +248,10 @@ export function createAudio() {
         master.gain.value = MASTER;
         master.connect(ctx.destination);
         sfxBus = ctx.createGain();
-        sfxBus.gain.value = prefs.sfx ? SFX_BUS : 0;
+        sfxBus.gain.value = sfxGain();
         sfxBus.connect(master);
         musicBus = ctx.createGain();
-        musicBus.gain.value = MUSIC_BUS;
+        musicBus.gain.value = musicGain();
         musicBus.connect(master);
         if (prefs.music && wanted) startMusic(wanted);
       }
@@ -292,7 +319,20 @@ export function createAudio() {
     setSfx(on) {
       prefs.sfx = on;
       savePrefs(prefs);
-      if (sfxBus) ramp(sfxBus.gain, on ? SFX_BUS : 0, 0.15);
+      if (sfxBus) ramp(sfxBus.gain, sfxGain(), 0.15);
+    },
+
+    /**
+     * La perilla de los efectos, de 0 a 1. Va aparte del interruptor: bajar el volumen
+     * a cero y apagarlos no es lo mismo —el que lo bajó lo va a volver a subir, y el
+     * que lo apagó dejó dicho que no quiere efectos—, y el interruptor tiene que poder
+     * devolver el sonido al volumen que el jugador había elegido.
+     */
+    setSfxLevel(value) {
+      prefs.sfxVol = level(Math.min(1, Math.max(0, value)));
+      savePrefs(prefs);
+      // Corto: la perilla se arrastra, y un fundido largo va siempre atrás del dedo.
+      if (sfxBus) ramp(sfxBus.gain, sfxGain(), 0.05);
     },
 
     setMusic(on) {
@@ -301,6 +341,17 @@ export function createAudio() {
       if (!ctx) return;
       if (on && wanted) startMusic(wanted);
       else if (!on) fadeOut(0.4);
+    },
+
+    /**
+     * La perilla de la música. A diferencia de la de los efectos, esta sí se puede
+     * mover con el tema sonando y se oye en el acto: el bus es uno solo y las vueltas
+     * que ya están programadas cuelgan de él.
+     */
+    setMusicLevel(value) {
+      prefs.musicVol = level(Math.min(1, Math.max(0, value)));
+      savePrefs(prefs);
+      if (musicBus) ramp(musicBus.gain, musicGain(), 0.05);
     },
 
     /**

@@ -13,7 +13,7 @@
 // Lo único que no se deduce acá es el golpe, porque no se oye cuando el estado cambia
 // sino cuando el efecto llega —hasta 700 ms después—: eso lo larga `playHit`, que es
 // quien sabe de ese instante.
-import { PLAYERS, TARGET, TUNING, hpOf, ownedBy } from './game.js';
+import { PLAYERS, TARGET, TUNING, hpOf, matchResult, ownedBy } from './game.js';
 import { hitDelay } from './vfx.js';
 
 /**
@@ -62,15 +62,19 @@ const snapshot = (state) => ({
   round: state.round,
   phase: state.phase,
   hitId: state.hitId,
-  human: snapPlayer(state, 'human'),
-  cpu: snapPlayer(state, 'cpu'),
+  p1: snapPlayer(state, 'p1'),
+  p2: snapPlayer(state, 'p2'),
 });
 
 /**
  * El que escucha la partida. `watch` se llama en cada repintado con el estado nuevo;
  * la primera vez —y cada vez que arranca una partida— solo toma la foto.
+ *
+ * `seat` es el asiento de esta pantalla, que hace falta para una sola cosa: el remate
+ * del final. En una sala la misma partida suena en dos aparatos y el que ganó no es el
+ * mismo para los dos. Sin asiento —contra la CPU— el que escucha es `p1`.
  */
-export function createCues(audio) {
+export function createCues(audio, { seat = null } = {}) {
   let last = null;
 
   function watch(state) {
@@ -110,7 +114,7 @@ export function createCues(audio) {
       }
 
       // El huevo que se gasta del todo devuelve la cáscara, justo después del golpe.
-      if (was.egg > 0 && now.egg === 0 && TUNING.eggThorns > 0) {
+      if (was.egg > 0 && now.egg === 0 && TUNING.eggBreak > 0) {
         audio.sfx('thorns', { delay: impact + 200 });
       }
 
@@ -138,7 +142,15 @@ export function createCues(audio) {
 
     if (state.phase === 'matchEnd' && before.phase !== 'matchEnd') {
       // El último golpe todavía está en el aire: el resultado entra después de él.
-      audio.sfx(hpOf(state, 'human') > 0 ? 'win' : 'lose', { delay: 900 });
+      //
+      // El remate es del que está escuchando: gana o pierde. En una sala eso es distinto
+      // en cada aparato —el mismo estado, dos remates opuestos—, y por eso hace falta
+      // saber de quién es esta pantalla. El doble KO no es de nadie: suena el otro.
+      //
+      // La partida anulada no tiene remate: no se ganó ni se perdió nada, y el de
+      // perder sería decirle al que se quedó que perdió él.
+      const result = matchResult(state);
+      if (result !== 'void') audio.sfx(result === (seat ?? 'p1') ? 'win' : 'lose', { delay: 900 });
     }
 
     music(state);

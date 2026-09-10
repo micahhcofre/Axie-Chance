@@ -1,11 +1,23 @@
 // Una "cadena" es la tirada de un jugador dentro de una ronda.
 //
 // Reglas:
-//  - La primera carta abre una racha por cada símbolo que tiene.
+//  - La primera carta abre una racha por cada símbolo distinto que tiene.
 //  - Cada carta siguiente debe compartir al menos un símbolo todavía vivo.
 //    Si no comparte ninguno, se corta todo: la ronda vale 0.
 //  - Las rachas que la carta nueva no contiene mueren, pero conservan su largo.
 //  - Puntos = suma de (largo de racha)^2. Solo puntúan los símbolos de la primera carta.
+//  - Una carta cuenta **cada vez** que trae el símbolo: la mejorada que lo lleva dos
+//    veces adelanta su racha de a dos. Es lo único que hacen las mejoras del Axie
+//    (ver `boostOptions` en `data.js`), y por eso valen: la racha puntúa al cuadrado.
+//
+// De ahí que la racha lleve dos cuentas y no una. `length` es lo que puntúa —cuántas
+// veces salió el símbolo— y `cards` cuántas cartas la sostienen, que es lo que la mesa
+// necesita para saber hasta qué carta pintar la racha. Con cartas mejoradas los dos
+// números dejan de ser el mismo.
+
+/** Cuántas veces trae `card` el símbolo `symbol`. Las mejoradas lo repiten. */
+export const timesIn = (card, symbol) =>
+  card.symbols.reduce((n, s) => n + (s === symbol ? 1 : 0), 0);
 
 export function emptyChain() {
   return { cards: [], runs: [], busted: false, bustCard: null };
@@ -28,7 +40,11 @@ export function playCard(chain, card) {
   if (chain.cards.length === 0) {
     return {
       cards: [card],
-      runs: card.symbols.map((symbol) => ({ symbol, length: 1, alive: true })),
+      // Una racha por símbolo distinto, ya arrancada en las veces que la carta lo trae:
+      // la mejorada abre en 2 y no en 1.
+      runs: [...new Set(card.symbols)].map((symbol) => ({
+        symbol, length: timesIn(card, symbol), cards: 1, alive: true,
+      })),
       busted: false,
       bustCard: null,
     };
@@ -43,7 +59,7 @@ export function playCard(chain, card) {
     runs: chain.runs.map((run) => {
       if (!run.alive) return run;
       return card.symbols.includes(run.symbol)
-        ? { ...run, length: run.length + 1 }
+        ? { ...run, length: run.length + timesIn(card, run.symbol), cards: run.cards + 1 }
         : { ...run, alive: false };
     }),
     busted: false,
@@ -62,9 +78,13 @@ export function scoreChain(chain) {
 }
 
 // ¿Esta carta forma parte de la racha del símbolo? Sirve para pintar la mesa.
+//
+// Va contra `cards` y no contra `length`: lo que se pregunta es "¿la racha llegó hasta
+// esta carta?", y con una carta mejorada de por medio el largo ya corre más rápido que
+// las cartas.
 export function isScoringCell(chain, cardIndex, symbol) {
   const run = chain.runs.find((r) => r.symbol === symbol);
-  return Boolean(run && run.length > cardIndex);
+  return Boolean(run && run.cards > cardIndex);
 }
 
 // Probabilidad de que la próxima carta del mazo continúe la cadena.

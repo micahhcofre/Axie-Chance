@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import {
-  buildPool, buildPersonalDeck, UNFAVORABLE, SYMBOL_IDS, POWER_IDS, POWERS, POWER_TRIOS,
+  buildPool, buildPersonalDeck, boostOptions, UNFAVORABLE, SYMBOL_IDS, POWER_IDS, POWERS,
+  POWER_TRIOS,
 } from '../src/data.js';
-import { emptyChain, playCard, scoreChain, activeSymbols, survivalOdds } from '../src/rules.js';
+import {
+  emptyChain, playCard, scoreChain, activeSymbols, isScoringCell, survivalOdds,
+} from '../src/rules.js';
 import { decideDraw } from '../src/ai.js';
 
 let uid = 0;
@@ -40,6 +43,59 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 {
   assert.equal(scoreChain(chainOf(card('bug'))).total, 1);
   assert.equal(scoreChain(chainOf(card('bug', 'plant', 'reptile'))).total, 3);
+}
+
+// --- el símbolo repetido: las mejoras del Axie -------------------------------
+// Una carta mejorada trae el mismo símbolo dos veces, y la racha cuenta cada aparición:
+// abre en 2 y adelanta de a 2. Es todo lo que hacen las mejoras, y por eso valen — la
+// racha puntúa al cuadrado.
+{
+  const sola = chainOf(card('beast', 'beast', 'bird'));
+  assert.equal(sola.runs.length, 2, 'un símbolo repetido no abre dos rachas');
+  const abre = Object.fromEntries(sola.runs.map((r) => [r.symbol, r]));
+  assert.equal(abre.beast.length, 2, 'la carta mejorada abre su racha en 2');
+  assert.equal(abre.bird.length, 1);
+  assert.equal(scoreChain(sola).total, 5, '2² + 1²');
+
+  const c = chainOf(card('beast', 'bird'), card('beast', 'beast', 'bird'));
+  const by = Object.fromEntries(scoreChain(c).breakdown.map((r) => [r.symbol, r]));
+  assert.equal(by.beast.length, 3, 'la mejorada adelanta la racha de a dos');
+  assert.equal(by.beast.cards, 2, 'pero son dos cartas, no tres');
+  assert.equal(by.bird.length, 2);
+  assert.equal(scoreChain(c).total, 13, '3² + 2²');
+  // Lo que pinta la mesa va por cartas y no por largo: si fuera por largo, la carta
+  // mejorada encendería una casilla de una carta que todavía no salió.
+  assert.equal(isScoringCell(c, 1, 'beast'), true);
+  assert.equal(isScoringCell(c, 2, 'beast'), false, 'la racha llega hasta la 2ª carta');
+
+  // Y la mejora no cambia con qué encadena: dos beast siguen siendo beast.
+  assert.equal(chainOf(card('plant'), card('beast', 'beast', 'bird')).busted, true);
+}
+
+// --- el mazo mejorado --------------------------------------------------------
+// `boosts` va de la clave de la carta sin mejorar al símbolo que se le suma. Solo se
+// aplica lo que la carta admite: el tuyo en las seis propias, uno de sus dos en las
+// cuatro no favorables.
+{
+  const mazo = (boosts) => buildPersonalDeck('beast', boosts).map((c) => c.symbols.join('+'));
+  assert.ok(mazo({ 'beast+bird': 'beast' }).includes('beast+beast+bird'), 'la propia admite el tuyo');
+  assert.ok(mazo({ 'aquatic+reptile': 'reptile' }).includes('aquatic+reptile+reptile'),
+    'la no favorable admite uno de sus dos');
+  assert.deepEqual(mazo({ 'beast+bird': 'plant' }), mazo({}),
+    'a la propia no se le puede sumar cualquier otro símbolo');
+  assert.deepEqual(mazo({ 'aquatic+reptile': 'beast' }), mazo({}),
+    'a la no favorable tampoco: solo los que ya tiene');
+  assert.deepEqual(mazo({ 'plant+bird': 'plant' }), mazo({}),
+    'una clave de otro mazo se ignora en silencio');
+  assert.deepEqual(boostOptions({ symbols: ['beast', 'bird'] }, 'beast'), ['beast']);
+  assert.deepEqual(boostOptions({ symbols: ['aquatic', 'reptile'] }, 'beast'), ['aquatic', 'reptile']);
+  assert.deepEqual(boostOptions({ symbols: ['beast'] }, 'beast'), ['beast'],
+    'la carta de un símbolo solo también se puede mejorar');
+  // Diecinueve símbolos en diez cartas; cada mejora suma uno.
+  const cuenta = (boosts) => buildPersonalDeck('beast', boosts)
+    .reduce((n, c) => n + c.symbols.length, 0);
+  assert.equal(cuenta({}), 19);
+  assert.equal(cuenta({ 'beast+bird': 'beast', 'aquatic+reptile': 'reptile' }), 21);
 }
 
 // --- inmutabilidad (la IA simula sobre copias) -------------------------------
@@ -156,8 +212,18 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   assert.equal(scoreChain(risky).total, 16);
   assert.equal(decideDraw(risky, deck, { difficulty: 'duro' }), false);
 
-  // `needs` manda por encima del EV: si plantarse pierde igual, roba.
-  assert.equal(decideDraw(risky, deck, { needs: 30, difficulty: 'duro' }), true);
+  // La última chance (`needs`): el empate es el único final que le queda.
+  const fresh = chainOf(card('bird', 'plant', 'bug'));
+  assert.equal(scoreChain(fresh).total, 3);
+  // Con lo que ya tiene alcanza: se planta y lo asegura, aunque el EV diga robar
+  // —robar no puede mejorar un empate y sí puede perderlo—.
+  assert.equal(decideDraw(fresh, deck, { needs: 3, difficulty: 'duro' }), false);
+  // Si todavía no alcanza, no persigue el número: sigue con su cabeza de siempre. Acá
+  // eso es robar, porque la cadena recién abierta lo pide.
+  assert.equal(decideDraw(fresh, deck, { needs: 30, difficulty: 'duro' }), true);
+  // Y acá es plantarse, con el mismo número imposible: perseguirlo sería robar hasta
+  // cortarse y dejar el golpe final en 0.
+  assert.equal(decideDraw(risky, deck, { needs: 30, difficulty: 'duro' }), false);
   assert.equal(decideDraw(risky, deck, { needs: 10, difficulty: 'duro' }), false);
 
   const t0 = performance.now();

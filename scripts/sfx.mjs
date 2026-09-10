@@ -64,17 +64,20 @@ const PICKS = {
   plant: `${WEB}plant_slash_attack.wav`,
   reptile: `${WEB}reptile_slash_attack.wav`,
   // La carta que corta la cadena. Suena cuando cae, no con la animación de desarme
-  // que viene después (ver `audio-cues.js`), así que tiene que ser un impacto y no un
-  // efecto: lo que hace falta es un golpe seco, grave y corto.
+  // que viene después (ver `audio-cues.js`).
   //
-  // Se eligió midiendo el ataque y la cola de los 45 impactos del kit, no por el
-  // nombre. `disarm.wav` —el que le corresponde al efecto `disarmed`— tarda 660 ms en
-  // llegar a su punto más fuerte y dura 1,5 s: puesto después de una seguidilla de
-  // tics que suben, se leía como un swoosh más y no como un corte. `hex` era peor
-  // todavía en lo mismo (pico a los 550 ms). Este llega en 165 ms, con el 69% de la
-  // energía de su arranque por debajo de 400 Hz, y encima es de una clase que este
-  // juego no juega: no se puede confundir con el golpe de nadie.
-  bust: `${WEB}mech_throw_hit.wav`,
+  // Fue un impacto —`mech_throw_hit`, un golpe seco y grave— y estaba mal: en una
+  // pantalla donde todo lo demás que golpea es un golpe de verdad, el corte se oía
+  // como un ataque más. Y no es un ataque: no le pegó nadie, la carta no enganchó y
+  // el turno se desinfló. Lo que tiene que sonar es eso.
+  //
+  // `doubt` es el más corto de los 152 sonidos del kit que no son un impacto —0,74 s
+  // audibles, sin silencio adelante— y el más tonal de todos los que se midieron
+  // (planitud espectral 0,064: es una nota, no un ruido). Y la nota **cae**: la
+  // autocorrelación la sigue de 1000 a 814 Hz, tres semitonos hacia abajo antes de
+  // apagarse. Es exactamente al revés del tic de robar, que va subiendo carta a carta
+  // (ver `STEP` en `audio-cues.js`): la escalera que venía subiendo se cae de una.
+  bust: `${UNITY}doubt.wav`,
   // Cada carta que alarga la cadena. Se reproduce cortado y cada vez más agudo.
   draw: `${WEB}power_gain.wav`,
   // El huevo del rival aguantando, y la cáscara volviéndose contra el que pegó.

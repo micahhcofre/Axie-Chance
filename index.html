@@ -11,32 +11,67 @@
 <body>
 <div class="app">
   <header class="topbar">
+    <!-- La marca es el logo, no un rombo y una palabra: acá va la versión limpia,
+         que es la que se apoya sobre el fondo plano de la página. El `alt` es el
+         nombre, así que el lector de pantalla sigue leyendo lo mismo que antes.
+         El `div` sigue estando porque es la columna izquierda de la barra: sin él el
+         logo se estiraría al alto del renglón. -->
     <div class="brand">
-      <span class="brand-mark">◈</span>
-      <span class="brand-name">Axie&nbsp;Chance</span>
+      <img class="brand-logo" src="Icons/logo.png" alt="Axie Chance" width="180" height="134">
     </div>
-    <div class="scoreboard" id="scoreboard"></div>
+    <!-- La ronda, y debajo el reloj de quien tiene que decidir. El reloj guarda su
+         lugar aunque no corra (ver `.clock`): si no, la ronda saltaría cada vez que
+         cambia de turno. -->
+    <div class="scoreboard">
+      <div id="scoreboard"></div>
+      <div class="clock" id="clock" role="timer" aria-label="Tiempo que queda" data-on="false"></div>
+    </div>
     <div class="topbar-actions">
-      <div class="picker">
-        <span class="picker-label">Tu Axie</span>
-        <div class="crest-row" id="axie-picker"></div>
-      </div>
-      <label class="select">
-        <span>CPU</span>
-        <select id="difficulty">
-          <option value="facil">Fácil</option>
-          <option value="normal" selected>Normal</option>
-          <option value="duro">Duro</option>
-        </select>
-      </label>
-      <!-- Los efectos vienen prendidos; la música no, que son dos minutos de wav que
+      <!-- Las tres rayitas. Todo lo que no es jugar vive detrás de este botón: el
+           sonido, las reglas y la puerta de salida. -->
+      <button class="btn btn-burger" id="hud-btn" aria-expanded="false"
+        aria-controls="hud-menu" aria-label="Menú" title="Menú"
+        ><i></i><i></i><i></i></button>
+    </div>
+
+    <!-- El menú de la mesa. Cuelga de la barra y no de la ventana para que se abra
+         debajo de su botón, que es donde el que lo apretó lo está esperando. -->
+    <div class="hud-menu" id="hud-menu" hidden>
+      <p class="hud-label">Sonido</p>
+      <!-- Cada renglón es un interruptor y su perilla. Van juntos porque son la misma
+           pregunta contestada con dos precisiones distintas: "¿quiero esto?" y
+           "¿cuánto?". Apagar no borra el volumen elegido: al volver a prender, vuelve
+           donde estaba.
+
+           Los efectos vienen prendidos; la música no, que son dos minutos de wav que
            el navegador tiene que bajar y no todo el mundo la quiere. -->
-      <button class="btn btn-ghost btn-sound" id="sfx-btn" data-on="true"
-        aria-pressed="true" title="Efectos de sonido" aria-label="Efectos de sonido">🔊</button>
-      <button class="btn btn-ghost btn-sound" id="music-btn" data-on="false"
-        aria-pressed="false" title="Música" aria-label="Música">🎵</button>
-      <button class="btn btn-ghost" id="rules-btn">Reglas</button>
-      <button class="btn btn-ghost" id="new-match">Nueva partida</button>
+      <div class="hud-row">
+        <button class="btn btn-ghost btn-sound" id="music-btn" data-on="false"
+          aria-pressed="false" title="Música" aria-label="Música">🎵</button>
+        <span class="hud-name">Música</span>
+        <input class="hud-vol" id="music-vol" type="range" min="0" max="100" step="5"
+          value="100" aria-label="Volumen de la música">
+        <span class="hud-pct" id="music-pct">100%</span>
+      </div>
+      <div class="hud-row">
+        <button class="btn btn-ghost btn-sound" id="sfx-btn" data-on="true"
+          aria-pressed="true" title="Efectos de sonido" aria-label="Efectos de sonido">🔊</button>
+        <span class="hud-name">Efectos</span>
+        <input class="hud-vol" id="sfx-vol" type="range" min="0" max="100" step="5"
+          value="100" aria-label="Volumen de los efectos">
+        <span class="hud-pct" id="sfx-pct">100%</span>
+      </div>
+      <hr class="hud-sep">
+      <!-- El historial vivía en una columna al costado de la mesa, y en un teléfono esa
+           columna caía una pantalla más abajo: para leerlo había que scrollear el
+           juego. Acá adentro es lo que es —algo que se consulta entre rondas— y no le
+           saca un píxel a la pelea. -->
+      <button class="btn btn-ghost hud-item" id="log-btn">Historial</button>
+      <button class="btn btn-ghost hud-item" id="rules-btn">Cómo se juega</button>
+      <!-- La puerta de vuelta a la portada, donde se elige contra quién y con qué
+           Axie. La pone `lobby.js`: con la partida en red no hay portada a la que
+           volver, y el botón se queda guardado. -->
+      <button class="btn btn-ghost hud-item hud-quit" id="menu-btn" hidden>Abandonar partida</button>
     </div>
   </header>
 
@@ -50,35 +85,332 @@
       <!-- El terreno. Va en su propia capa y no como fondo del arena porque tiene que
            quedar clavado a la línea donde apoyan los Axies: ver `.arena-art`. -->
       <div class="arena-art" aria-hidden="true"><i></i></div>
-      <div class="fighter fighter--human" id="fighter-human">
-        <div class="plate" id="plate-human"></div>
-        <div class="board-axie" id="axie-human"></div>
+      <div class="fighter fighter--p1" id="fighter-p1" data-side="left">
+        <!-- Tocar el bicho abre su mazo: el de fábrica y lo que fue juntando del
+             centro. Es un botón transparente calzado sobre el dibujo —ver `.peek`— y
+             no un control aparte, porque el control **es** el Axie: no hay nada más
+             ahí que se pueda apretar. -->
+        <button class="peek" id="peek-p1" title="Ver el mazo"
+          aria-label="Ver el mazo"></button>
+        <div class="plate" id="plate-p1"></div>
+        <div class="board-axie" id="axie-p1"></div>
       </div>
-      <div class="fighter fighter--cpu" id="fighter-cpu">
-        <div class="plate" id="plate-cpu"></div>
-        <div class="board-axie" id="axie-cpu"></div>
+      <div class="fighter fighter--p2" id="fighter-p2" data-side="right">
+        <button class="peek" id="peek-p2" title="Ver el mazo"
+          aria-label="Ver el mazo"></button>
+        <div class="plate" id="plate-p2"></div>
+        <div class="board-axie" id="axie-p2"></div>
       </div>
-      <!-- El medidor de la próxima carta, adelante de la escena. -->
-      <div class="odds" id="odds"></div>
+      <!-- Los dos instrumentos, en una sola columna adelante de la escena y del mismo
+           ancho: arriba lo que vale el ataque que se está armando, abajo lo que tiene
+           de seguir. Se leen juntos —cuánto se gana contra cuánto se arriesga—, que es
+           toda la decisión del turno. El de abajo aparece y desaparece (solo existe
+           mientras la decisión es tuya); el de arriba está siempre. -->
+      <div class="gauge">
+        <div class="swing" id="swing"></div>
+        <div class="odds" id="odds"></div>
+      </div>
       <div class="field" id="field"></div>
+      <!-- Cómo terminó la partida, en el medio de la escena y encima de los dos
+           bichos: letra sola, sin caja, para que no se lea como un botón más al lado
+           de los que hay abajo. Vacío y escondido el resto del tiempo. -->
+      <div class="finale" id="finale" role="status" hidden></div>
       <div class="controls" id="controls"></div>
       <canvas class="vfx" id="vfx" aria-hidden="true"></canvas>
-      <div class="overlay" id="market" hidden></div>
     </section>
   </main>
-
-  <aside class="sidebar">
-    <p class="aside-label">Tu mazo</p>
-    <div class="deck" id="deck"></div>
-    <p class="aside-label">Historial</p>
-    <ol class="log" id="log"></ol>
-  </aside>
 </div>
+
+<!-- El centro: las cinco cartas del reparto. Vive afuera de la mesa y no adentro, que
+     es donde estuvo mientras la mesa fue una tarjeta en el medio de la página.
+
+     Ahora la mesa está clavada a la ventana, y un elemento clavado a la ventana arma
+     una capa propia: todo lo que cuelga de él queda atrapado ahí abajo, por más
+     `z-index` que se le ponga. Adentro, el panel del reparto se abría **debajo** de la
+     barra y de la columna, y el oscurecido dejaba dos pedazos de pantalla encendidos
+     alrededor de una elección que se supone que es la única cosa que importa en ese
+     momento. Acá afuera tapa la pantalla entera, que es lo que tiene que hacer. -->
+<div class="overlay" id="market" hidden></div>
+
+<!-- La portada. Es lo primero que se ve y lo que hace que esto parezca un juego y no
+     una planilla: el terreno de fondo, los Axies del roster dando vueltas por ahí
+     —caminando, parándose a rascarse, cambiando de rumbo— y dos botones grandes, uno
+     en cada esquina de abajo.
+
+     Son las dos cosas que se hacen desde acá, y son distintas:
+
+       Jugar         a la derecha, el grande. Abre el menú —contra quién: la máquina,
+                     alguien en este mismo teclado, o alguien en otro aparato— y de ahí
+                     la partida empieza. Con qué Axie no lo pregunta: ya lo sabe.
+       Elegí tu Axie a la izquierda. Es tu bicho, no un paso del camino de jugar: se
+                     elige una vez, queda puesto, y se cambia cuando se te da la gana.
+                     Debajo del nombre del botón dice con cuál estás jugando ahora.
+
+     Que sea una puerta propia y no una escala es lo que la deja crecer: es la pantalla
+     de tu Axie, y ahí es donde más adelante van a vivir las mejoras temporales.
+
+     La mesa de atrás está vacía hasta que empiece la partida (ver `main.js`: la
+     pantalla se monta sin arrancar ninguna).
+
+     Los Axies los pone `lobby.js`; acá abajo solo está el escenario vacío.
+
+     Viene puesta y no escondida: es lo primero que se ve, y arrancar escondida sería
+     mostrar medio segundo de mesa vacía antes de taparla. La partida en red la guarda
+     al arrancar —ahí lo primero es la sala— y después usa **una** de sus pantallas: la
+     elección de Axie, abierta encima de la sala (ver `main.js`). Con qué jugás se
+     pregunta en un solo lugar del juego, y este es el lugar. -->
+<div class="lobby" id="lobby" data-view="front">
+  <div class="lobby-art" aria-hidden="true"><i></i></div>
+  <!-- Por donde se pasean. `aria-hidden` porque es decorado puro: un lector de
+       pantalla no tiene nada que hacer con unos bichos que caminan. -->
+  <div class="lobby-cast" id="lobby-cast" aria-hidden="true"></div>
+
+  <!-- El título de la portada es el logo grande, en la versión con contorno blanco:
+       acá abajo hay un terreno pintado y unos bichos de colores paseándose, y sobre
+       eso la versión limpia se pierde. El contorno lo despega del fondo se pare donde
+       se pare un Axie. -->
+  <div class="lobby-head">
+    <h1 class="lobby-title">
+      <img class="lobby-logo" src="Icons/logo-outline.png" alt="Axie Chance"
+        width="520" height="388">
+    </h1>
+    <p class="lobby-sub">Creado por: MikhChest</p>
+  </div>
+
+  <div class="lobby-panel">
+    <!-- La portada: el botón de jugar y nada más. -->
+    <div class="lobby-front" id="lobby-front">
+      <button class="lobby-play" id="lobby-play">Jugar</button>
+    </div>
+
+    <!-- El menú: contra quién. La dificultad cuelga de la opción a la que le
+         corresponde, que es la única con máquina adentro. -->
+    <div class="lobby-menu" id="lobby-menu" hidden>
+      <p class="lobby-menu-label">Contra quién</p>
+      <div class="lobby-modes">
+        <div class="lobby-mode">
+          <button class="lobby-pick" data-play="cpu">
+            <b>Vs CPU</b><span>Vos contra la máquina, que saca un Axie sorteado</span>
+          </button>
+          <label class="select" id="difficulty-box">
+            <span>Dificultad</span>
+            <select id="difficulty">
+              <option value="facil">Fácil</option>
+              <option value="normal" selected>Normal</option>
+              <option value="duro">Duro</option>
+            </select>
+          </label>
+        </div>
+        <!-- Se prende sola si la página la sirvió el servidor del juego: abierta como
+             archivo suelto no hay sala a la que entrar. Ver `net.js`. -->
+        <div class="lobby-mode">
+          <button class="lobby-pick" id="lobby-net" data-play="net" disabled>
+            <b>Multijugador</b><span id="lobby-net-note">Contra otra persona, en una sala</span>
+          </button>
+        </div>
+      </div>
+      <button class="btn btn-ghost" id="lobby-back">Volver</button>
+    </div>
+
+  </div>
+
+  <!-- Tu Axie, en la esquina de enfrente. Es el mismo botón que el de jugar con menos
+       cuerpo —uno es la puerta y el otro es el ropero—, y lleva colgado el nombre del
+       que tenés puesto: sin eso, el que abre el juego no sabe con qué está jugando
+       hasta que empieza la partida y ve salir al bicho.
+
+       Se guarda solo cuando la portada deja de estar en la tapa: adentro del menú y de
+       la elección no pinta nada (ver `.lobby-aside` en el CSS). -->
+  <div class="lobby-aside" id="lobby-aside">
+    <button class="lobby-play lobby-play--alt" id="lobby-loadout">
+      <span class="loadout-cta">Elegí tu Axie</span>
+      <span class="loadout-now" id="lobby-loadout-now"></span>
+    </button>
+  </div>
+
+  <!-- La letra chica de la portada. No es una tercera puerta: las puertas son dos y
+       están en las dos esquinas de abajo. Esto se lee una vez, la primera, y después
+       nunca más, así que va chico y en el medio — abajo de las dos y entre las dos.
+
+       Estaba colgado del botón de jugar, apilado debajo, y eso le hacía dos cosas: lo
+       ponía a la altura de una puerta, y **levantaba a jugar del piso** lo que mide un
+       botón, así que las dos esquinas dejaban de estar a la misma altura. -->
+  <div class="lobby-foot" id="lobby-foot">
+    <button class="btn btn-ghost lobby-help" id="lobby-rules">Cómo se juega</button>
+  </div>
+
+  <!-- Con quién. Es la última pregunta antes del combate y la que hace que la partida
+       sea tuya: elegir un Axie es elegir el mazo con el que vas a jugar —la clase es el
+       mazo—, así que no es un paso más entre dos botones. Es una pantalla entera, con
+       el bicho grande, su nombre, su clase, **las diez cartas con las que arranca** y
+       la cuenta de cada símbolo que hay adentro de esas diez.
+
+       Que se vean las cartas es todo el punto: sin eso, elegir un Axie es elegir un
+       dibujo. Con las cartas a la vista se ve lo único que de verdad cambia entre uno y
+       otro —cinco pares del color propio, uno solo, y cuatro cartas ajenas—, y la
+       cuenta de abajo lo dice en un número.
+
+       Se llega de dos lados y por eso la pantalla es la misma con dos carteles. Desde la
+       portada, con el botón de la izquierda: ahí elegís **el tuyo**, el que te queda
+       puesto para todas las partidas que juegues. Y desde el camino de jugar cuando son
+       dos en el mismo teclado, para el **Jugador 2** —que no tiene portada donde
+       elegir—, con la clase del primero fuera de la vuelta porque la clase es el mazo y
+       dos mazos iguales no tendrían gracia. Contra la CPU no se pregunta nada: jugás con
+       el tuyo y el de la máquina se sortea. Lo llena `lobby.js`.
+
+       Va afuera del panel de abajo a la derecha y no adentro: los otros dos son
+       carteles apoyados en una esquina de la escena, y este ocupa la escena. -->
+  <div class="lobby-choose" id="lobby-choose" hidden>
+    <div class="choose-bar">
+      <button class="btn btn-ghost" id="lobby-choose-back">← Volver</button>
+      <p class="choose-step" id="lobby-choose-title">Elegí tu Axie</p>
+    </div>
+
+    <!-- El Axie, con una flecha de cada lado. Las flechas son la navegación entera:
+         seis bichos se recorren, no se buscan. -->
+    <div class="choose-stage">
+      <div class="choose-hero">
+        <button class="choose-arrow" id="lobby-prev" aria-label="El Axie anterior">‹</button>
+        <div class="choose-art" id="lobby-choose-art"></div>
+        <button class="choose-arrow" id="lobby-next" aria-label="El Axie siguiente">›</button>
+      </div>
+      <div class="choose-id" id="lobby-choose-id"></div>
+    </div>
+
+    <!-- El mazo con el que arranca, en el mismo formato en que se van a ver en la
+         mesa: son las mismas cartas. -->
+    <div class="choose-sheet">
+      <p class="choose-label" id="lobby-choose-deck-label">Mazo inicial · 10 cartas</p>
+      <div class="choose-deck" id="lobby-choose-deck"></div>
+      <p class="choose-label">Símbolos en el mazo</p>
+      <div class="choose-tally" id="lobby-choose-tally"></div>
+    </div>
+
+    <div class="choose-actions">
+      <p class="choose-note" id="lobby-choose-note"></p>
+      <button class="lobby-play choose-go" id="lobby-start">Elegir Axie</button>
+    </div>
+  </div>
+</div>
+
+<!-- Las salas de la red y la sala propia. Se ven mientras no haya partida que mostrar:
+     primero la lista de salas, después la sala con los dos asientos y el botón de
+     listo. Se van solas al llegar el primer estado y vuelven si se corta el cable.
+
+     Es una pantalla del juego y no un cartel del navegador, así que está hecha con lo
+     mismo que la portada: el terreno de tu Axie atrás, el logo arriba, y las salas
+     apoyadas en un panel del Origins —tabla de madera, cartel tallado y las cintas de
+     siempre para lo que se aprieta—. Ver `.netbox` en el CSS. -->
+<div class="netbox" id="net" hidden>
+  <!-- El terreno, colgado igual que en la mesa y en la portada: `data-arena` lo pone
+       `net.js` con la clase de tu Axie, que es de donde salen el dibujo, la altura de
+       su línea de suelo y el color con el que sigue el piso. -->
+  <div class="netbox-art" aria-hidden="true"><i></i></div>
+
+  <div class="netbox-stack">
+    <!-- La marca, en la versión con contorno blanco: es la que se apoya sobre el
+         dibujo. Chica, porque acá lo que hay que mirar son las salas. -->
+    <img class="netbox-logo" src="Icons/logo-outline.png" alt="Axie Chance"
+      width="360" height="268">
+
+    <section class="netbox-panel">
+      <!-- El nombre de la pantalla va en un cartel de madera colgado del borde de
+           arriba del panel, que es donde el Origins pone los suyos. -->
+      <h2 class="netbox-banner" id="net-title">Salas</h2>
+      <!-- La cruz de la esquina: la puerta de salida de la sala. Solo existe adentro de
+           una —atrás está la lista, que es a donde vuelve—; en la lista no hay nada que
+           cerrar y la puerta es "Jugar solo", que va a otro lado y por eso se lee. -->
+      <button class="netbox-x" id="net-close" title="Salir de la sala"
+        aria-label="Salir de la sala" hidden></button>
+      <p class="netbox-note" id="net-note"></p>
+
+      <div class="netbox-view" id="net-lobby">
+        <ul class="netbox-rooms" id="net-rooms"></ul>
+        <div class="netbox-actions">
+          <button class="btn btn-primary" id="net-create">Crear sala</button>
+          <a class="btn btn-ghost" href="./">Jugar solo</a>
+        </div>
+
+        <div class="netbox-urls" id="net-urls" hidden>
+          <span class="netbox-label">Desde el otro aparato, en la misma red:</span>
+          <ul id="net-list"></ul>
+        </div>
+      </div>
+
+      <div class="netbox-view" id="net-room" hidden>
+        <ul class="netbox-seats" id="net-seats"></ul>
+        <!-- Con qué Axie entrás. No es un roster: abre la misma pantalla de elección de
+             la portada, encima de la sala (ver `net.js`). Está acá porque a una sala se
+             llega también por el link del otro, sin pasar por la portada, y porque el
+             rato de esperar al otro es justo cuando uno se acuerda de que quería cambiar
+             de bicho. Con la partida repartida se va: ahí lo único que se hace es jugar. -->
+        <button class="netbox-mine" id="net-axie" hidden>
+          <span class="netbox-mine-label">Tu Axie</span>
+          <span class="netbox-mine-now" id="net-axie-now"></span>
+          <span class="netbox-mine-cta">Cambiar</span>
+        </button>
+        <div class="netbox-actions">
+          <button class="btn btn-primary" id="net-ready">Estoy listo</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- El mazo de un Axie: se abre tocándolo.
+
+     Antes era un renglón con dos números en una columna al costado de la mesa, y esa
+     columna se llevaba un cuarto de la pantalla en un monitor y caía fuera de la
+     ventana en un teléfono —había que scrollear el juego para verla—. Acá es una
+     pantalla que se abre cuando se la pide y se cierra cuando se terminó de mirar, y de
+     paso muestra lo que la columna no mostraba: **las cartas**, que es lo único que de
+     verdad hay que ver de un mazo.
+
+     Va de los dos: el mazo del rival es público —su mazo inicial sale de su clase y
+     cada carta que se lleva del centro se ve— y saber con qué está jugando el otro es
+     parte de decidir el propio turno. -->
+<dialog class="modal modal--sheet" id="deck-modal">
+  <h2 id="deck-label">Tu mazo</h2>
+  <div class="deck" id="deck"></div>
+  <div id="deck-sheet"></div>
+  <form method="dialog"><button class="btn btn-primary">Cerrar</button></form>
+</dialog>
+
+<!-- El historial, que se abre desde el menú de las tres rayitas. -->
+<dialog class="modal modal--sheet" id="log-modal">
+  <h2>Historial</h2>
+  <ol class="log" id="log"></ol>
+  <form method="dialog"><button class="btn btn-primary">Cerrar</button></form>
+</dialog>
+
+<!-- Abandonar una partida en red. Pregunta antes, y la nota la escribe `net.js` con lo
+     que va a pasar —se anula, o gana el otro— según las rondas que ya se jugaron. -->
+<dialog class="modal" id="quit-modal">
+  <h2>¿Abandonar la partida?</h2>
+  <p id="quit-note"></p>
+  <form method="dialog">
+    <button class="btn" value="stay">Seguir jugando</button>
+    <button class="btn btn-danger" value="quit">Abandonar</button>
+  </form>
+</dialog>
 
 <dialog class="modal" id="rules-modal">
   <h2>Cómo se juega</h2>
   <p>Es un combate. Elegís uno de los <b>seis Axies</b> —uno por clase— y peleás con su
      <b>mazo personal</b> contra la CPU, que usa otro. Los dos arrancan con <b>100 de vida</b>.</p>
+  <p>En <b>2 jugadores</b> es la misma partida con dos personas en el mismo teclado: cada una
+     elige su Axie, los turnos van uno detrás del otro y los mismos dos botones sirven para
+     los dos —el cartel de abajo dice de quién es el turno—. No hace falta esconder nada:
+     las cartas salen boca arriba y el centro está a la vista de los dos.
+     <b>Quién abre se sortea</b> al empezar la partida: cerrar el intercambio —ver el
+     golpe del otro antes de decidir el tuyo— es una ventaja, y entre dos personas no
+     hay ningún lado que la merezca. Contra la CPU abrís siempre vos.</p>
+  <p><b>Jugar en red</b> es lo mismo desde dos aparatos de la misma red: uno crea una
+     sala, el otro entra desde la lista, y la partida empieza cuando los dos aprietan
+     <b>Listo</b>. Cada uno se ve a sí mismo a la izquierda y solo puede apretar en su
+     turno; el turno del otro se ve igual, carta por carta, en la misma mesa. Se puede
+     <b>abandonar</b> desde el menú: en las primeras 5 rondas la partida se anula y no
+     gana nadie; después, gana el que se queda.</p>
   <p>Se turnan. En tu turno te reparten una carta y vas <b>cargando el ataque</b>: cada carta que
      robás lo hace más fuerte, pero si la cadena se corta el golpe falla. Cuando te plantás,
      <b>atacás</b>: los puntos de tu cadena son el <b>daño</b> que le sacás al rival. Ahí mismo
@@ -110,6 +442,9 @@
   </div>
 
   <h3>Tu mazo</h3>
+  <p class="muted"><b>Tocá un Axie</b> —el tuyo o el del rival— para ver su mazo entero: las
+     diez de fábrica y todo lo que fue juntando del centro. El <b>historial</b> de la partida
+     está en el menú de las tres rayitas, arriba a la derecha.</p>
   <p>Cada jugador roba de su <b>propio mazo de 10 cartas</b>, armado alrededor de su símbolo.
      Si jugás <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> Pez:</p>
   <div class="example">
@@ -125,6 +460,17 @@
   </div>
   <p class="muted">Los mazos iniciales <b>no traen poderes</b>: los seis salen del centro y hay
      que ganárselos.</p>
+  <p><b>Las mejoras.</b> En la pantalla de tu Axie cada carta del mazo tiene un
+     <b>(+)</b> debajo: le sumás <b>un símbolo</b> y queda puesto. Las seis cartas que
+     llevan tu símbolo admiten <b>el tuyo</b>; las cuatro ajenas, <b>uno de los dos</b>
+     que ya tienen —vos elegís cuál—.</p>
+  <div class="example">
+    <div><span class="tag">+</span> <img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> sobre <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> → <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""></div>
+    <hr>
+    <div>El símbolo repetido <b>cuenta las dos veces</b>: esa carta abre la cadena del
+      reptil en <b>2</b> y la adelanta de a dos. Y la cadena golpea por su largo al
+      cuadrado, así que un símbolo de más vale más de lo que parece.</div>
+  </div>
   <p><b>No hay descarte:</b> al empezar cada intercambio se rebaraja el mazo entero, como una
      tragamonedas. Dentro del turno las cartas que ya salieron no vuelven, así que
      acordarte de lo que salió sirve mientras dura la tirada — el medidor del arena

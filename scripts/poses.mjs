@@ -61,9 +61,26 @@ const CLIPS = {
   chew: { from: 'activity/eat-chew', fps: 12 }, // masca al pedo
   snap: { from: 'activity/eat-bite', fps: 14 }, // tarascón al aire
   stomp: { from: 'activity/entrance', fps: 12 }, // se planta y se hace el malo
+  // Andar. No es un clip del combate —en la mesa los dos pelean plantados uno
+  // enfrente del otro— sino del lobby, donde los Axies se pasean por el terreno
+  // mientras nadie apretó nada. El kit lo trae hecho (`action/run`) y corre **en el
+  // lugar**: mueve las patas y hamaca el cuerpo, y de llevarlo de un lado a otro se
+  // encarga el CSS. Va más lento que el original, que es un trote de pelea y en un
+  // paseo se lee como si el bicho estuviera huyendo.
+  walk: { from: 'action/run', loop: true, fps: 14, rate: 0.7 },
   // Su turno: se prepara. Es un pulso al empezar, no un loop — la postura de cargar
   // ya la sostiene el CSS.
   ready: { from: 'activity/prepare', fps: 10 },
+  // La cadena que se corta. El kit no trae un clip triste —son 46 y ninguno se llama
+  // así—, pero de los 46 hay exactamente dos que cierran los ojos y no los vuelven a
+  // abrir en todo el clip, y uno de los dos ya es el desmayo (`activity/sleep`, que
+  // acá abajo es `ko`). El otro es este: `activity/bath` cierra los ojos, hunde el
+  // cuerpo casi tres por ciento del marco y lo deja respirando ahí abajo con las
+  // cuatro patas aflojadas. Sacado de la bañera y puesto en la mesa no se lee como
+  // bañarse: se lee como resoplar mirando el piso, que es lo que hace un bicho al que
+  // se le desinfló el turno. Va al 80% para que el vaivén sea un suspiro y no un
+  // temblor.
+  sad: { from: 'activity/bath', fps: 12, rate: 0.8 },
   // El intercambio de golpes.
   attack: { from: 'attack/melee/normal-attack', fps: 20 },
   hurt: { from: 'defense/hit-with-shield', fps: 20 },
@@ -398,6 +415,28 @@ function bakeClip(skeleton, clip, frame, setup, rest) {
         round((100 * (-ss * dx + cs * dy)) / home.h, 1),
         round(-spun[name] - screenSpin, 1),
       ]);
+    }
+  }
+
+  // El clip arranca donde el cuerpo ya estaba parado.
+  //
+  // El kit no dibuja todos los clips sobre la misma línea de piso: `activity/prepare`
+  // trae el esqueleto entero quince por ciento del marco más abajo desde su primer
+  // cuadro —no es que se agache, las patas ni se doblan: el bicho está puesto más
+  // abajo—, y el festejo, siete por ciento más arriba. Allá da igual, porque el clip
+  // se reproduce solo; acá el suelo lo pone el CSS y no se mueve, así que esa
+  // diferencia se lee como que el Axie se hunde bajo su propia sombra al empezar el
+  // turno, o como que festeja flotando.
+  //
+  // El primer cuadro es, por definición, el cuerpo tal como venía: se le resta a toda
+  // la pista y lo que queda es el movimiento, que es lo único que el juego quiere. Las
+  // partes no necesitan esto —se miden contra su propio reposo y ya arrancan en cero—.
+  const [ax, ay, ar] = root[0];
+  if (ax || ay || ar) {
+    for (const f of root) {
+      f[0] = round(f[0] - ax, 1);
+      f[1] = round(f[1] - ay, 1);
+      f[2] = round(f[2] - ar, 1);
     }
   }
 

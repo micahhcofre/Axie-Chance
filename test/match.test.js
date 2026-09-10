@@ -1,10 +1,12 @@
 // Smoke test del flujo completo: rondas, reparto de la reserva y final a 100 puntos.
 import assert from 'node:assert/strict';
-import { createGame, TARGET, PLAYERS, MARKET_SIZE, hpOf, ownedBy } from '../src/game.js';
+import {
+  createGame, TARGET, PLAYERS, MARKET_SIZE, hpOf, lastChance, matchResult, ownedBy,
+} from '../src/game.js';
 import { scoreChain } from '../src/rules.js';
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
-const other = (p) => (p === 'human' ? 'cpu' : 'human');
+const other = (p) => (p === 'p1' ? 'p2' : 'p1');
 // Todo lo que tiene un jugador: mazo, lo que reservó el pulpo y lo que sigue en la
 // mesa sin devolver.
 const owned = (s, p) => ownedBy(s, p);
@@ -15,16 +17,16 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   const openers = [];
   const gains = [];
   game.newMatch({ difficulty, axie: 'aquatic' });
-  assert.equal(game.state.axies.human, 'aquatic');
-  assert.equal(game.state.symbols.human, 'aquatic', 'la clase del Axie es su símbolo');
-  assert.notEqual(game.state.symbols.cpu, 'aquatic', 'la CPU juega otra clase');
-  assert.equal(game.state.market.length, MARKET_SIZE, 'el centro arranca con 5');
+  assert.equal(game.state.axies.p1, 'aquatic');
+  assert.equal(game.state.symbols.p1, 'aquatic', 'la clase del Axie es su símbolo');
+  assert.notEqual(game.state.symbols.p2, 'aquatic', 'la CPU juega otra clase');
+  assert.equal(game.state.market.length, MARKET_SIZE, `el centro arranca con ${MARKET_SIZE}`);
   assert.equal(game.state.pool.length, 71 - MARKET_SIZE);
 
   // Qué terminó llevándose el humano en cada draft. No se elige un modo aparte: lo
   // decide la carta que toca —con poder cierra el reparto, sin poder deja una
   // segunda—, así que se alterna qué carta tocar para probar las dos ramas.
-  let humanMode = 'power';
+  let p1Mode = 'power';
   let guard = 0;
 
   // Ahora reparte un solo jugador por vez, apenas termina su turno, y el turno de la
@@ -37,8 +39,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
     if (s.phase === 'draft' && !before) {
       before = {
         player: s.draft.order[0],
-        human: owned(s, 'human'),
-        cpu: owned(s, 'cpu'),
+        p1: owned(s, 'p1'),
+        p2: owned(s, 'p2'),
         pool: s.pool.length + s.market.length,
         // Cada pulpo puesto paga una carta de más, aparte del reparto. Van a `top` y
         // no al mazo, así que la pila mide exactamente cuántas se cobraron: dentro de
@@ -62,13 +64,20 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
     }
   });
 
+  // La ronda cierra sola: la fase 'roundEnd' dura una pausa y se va, así que el bucle
+  // puede no verla nunca. Quién abrió se anota al cambiar el número de ronda.
+  let seenRound = 0;
   while (game.state.phase !== 'matchEnd') {
     assert.ok(guard++ < 4000, 'la partida no termina');
     const s = game.state;
+    if (s.round > seenRound) {
+      seenRound = s.round;
+      openers.push(s.order[0]);
+    }
 
     // Invariante: 35 comunes + 10 de cada mazo base, nunca se pierde ni se duplica nada.
     assert.equal(
-      s.pool.length + s.market.length + owned(s, 'human') + owned(s, 'cpu'),
+      s.pool.length + s.market.length + owned(s, 'p1') + owned(s, 'p2'),
       91,
       'cartas totales en juego',
     );
@@ -94,21 +103,21 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
 
     if (s.phase === 'draft') {
       const picking = game.drafting();
-      if (picking === 'cpu') { await idle(); continue; }
+      if (picking === 'p2') { await idle(); continue; }
       const options = game.pickable();
       assert.ok(options.length <= MARKET_SIZE, 'se elige solo entre las cartas del centro');
       assert.ok(options.every((c) => s.market.includes(c)), 'las opciones salen del centro');
-      // El centro puede no ofrecer nada: las cinco cartas con poder y el jugador
+      // El centro puede no ofrecer nada: las seis cartas con poder y el jugador
       // yendo por cartas sin poder. Queda la renovación —una— y después pasar.
       if (options.length === 0) {
         assert.ok(s.market.length > 0 && s.market.every((c) => c.power),
           'sin nada elegible, el centro es todo poderes');
-        if (game.canRenew('human')) game.renewMarket();
+        if (game.canRenew('p1')) game.renewMarket();
         else await game.skipDraft();
         continue;
       }
       // La etapa del pulpo va aparte del reparto: una carta suelta por pulpo, sin
-      // reglas. No toca `humanMode`, que describe la rama del reparto normal.
+      // reglas. No toca `p1Mode`, que describe la rama del reparto normal.
       if (s.draft.step === 'bonus') {
         await game.takeCard(options[0].uid);
         continue;
@@ -120,7 +129,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       }
       // Se alterna entre las dos ramas: una carta con poder cierra el reparto (suma
       // 1) y una sin poder deja pendiente la segunda (suma 2).
-      const want = (!gains.includes(2) || humanMode === 'power') ? 'plain' : 'power';
+      const want = (!gains.includes(2) || p1Mode === 'power') ? 'plain' : 'power';
       // Para llegar a 2 hacen falta dos cartas sin poder a la vista, y 36 de las 71
       // traen poder: hay repartos donde no hay ninguna. Con partidas de 7 rondas eso
       // alcanzaba para terminar sin haber probado nunca la rama, así que se fuerza.
@@ -136,7 +145,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       const options2 = game.pickable();
       const card = options2.find((c) => (want === 'power' ? c.power : !c.power)) ?? options2[0];
       // Espejo de la inferencia del juego: la carta que tocás decide.
-      humanMode = card.power ? 'power' : 'plain';
+      p1Mode = card.power ? 'power' : 'plain';
       await game.takeCard(card.uid);
       continue;
     }
@@ -154,26 +163,23 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       // a dos: le toca una sola, y sin poder.
       assert.ok(draftGain >= 0 && draftGain <= 2, `${d.player} sumó ${draftGain}`);
       assert.ok(d.poolAfter <= d.pool, 'la reserva nunca crece');
-      // Cortarse da una carta sin poder, nunca dos. Puede dar cero: si las cinco del
+      // Cortarse da una carta sin poder, nunca dos. Puede dar cero: si las seis del
       // centro traen poder no hay nada que llevarse.
       if (d.busted) assert.ok(draftGain <= 1, `${d.player} se cortó y sumó ${draftGain}`);
-      if (d.player === 'human') {
+      if (d.player === 'p1') {
         // La carta con poder cierra el reparto ahí mismo, siempre.
-        if (!d.busted && humanMode === 'power') {
+        if (!d.busted && p1Mode === 'power') {
           assert.equal(draftGain, 1, 'una carta con poder y se acabó');
         }
         gains.push(draftGain);
       }
     }
 
-    if (s.phase === 'roundEnd') {
-      openers.push(s.order[0]);
-      await game.nextRound();
-    } else if (s.turn === 'human' && !s.busy) {
+    if (s.turn === 'p1' && !s.busy) {
       // En las rondas pares se planta con la primera carta. Robar hasta 6 se corta el
       // ~65% de las veces, y una racha de cortes deja el reparto de quien se planta
       // (1 trío o 2 pares) sin probar: plantarse seguro cada dos rondas lo garantiza.
-      if (s.round % 2 === 0 || scoreChain(s.chains.human).total >= 6) await game.stand();
+      if (s.round % 2 === 0 || scoreChain(s.chains.p1).total >= 6) await game.stand();
       else await game.hit();
     } else {
       await idle();
@@ -182,18 +188,16 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
 
   const s = game.state;
   assert.ok(PLAYERS.some((p) => hpOf(s, p) <= 0), 'alguien se quedó sin vida');
-  assert.ok(Math.max(s.totals.human, s.totals.cpu) >= TARGET, 'hizo falta el daño de una vida');
-  assert.ok(s.roundScores.human !== null && s.roundScores.cpu !== null, 'los dos jugaron la ronda');
-  assert.deepEqual(
-    openers,
-    openers.map((_, i) => (i % 2 === 0 ? 'human' : 'cpu')),
-    'se alterna quién abre',
-  );
+  assert.ok(Math.max(s.totals.p1, s.totals.p2) >= TARGET, 'hizo falta el daño de una vida');
+  assert.ok(s.roundScores.p1 !== null && s.roundScores.p2 !== null, 'los dos jugaron la ronda');
+  // Uno y uno: abre siempre el jugador y contesta la CPU, así ningún lado juega dos
+  // turnos seguidos al cambiar de ronda.
+  assert.deepEqual(openers, openers.map(() => 'p1'), 'abre siempre el jugador');
   assert.ok(gains.includes(1) && gains.includes(2), 'se probaron poder y cantidad');
-  assert.equal(s.pool.length + s.market.length + owned(s, 'human') + owned(s, 'cpu'), 91);
+  assert.equal(s.pool.length + s.market.length + owned(s, 'p1') + owned(s, 'p2'), 91);
   console.log(
-    `  ${difficulty.padEnd(6)} ${s.totals.human} — ${s.totals.cpu} en ${s.round} rondas` +
-      ` · mazos ${owned(s, 'human')}/${owned(s, 'cpu')}` +
+    `  ${difficulty.padEnd(6)} ${s.totals.p1} — ${s.totals.p2} en ${s.round} rondas` +
+      ` · mazos ${owned(s, 'p1')}/${owned(s, 'p2')}` +
       ` · quedan ${s.pool.length + s.market.length}`,
   );
 }
@@ -205,44 +209,95 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   game.newMatch({ difficulty: 'duro', axie: 'bug' });
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(game.state.difficulty, 'duro');
-  assert.equal(game.state.symbols.human, 'bug');
+  assert.equal(game.state.symbols.p1, 'bug');
   assert.equal(game.state.round, 1);
-  assert.equal(game.state.totals.human, 0);
-  assert.equal(game.state.market.length, MARKET_SIZE, 'el centro arranca con 5');
+  assert.equal(game.state.totals.p1, 0);
+  assert.equal(game.state.market.length, MARKET_SIZE, `el centro arranca con ${MARKET_SIZE}`);
   assert.equal(game.state.pool.length, 71 - MARKET_SIZE);
+}
+
+// El reloj: al que no juega su turno a tiempo se le desarma el ataque, como si se le
+// hubiera cortado la cadena, y al que no elige del centro a tiempo se queda sin carta.
+// La CPU no lleva reloj.
+{
+  const game = createGame({ pace: 0, seed: 4, clock: { turn: 40, draft: 25 } });
+  const until = async (ok, what) => {
+    for (let i = 0; i < 400; i++) {
+      if (ok()) return;
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    assert.fail(what);
+  };
+  let botClock = false;
+  game.subscribe((s) => { if (s.turn === 'p2' && s.clock) botClock = true; });
+  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+
+  await until(() => game.state.turn === 'p1', 'no arranca el turno');
+  const c = game.state.clock;
+  assert.equal(c?.seat, 'p1');
+  assert.equal(c?.kind, 'turn');
+  assert.equal(c?.ms, 40);
+  assert.equal(game.state.roundScores.p1, null);
+
+  await until(() => game.state.phase === 'draft' && game.drafting() === 'p1',
+    'el turno no se cierra solo');
+  assert.equal(game.state.roundScores.p1, 0, 'sin tiempo el ataque falla');
+  assert.equal(game.state.chains.p1.busted, true, 'cuenta como cadena cortada');
+  assert.equal(game.state.draft.mode, 'plain', 'y el reparto es el de un fallo');
+  assert.ok(game.state.log.some((l) => l.text.startsWith('Se acabó el tiempo:')));
+  assert.equal(game.state.clock?.kind, 'draft', 'el reparto trae su reloj');
+  const deck = owned(game.state, 'p1');
+
+  await until(() => game.state.phase !== 'draft' || game.drafting() !== 'p1',
+    'el reparto no se cierra solo');
+  assert.ok(game.state.log.some((l) => l.text === 'Se acabó el tiempo de elegir.'));
+  assert.equal(owned(game.state, 'p1'), deck, 'sin elegir no se lleva nada');
+
+  await until(() => game.state.round === 2 || game.state.phase === 'matchEnd',
+    'la CPU no cierra la ronda');
+  assert.equal(botClock, false, 'la CPU juega sin reloj');
+  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
 }
 
 // No hay descarte: cada ronda arranca con todas las cartas propias barajadas de nuevo.
 {
   const game = createGame({ pace: 0 });
+  // El cierre de ronda dura una pausa y sigue solo, así que la foto se saca en el
+  // subscriber: entre dos vueltas del bucle la ronda nueva ya arrancó.
+  let closed = null;
+  game.subscribe((s) => {
+    if (s.phase !== 'roundEnd' || closed) return;
+    closed = {
+      round: s.round,
+      played: s.chains.p1.cards.map((c) => c.uid),
+      deck: s.decks.p1.map((c) => c.uid),
+    };
+  });
   game.newMatch({ difficulty: 'normal', axie: 'plant' });
   let guard = 0;
-  while (game.state.phase !== 'roundEnd') {
+  while (!closed || game.state.round === closed.round) {
     assert.ok(guard++ < 4000, 'la ronda no cierra');
     const s = game.state;
     if (s.phase === 'draft') {
-      if (game.drafting() !== 'human') { await idle(); continue; }
+      if (game.drafting() !== 'p1') { await idle(); continue; }
       const options = game.pickable();
       if (!options.length) { await game.skipDraft(); continue; }
       await game.takeCard(options[0].uid);
       continue;
     }
-    if (s.turn === 'human' && !s.busy) await game.stand();
+    if (s.turn === 'p1' && !s.busy) await game.stand();
     else await idle();
   }
 
   // Cerrada la ronda no queda nada afuera: mazo = todo lo que el jugador posee.
-  const played = game.state.chains.human.cards.map((c) => c.uid);
-  assert.ok(played.length > 0, 'el jugador jugó al menos una carta');
-  const before = game.state.decks.human.map((c) => c.uid);
-  assert.ok(played.every((uid) => before.includes(uid)), 'lo jugado vuelve al mazo');
-  assert.equal(new Set(before).size, before.length, 'sin cartas duplicadas');
+  assert.ok(closed.played.length > 0, 'el jugador jugó al menos una carta');
+  assert.ok(closed.played.every((uid) => closed.deck.includes(uid)), 'lo jugado vuelve al mazo');
+  assert.equal(new Set(closed.deck).size, closed.deck.length, 'sin cartas duplicadas');
 
-  await game.nextRound();
-  const after = game.state.decks.human.map((c) => c.uid).concat(
-    game.state.chains.human.cards.map((c) => c.uid),
+  const after = game.state.decks.p1.map((c) => c.uid).concat(
+    game.state.chains.p1.cards.map((c) => c.uid),
   );
-  assert.deepEqual(new Set(after), new Set(before), 'la ronda nueva reparte el mazo entero');
+  assert.deepEqual(new Set(after), new Set(closed.deck), 'la ronda nueva reparte el mazo entero');
 }
 
 // El centro se renueva una vez cuando nada de lo que podés agarrar lleva tu símbolo.
@@ -250,10 +305,10 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   const game = createGame({ pace: 0 });
   game.newMatch({ difficulty: 'normal', axie: 'plant' });
   let guard = 0;
-  while (!(game.state.phase === 'draft' && game.drafting() === 'human')) {
+  while (!(game.state.phase === 'draft' && game.drafting() === 'p1')) {
     assert.ok(guard++ < 4000, 'no se llegó al reparto del jugador');
     const s = game.state;
-    if (s.phase === 'draft' || s.busy || s.turn !== 'human') await idle();
+    if (s.phase === 'draft' || s.busy || s.turn !== 'p1') await idle();
     else await game.stand();
   }
 
@@ -270,19 +325,19 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   const total = s.pool.length + s.market.length;
   const before = s.market.map((c) => c.uid);
 
-  assert.ok(game.canRenew('human'), 'sin nada del símbolo propio se puede renovar');
+  assert.ok(game.canRenew('p1'), 'sin nada del símbolo propio se puede renovar');
   game.renewMarket();
   assert.equal(s.market.length, MARKET_SIZE, 'el centro vuelve a estar lleno');
   assert.equal(s.pool.length + s.market.length, total, 'la reserva no pierde ni gana cartas');
   assert.notDeepEqual(s.market.map((c) => c.uid), before, 'salieron cartas nuevas');
-  assert.ok(s.draft.renewed.human, 'queda marcado que ya renovó');
-  assert.ok(!game.canRenew('human'), 'se renueva una sola vez por reparto');
+  assert.ok(s.draft.renewed.p1, 'queda marcado que ya renovó');
+  assert.ok(!game.canRenew('p1'), 'se renueva una sola vez por reparto');
 
   // Con una carta propia a la vista no hay renovación que ofrecer.
-  s.draft.renewed.human = false;
+  s.draft.renewed.p1 = false;
   const at = s.pool.findIndex((c) => c.symbols.includes('plant'));
   s.market[0] = s.pool.splice(at, 1)[0];
-  assert.ok(!game.canRenew('human'), 'con una carta del símbolo propio no se renueva');
+  assert.ok(!game.canRenew('p1'), 'con una carta del símbolo propio no se renueva');
 }
 
 // Con semilla la partida es reproducible. Es lo que hace comparables dos corridas
@@ -299,23 +354,23 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       assert.ok(guard++ < 4000, 'la partida no termina');
       const s = game.state;
       if (s.phase === 'draft') {
-        if (game.drafting() !== 'human') { await idle(); continue; }
+        if (game.drafting() !== 'p1') { await idle(); continue; }
         const options = game.pickable();
         if (!options.length) await game.skipDraft();
         else await game.takeCard(options[0].uid);
         continue;
       }
       if (s.phase === 'roundEnd') { await game.nextRound(); continue; }
-      if (s.turn === 'human' && !s.busy) {
-        if (s.chains.human.cards.length < 2) await game.hit();
+      if (s.turn === 'p1' && !s.busy) {
+        if (s.chains.p1.cards.length < 2) await game.hit();
         else await game.stand();
-        steps.push(`${s.round}:${s.chains.human.cards.map((c) => c.key).join('|')}`);
+        steps.push(`${s.round}:${s.chains.p1.cards.map((c) => c.key).join('|')}`);
         continue;
       }
       await idle();
     }
     const s = game.state;
-    return [s.axies.cpu, s.round, s.totals.human, s.totals.cpu, ...steps].join('/');
+    return [s.axies.p2, s.round, s.totals.p1, s.totals.p2, ...steps].join('/');
   }
 
   const a = await trace(1234);
@@ -324,6 +379,80 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.equal(a, b, 'la misma semilla juega la misma partida');
   assert.notEqual(a, c, 'otra semilla juega otra partida');
   assert.ok(a.length > 40, 'la huella cubre la partida entera');
+}
+
+// La última chance: al que dejan sin vida antes de haber atacado le queda su turno
+// entero, y si en ese golpe se lleva puesto al otro, empatan. Solo le puede tocar al
+// que juega segundo, que con el orden fijo es siempre la CPU.
+{
+  const game = createGame({ pace: 0, seed: 7 });
+  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+  await idle();
+  assert.equal(game.state.order[0], 'p1', 'abre el jugador');
+  assert.equal(game.state.turn, 'p1');
+  assert.equal(lastChance(game.state), null, 'con los dos enteros no hay última chance');
+
+  // Los dos a un punto de morir: el golpe del jugador deja sin vida a la CPU, y el que
+  // la CPU alcanza a devolver lo deja sin vida a él.
+  game.state.totals.p1 = TARGET - 1;
+  game.state.totals.p2 = TARGET - 1;
+
+  // El halo se prende con el golpe que la mata y se apaga cuando contesta: dura
+  // exactamente el turno regalado, ni un repintado más.
+  const halo = [];
+  game.subscribe((s) => {
+    const dying = lastChance(s);
+    if (halo[halo.length - 1] !== dying) halo.push(dying);
+  });
+
+  await game.stand();
+  let guard = 0;
+  while (game.state.phase !== 'matchEnd') {
+    assert.ok(guard++ < 400, 'la partida no termina');
+    await idle();
+  }
+
+  const s = game.state;
+  assert.ok(s.roundScores.p2 !== null, 'la CPU jugó su última chance');
+  assert.ok(s.roundScores.p2 > 0, 'y pegó: sin vida, plantarse por debajo pierde igual');
+  assert.ok(hpOf(s, 'p1') <= 0 && hpOf(s, 'p2') <= 0, 'los dos quedaron sin vida');
+  assert.equal(matchResult(s), 'tie', 'doble KO: empate');
+  assert.deepEqual(halo, [null, 'p2', null], 'el halo dura el turno regalado y se apaga');
+  console.log('  última chance: empate por doble KO');
+}
+
+// El que abre nunca cobra la última chance: cuando lo dejan sin vida ya tiró su golpe.
+// Es la contracara del orden fijo, y se mide sobre una partida entera.
+{
+  const game = createGame({ pace: 0, seed: 11 });
+  const halo = new Set();
+  game.subscribe((s) => halo.add(lastChance(s)));
+  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+
+  let guard = 0;
+  while (game.state.phase !== 'matchEnd') {
+    assert.ok(guard++ < 4000, 'la partida no termina');
+    const s = game.state;
+    if (s.phase === 'draft') {
+      if (game.drafting() !== 'p1') { await idle(); continue; }
+      const options = game.pickable();
+      if (!options.length) await game.skipDraft();
+      else await game.takeCard(options[0].uid);
+      continue;
+    }
+    if (s.phase === 'turn' && s.turn === 'p1' && !s.busy) await game.stand();
+    else await idle();
+  }
+
+  assert.ok(!halo.has('p1'), 'al que abre nunca se le prende el halo');
+  const s = game.state;
+  const r = matchResult(s);
+  assert.equal(r, hpOf(s, 'p1') <= 0 ? (hpOf(s, 'p2') <= 0 ? 'tie' : 'p2') : 'p1',
+    'el resultado sale de la vida, no del daño repartido');
+  // Si al jugador lo mataron, fue la CPU cerrando el intercambio: no quedó turno suyo
+  // pendiente que devolver.
+  if (r === 'p2') assert.ok(s.roundScores.p1 !== null, 'ya había atacado cuando cayó');
+  console.log(`  última chance: el que abre no la cobra (${r})`);
 }
 
 console.log('✓ flujo de partida ok');

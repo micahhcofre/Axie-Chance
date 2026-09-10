@@ -8,16 +8,19 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 
 const MODULES = [
-  'data', 'axie-avatars', 'axie-poses', 'axies', 'rules', 'ai', 'game',
-  'vfx-clips', 'vfx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'ui', 'main',
+  'data', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'rules', 'ai', 'game',
+  'vfx-clips', 'vfx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'ui', 'net', 'lobby',
+  'main',
 ];
 const FONTS =
   'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800' +
   '&family=IBM+Plex+Mono:wght@500;600&display=swap';
 
-// Todos los PNG de Icons/ —crests, poderes y estados— en un solo mapa por nombre de
-// archivo. `data.js` los pide con `iconUrl()`, y el HTML del modal de reglas los
-// nombra por ruta: las dos formas se resuelven abajo.
+// Todos los PNG de Icons/ —crests, poderes, estados y las dos versiones del logo— en
+// un solo mapa por nombre de archivo. `data.js` los pide con `iconUrl()`, y el HTML
+// —el modal de reglas, la marca de la barra, el título de la portada— los nombra por
+// ruta: las dos formas se resuelven abajo. Los originales del logo viven en `logo/` y
+// no viajan: lo que se inlinea es la copia al tamaño en que se muestra.
 const icons = Object.fromEntries(
   readdirSync(join(root, 'Icons'))
     .filter((f) => f.endsWith('.png'))
@@ -28,10 +31,12 @@ const icons = Object.fromEntries(
 );
 
 // Los fondos del arena se piden desde el CSS por ruta relativa, que en un archivo
-// suelto no resuelve a nada: se cambian por data URI igual que los crests.
-const arenas = readdirSync(join(root, 'Backgrounds')).filter((f) => f.endsWith('.jpg'));
+// suelto no resuelve a nada: se cambian por data URI igual que los crests. Viajan los
+// `.avif` de 3840 —los que carga el juego—, no los `.jpg` cuadrados que quedan al lado
+// como original de `cuadrar.py`: ver `scripts/agrandar.py`.
+const arenas = readdirSync(join(root, 'Backgrounds')).filter((f) => f.endsWith('.avif'));
 const arenaUrl = (file) =>
-  `data:image/jpeg;base64,${readFileSync(join(root, 'Backgrounds', file)).toString('base64')}`;
+  `data:image/avif;base64,${readFileSync(join(root, 'Backgrounds', file)).toString('base64')}`;
 
 // Los módulos no tienen dependencias circulares ni nombres repetidos entre sí,
 // así que alcanza con sacarles import/export y concatenarlos en orden.

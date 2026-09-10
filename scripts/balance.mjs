@@ -46,10 +46,16 @@ const ARMS = {
   pulpoUno: { octopusStacks: false },
   // El pulpo cobrando salga como salga el ataque, que es como estaba antes de pedirle
   // plantarse. Queda como variante para poder volver a comprobar el cambio.
-  // El huevo sin cáscara, que es como estaba antes, y con la mitad del golpe en vez de
-  // un tercio: la mitad lo dejaba arriba del veneno y hundía al caracol un escalón.
-  huevoSinPuas: { eggThorns: 0 },
-  huevoPuas2: { eggThorns: 2 },
+  // El huevo sin cáscara, que es como estaba antes, y con la cáscara más chica. La
+  // cáscara pasó a ser un número fijo —5— en vez de una fracción del golpe que la
+  // rompía: se entiende, pero conviene volver a medir cuánto pesa.
+  huevoSinPuas: { eggBreak: 0 },
+  huevoPuas3: { eggBreak: 3 },
+  huevoPuas8: { eggBreak: 8 },
+  // El veneno partiéndose en tres en vez de al medio, y el que se arrastra hasta el
+  // último punto en vez de irse en 2.
+  venenoTercio: { poisonHalve: 3 },
+  venenoLargo: { poisonFloor: 0 },
   pulpoSiempre: { octopusOnStand: false },
   pulpoUnoYPlantado: { octopusStacks: false },
   sesgo07: { powerBias: 0.7 },
@@ -72,7 +78,7 @@ const POWERS = powers === 'all' ? POWER_IDS : powers.split(',');
 /** El humano se lleva las dos cartas sin poder que mejor se enlazan con su mazo. */
 const bestPlain = (game, s) => {
   const plain = game.pickable().filter((c) => !c.power);
-  return plain.length ? pickBest(plain, s.decks.human) : null;
+  return plain.length ? pickBest(plain, s.decks.p1) : null;
 };
 
 /**
@@ -89,7 +95,7 @@ async function playOne(seed, only) {
     const s = game.state;
 
     if (s.phase === 'draft') {
-      if (game.drafting() !== 'human') { await idle(); continue; }
+      if (game.drafting() !== 'p1') { await idle(); continue; }
 
       // La carta que paga el pulpo se elige a criterio, no atada al poder del brazo.
       // Atarla arruinaba justo al pulpo: su efecto **es** conseguir otras cartas, así
@@ -98,7 +104,7 @@ async function playOne(seed, only) {
       // nunca llegan acá —sin pulpos no hay etapa extra—, así que el cambio no los
       // toca.
       if (s.draft.step === 'bonus') {
-        const card = pickBonus(game.pickable(), s.decks.human);
+        const card = pickBonus(game.pickable(), s.decks.p1);
         if (card) await game.takeCard(card.uid);
         else await game.skipDraft();
         continue;
@@ -112,14 +118,14 @@ async function playOne(seed, only) {
       continue;
     }
     if (s.phase === 'roundEnd') { await game.nextRound(); continue; }
-    if (s.turn === 'human' && !s.busy) {
+    if (s.turn === 'p1' && !s.busy) {
       // Mismo criterio que la CPU, incluido el golpe final: sin vida, plantarse por
       // debajo pierde igual. Si el jugador simulado juega peor que la CPU, la brecha
       // que se mide es la de las cabezas y no la de los poderes.
-      const needs = (s.roundScores.cpu !== null && hpOf(s, 'human') <= 0)
-        ? s.totals.cpu - s.totals.human + 1
+      const needs = (s.roundScores.p2 !== null && hpOf(s, 'p1') <= 0)
+        ? s.totals.p2 - s.totals.p1 + 1
         : null;
-      if (decideDraw(s.chains.human, game.unseenPool('human'), { needs, difficulty: 'normal' })) {
+      if (decideDraw(s.chains.p1, game.unseenPool('p1'), { needs, difficulty: 'normal' })) {
         await game.hit();
       } else {
         await game.stand();
@@ -130,9 +136,9 @@ async function playOne(seed, only) {
   }
 
   const s = game.state;
-  const down = { human: hpOf(s, 'human') <= 0, cpu: hpOf(s, 'cpu') <= 0 };
-  if (down.human && down.cpu) return 0.5;
-  return down.cpu ? 1 : 0;
+  const down = { p1: hpOf(s, 'p1') <= 0, p2: hpOf(s, 'p2') <= 0 };
+  if (down.p1 && down.p2) return 0.5;
+  return down.p2 ? 1 : 0;
 }
 
 /** Una celda: un poder bajo una variante, sobre todas las semillas. */

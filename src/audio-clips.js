@@ -13,7 +13,7 @@ export const SOUNDS = {
   bug: {'file':'web-vfx/public/sfx/bug_slash_attack.wav','secs':0.84,'onset':0.01,'lead':0.24,'gain':1.04},
   plant: {'file':'web-vfx/public/sfx/plant_slash_attack.wav','secs':0.88,'onset':0.03,'lead':0.2,'gain':1.05},
   reptile: {'file':'web-vfx/public/sfx/reptile_slash_attack.wav','secs':1.15,'onset':0.01,'lead':0.29,'gain':1.14},
-  bust: {'file':'web-vfx/public/sfx/mech_throw_hit.wav','secs':0.97,'onset':0.01,'lead':0.17,'gain':0.98},
+  bust: {'file':'Assets/OriginsKit/Audio/doubt.wav','secs':0.75,'onset':0,'lead':0.31,'gain':0.77},
   draw: {'file':'web-vfx/public/sfx/power_gain.wav','secs':1.79,'onset':0,'lead':0.23,'gain':0.87},
   block: {'file':'web-vfx/public/sfx/shield.wav','secs':1.2,'onset':0,'lead':0.38,'gain':0.92},
   thorns: {'file':'web-vfx/public/sfx/reflect_damage.wav','secs':1.08,'onset':0.05,'lead':0.36,'gain':0.7},

@@ -44,13 +44,16 @@ export function crest(symbol, size = '') {
  *
  *   strengthStep   cuánto suma cada carta de fuerza, para siempre
  *   poisonShare    divisor del golpe con que se envenena (2 = la mitad)
- *   poisonDecay    cuánto baja el veneno al cerrar la ronda, después de morder
+ *   poisonHalve    en cuánto se parte el veneno al cerrar la ronda, después de morder
+ *   poisonFloor    con esto o menos encima, el veneno se va: la cola de un veneno
+ *                  partiéndose al medio es infinita y no decide nada
  *   poisonStacks   true suma venenos; false se queda con el mayor, como el caracol
- *   snailShare     divisor del golpe con que se debilita
- *   snailAttacks   cuántos ataques dura cada caracol
+ *   snailShare     en cuánto se parte el ataque del debilitado (2 = la mitad).
+ *                  Redondea para arriba: un caracol nunca deja un ataque en cero
+ *   snailAttacks   cuántos ataques debilita cada caracol. Se suman
  *   eggShare       divisor del golpe con que se arma el escudo
- *   eggThorns      al romperse, divisor del golpe que lo rompió y que le vuelve al
- *                  que pegó. 0 lo apaga: el huevo solo tapa
+ *   eggBreak       daño fijo que le vuelve al que rompió el huevo. 0 lo apaga: el
+ *                  huevo solo tapa
  *   octopusPowers  si la carta que paga el pulpo puede llevar poder
  *   octopusStacks  true: cada pulpo paga una carta. false: una por reparto, salgan
  *                  los pulpos que salgan
@@ -72,12 +75,13 @@ export function crest(symbol, size = '') {
 export const TUNING = {
   strengthStep: 1,
   poisonShare: 2,
-  poisonDecay: 2,
+  poisonHalve: 2,
+  poisonFloor: 2,
   poisonStacks: true,
   snailShare: 2,
-  snailAttacks: 2,
+  snailAttacks: 1,
   eggShare: 2,
-  eggThorns: 3,
+  eggBreak: 5,
   octopusPowers: true,
   octopusStacks: true,
   octopusOnStand: true,
@@ -87,7 +91,8 @@ export const TUNING = {
 export const POWERS = {
   egg: {
     id: 'egg', symbol: 'bird', name: 'Huevo',
-    note: 'escudo de medio golpe: se come el próximo ataque y se rompe',
+    note: `escudo de medio golpe: aguanta hasta que lo rompan, y al romperse le ` +
+      `devuelve ${TUNING.eggBreak} al que lo rompió`,
   },
   octopus: {
     id: 'octopus', symbol: 'aquatic', name: 'Pulpo',
@@ -99,11 +104,12 @@ export const POWERS = {
   },
   poison: {
     id: 'poison', symbol: 'reptile', name: 'Veneno',
-    note: `la mitad del daño, cada ronda, bajando de a ${TUNING.poisonDecay}`,
+    note: 'la mitad del daño: muerde al cerrar cada ronda y se parte al medio',
   },
   snail: {
     id: 'snail', symbol: 'bug', name: 'Caracol',
-    note: `el rival pega la mitad durante ${TUNING.snailAttacks} ataques`,
+    note: 'el próximo ataque del rival pega la mitad. Se acumulan: dos caracoles, ' +
+      'los dos próximos',
   },
   strength: {
     id: 'strength', symbol: 'beast', name: 'Fuerza',
@@ -218,12 +224,56 @@ export const UNFAVORABLE = [
  *  - 1 carta con el símbolo propio solo
  *  - las 4 cartas no favorables que no lo incluyen
  */
-export function buildPersonalDeck(symbol) {
+function baseDeck(symbol) {
   return [
     ...SYMBOL_IDS.filter((s) => s !== symbol).map((s) => makeCard([symbol, s])),
     makeCard([symbol]),
     ...UNFAVORABLE.filter((pair) => !pair.includes(symbol)).map((pair) => makeCard(pair)),
   ];
+}
+
+/**
+ * Qué símbolo se le puede sumar a una carta del mazo de quien juega `symbol`. Uno
+ * solo, y de los que la carta ya tiene algo que ver:
+ *
+ *  - las seis cartas propias —las que llevan tu símbolo— admiten **el tuyo**, que es
+ *    el único que te sirve de las dos maneras: sube la racha de tu color y no le abre
+ *    la puerta a ningún otro.
+ *  - las cuatro no favorables —las que no lo llevan— admiten **uno de sus dos**, el
+ *    que elijas. Son las cartas que no te representan, así que la mejora es elegir
+ *    cuál de las dos mitades ajenas pesa más: un `pez+reptil` mejorado con reptil
+ *    queda con dos reptiles y un pez.
+ *
+ * El símbolo repetido no es adorno: la racha cuenta cada aparición (ver `timesIn` en
+ * `rules.js`), así que una carta con el símbolo dos veces adelanta su racha de a dos
+ * y la racha puntúa al cuadrado.
+ */
+export function boostOptions(card, symbol) {
+  const own = [...new Set(card.symbols)];
+  return own.includes(symbol) ? [symbol] : own;
+}
+
+/**
+ * El mazo de 10 con las mejoras puestas.
+ *
+ * `boosts` va de la clave de la carta **sin mejorar** al símbolo que se le suma
+ * —`{ 'beast+bird': 'beast' }`—, que es lo que la pantalla de elección junta con los
+ * botones de (+). La clave alcanza porque en un mazo personal no hay dos cartas
+ * iguales, y viaja bien: es texto, no un índice que se corre si el mazo cambia de
+ * orden.
+ *
+ * Lo que no esté en la lista de `boostOptions` se ignora en silencio. Las mejoras
+ * quedan guardadas por Axie y el mismo `boosts` puede llegar acompañando a otro mazo
+ * —volviste, cambiaste de bicho—, y una mejora que no le corresponde a esta carta no
+ * es una mejora.
+ */
+export function buildPersonalDeck(symbol, boosts = {}) {
+  return baseDeck(symbol).map((card) => {
+    const add = boosts[card.key];
+    return add && boostOptions(card, symbol).includes(add)
+      ? makeCard([...card.symbols, add])
+      : card;
+  });
 }
 
 /**

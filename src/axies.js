@@ -92,9 +92,13 @@ export function axie(id) {
 /**
  * El mazo con el que arranca un Axie: el de su clase, 10 cartas.
  * Acá entran las partes el día que modifiquen la baraja.
+ *
+ * `boosts` son las mejoras elegidas en la pantalla de elección —un símbolo de más en
+ * algunas cartas— y van de la clave de la carta al símbolo que se le suma (ver
+ * `buildPersonalDeck`). Sin ellas es el mazo pelado de siempre.
  */
-export function deckFor(id) {
-  return buildPersonalDeck(axie(id).class);
+export function deckFor(id, boosts = {}) {
+  return buildPersonalDeck(axie(id).class, boosts);
 }
 
 const pc = (n) => `${(n * 100).toFixed(3)}%`;
