@@ -145,6 +145,17 @@ function buildTutorialPool() {
 //   isActionStep: true si el paso avanza al realizar la acción en el tablero
 //   advanceTrigger: función (state, prev) => boolean que avanza al siguiente paso
 
+// Lo que se resalta y se pide una y otra vez a lo largo de los pasos.
+const TUTO_HIT = '#controls [data-action="hit"]';
+const TUTO_CHAIN = '#swing, #field .sym[data-on="true"], #field .runs .run';
+const TUTO_DRAW = 'Apretá <b>"Robar carta"</b>.';
+/** Antes de atacar se resalta el botón y la cadena; ya atacado, el rival que recibe. */
+const tutoStand = (s) => (s.roundScores?.p1 !== null
+  ? '#axie-p2'
+  : `#controls [data-action="stand"], ${TUTO_CHAIN}`);
+/** Qué decir en un reparto: la indicación mientras se elige, y después esperar a la CPU. */
+const tutoWait = (text) => (s) => (s.phase !== 'draft' ? 'Esperá a que la CPU termine su turno.' : text);
+
 function createSteps() {
   return [
     // ── Ronda 1: Tu primer golpe ──────────────────────────────────────────
@@ -164,9 +175,7 @@ function createSteps() {
       round: 1,
       type: 'coach',
       allowedAction: 'stand',
-      highlight: (s) => s.roundScores?.p1 !== null
-        ? '#axie-p2'
-        : '#controls [data-action="stand"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: tutoStand,
       title: '¡La cadena continúa!',
       desc: `Tu cadena de ${crest('aquatic', 'sm')} Pez sigue viva (largo <b>2</b> = 4 pts). ` +
         `La de ${crest('beast', 'sm')} Bestia se cerró (1 pt). Daño total: <b>5</b>.`,
@@ -202,9 +211,7 @@ function createSteps() {
       desc: (s) => s.phase !== 'draft'
         ? 'Carta agregada a tu mazo. Ahora la CPU juega su turno...'
         : 'Después de atacar, podés elegir cartas del Centro para sumar a tu mazo en las próximas rondas.',
-      action: (s) => s.phase !== 'draft'
-        ? 'Esperá a que la CPU termine su turno.'
-        : 'Elegí cualquier carta <b>sin poder</b> para sumarla a tu mazo.',
+      action: tutoWait('Elegí cualquier carta <b>sin poder</b> para sumarla a tu mazo.'),
       advanceTrigger: (s) => s.round === 2 && s.turn === 'p1' && s.phase === 'turn',
     },
 
@@ -217,7 +224,7 @@ function createSteps() {
       highlight: '#controls [data-action="hit"]',
       title: 'Ronda 2 — La ambición y el riesgo',
       desc: 'Tu mazo se rebarajó completo. Vamos a armar una cadena más larga para multiplicar los puntos.',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 2 && s.chains.p1.cards.length >= 2,
     },
     {
@@ -225,7 +232,7 @@ function createSteps() {
       round: 2,
       type: 'coach',
       allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
       title: 'Cadena viva',
       desc: 'Pez sigue vivo con largo 2 (4 puntos). Sigamos arriesgando para sumar más.',
       action: 'Apretá <b>"Robar carta"</b> otra vez.',
@@ -268,9 +275,7 @@ function createSteps() {
       desc: (s) => s.phase !== 'draft'
         ? 'Carta agregada. La CPU juega su turno...'
         : 'Al cortarse la cadena, el centro te penaliza: solo podés llevarte <b>1 carta sin poder</b>.',
-      action: (s) => s.phase !== 'draft'
-        ? 'Esperá a que la CPU termine su turno.'
-        : 'Elegí una carta del centro.',
+      action: tutoWait('Elegí una carta del centro.'),
       advanceTrigger: (s) => s.round === 3 && s.turn === 'p1' && s.phase === 'turn',
     },
 
@@ -283,7 +288,7 @@ function createSteps() {
       highlight: '#controls [data-action="hit"]',
       title: 'Ronda 3 — Cartas con Poder',
       desc: 'Armá una cadena segura de 2 cartas y asegurá el ataque.',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 3 && s.chains.p1.cards.length >= 2,
     },
     {
@@ -291,9 +296,7 @@ function createSteps() {
       round: 3,
       type: 'coach',
       allowedAction: 'stand',
-      highlight: (s) => s.roundScores?.p1 !== null
-        ? '#axie-p2'
-        : '#controls [data-action="stand"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: tutoStand,
       title: 'Asegurar el ataque',
       desc: 'Tenés 5 puntos seguros. Plantate con éxito para desbloquear el draft de poderes.',
       action: (s) => s.roundScores?.p1 !== null
@@ -313,9 +316,7 @@ function createSteps() {
         ? '¡Maceta conseguida! La CPU juega su turno...'
         : 'Como te plantaste bien, podés elegir <b>1 carta con poder</b>. ' +
           'Mirá la <b>Maceta 🌱</b>: te cura exactamente lo mismo que pegás.',
-      action: (s) => s.phase !== 'draft'
-        ? 'Esperá a que la CPU termine su turno.'
-        : 'Hacé click en la carta de la <b>Maceta 🌱</b> en el centro.',
+      action: tutoWait('Hacé click en la carta de la <b>Maceta 🌱</b> en el centro.'),
       advanceTrigger: (s) => s.round === 4 && s.turn === 'p1' && s.phase === 'turn',
     },
 
@@ -328,7 +329,7 @@ function createSteps() {
       highlight: '#controls [data-action="hit"]',
       title: 'Ronda 4 — Activando el poder',
       desc: 'La Maceta ya está en tu mazo. Vamos a buscarla y a armar una súper cadena.',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 2,
     },
     {
@@ -339,7 +340,7 @@ function createSteps() {
       highlight: '#controls [data-action="hit"]',
       title: 'Buscando la Maceta',
       desc: 'Todavía no salió. Robá otra carta del mazo.',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.some((c) => c.power === 'pot'),
     },
     {
@@ -351,7 +352,7 @@ function createSteps() {
       title: '¡Salió la Maceta! 🌱',
       desc: 'Mirá el icono de la maceta abajo de la carta. Al atacar con éxito, ' +
         '<b>te vas a curar todo el daño que hagas</b>. ¡Sigamos robando para armar un golpe demoledor!',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 4,
     },
     {
@@ -359,11 +360,11 @@ function createSteps() {
       round: 4,
       type: 'coach',
       allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
       title: 'Cadena doble en alza ⚡',
       desc: `Tanto ${crest('aquatic', 'sm')} Pez como ${crest('plant', 'sm')} Planta siguen vivos (largo 4 cada uno). ` +
         `¡El daño escala a toda velocidad!`,
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 5,
     },
     {
@@ -371,10 +372,10 @@ function createSteps() {
       round: 4,
       type: 'coach',
       allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
       title: '¡5 cartas seguidas! 🔥',
       desc: 'Largo 5 en Pez y Planta (25 + 25 = 50 puntos). ¡El combo ya es gigante, sigamos!',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 6,
     },
     {
@@ -382,11 +383,11 @@ function createSteps() {
       round: 4,
       type: 'coach',
       allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
       title: '¡6 cartas! Pez imparable 🌊',
       desc: `Planta cerró en 25 pts, pero ${crest('aquatic', 'sm')} Pez sigue con largo 6 (36 pts). ` +
         `¡Robá una carta más para alcanzar el daño colosal!`,
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 7,
     },
     {
@@ -429,9 +430,7 @@ function createSteps() {
       desc: (s) => s.phase !== 'draft'
         ? 'Carta agregada. La CPU juega su turno...'
         : 'Elegí cualquier carta disponible del centro para sumar a tu mazo.',
-      action: (s) => s.phase !== 'draft'
-        ? 'Esperá a que la CPU termine su turno.'
-        : 'Elegí una carta del centro.',
+      action: tutoWait('Elegí una carta del centro.'),
       advanceTrigger: (s) => s.round === 5 && s.turn === 'p1' && s.phase === 'turn',
     },
 
@@ -444,7 +443,7 @@ function createSteps() {
       highlight: '#controls [data-action="hit"], #plate-p2 .plate-hp',
       title: 'Ronda 5 — ¡El remate final!',
       desc: 'A tu rival le quedan solo <b>15 HP</b>. Con una cadena de 4 cartas (4² = <b>16 de daño</b>), ¡lo dejamos en 0!',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 5 && s.chains.p1.cards.length >= 2,
     },
     {
@@ -452,10 +451,10 @@ function createSteps() {
       round: 5,
       type: 'coach',
       allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
       title: 'Cadena de 2',
       desc: 'Pez largo 2 (4 puntos). Seguí robando para alcanzar 16.',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 5 && s.chains.p1.cards.length >= 3,
     },
     {
@@ -463,10 +462,10 @@ function createSteps() {
       round: 5,
       type: 'coach',
       allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
       title: 'Cadena de 3',
       desc: 'Pez largo 3 (9 puntos). ¡Una carta más para alcanzar 16!',
-      action: 'Apretá <b>"Robar carta"</b>.',
+      action: TUTO_DRAW,
       advanceTrigger: (s) => s.round === 5 && s.chains.p1.cards.length >= 4,
     },
     {
@@ -474,9 +473,7 @@ function createSteps() {
       round: 5,
       type: 'coach',
       allowedAction: 'stand',
-      highlight: (s) => s.roundScores?.p1 !== null
-        ? '#axie-p2'
-        : '#controls [data-action="stand"], #swing, #field .sym[data-on="true"], #field .runs .run',
+      highlight: tutoStand,
       title: '¡Cadena de 4! 🎯',
       desc: '4² = <b>16 de daño</b>. Es suficiente para dejar a la CPU en 0 de vida.',
       action: (s) => s.roundScores?.p1 !== null
