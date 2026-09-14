@@ -33,38 +33,28 @@ function cardExtends(chain, card) {
   return card.symbols.some((s) => alive.includes(s));
 }
 
+// Una racha por símbolo distinto, ya arrancada en las veces que la carta lo trae: la
+// mejorada abre en 2 y no en 1.
+const openRuns = (card) => [...new Set(card.symbols)].map((symbol) => ({
+  symbol, length: timesIn(card, symbol), cards: 1, alive: true,
+}));
+
+// Las rachas vivas que la carta trae se alargan; las que no, mueren.
+const extendRuns = (runs, card) => runs.map((run) => {
+  if (!run.alive) return run;
+  return card.symbols.includes(run.symbol)
+    ? { ...run, length: run.length + timesIn(card, run.symbol), cards: run.cards + 1 }
+    : { ...run, alive: false };
+});
+
 // Devuelve una cadena nueva (no muta la anterior) para poder simular en la IA.
 export function playCard(chain, card) {
   if (chain.busted) return chain;
-
   if (chain.cards.length === 0) {
-    return {
-      cards: [card],
-      // Una racha por símbolo distinto, ya arrancada en las veces que la carta lo trae:
-      // la mejorada abre en 2 y no en 1.
-      runs: [...new Set(card.symbols)].map((symbol) => ({
-        symbol, length: timesIn(card, symbol), cards: 1, alive: true,
-      })),
-      busted: false,
-      bustCard: null,
-    };
+    return { cards: [card], runs: openRuns(card), busted: false, bustCard: null };
   }
-
-  if (!cardExtends(chain, card)) {
-    return { ...chain, busted: true, bustCard: card };
-  }
-
-  return {
-    cards: [...chain.cards, card],
-    runs: chain.runs.map((run) => {
-      if (!run.alive) return run;
-      return card.symbols.includes(run.symbol)
-        ? { ...run, length: run.length + timesIn(card, run.symbol), cards: run.cards + 1 }
-        : { ...run, alive: false };
-    }),
-    busted: false,
-    bustCard: null,
-  };
+  if (!cardExtends(chain, card)) return { ...chain, busted: true, bustCard: card };
+  return { cards: [...chain.cards, card], runs: extendRuns(chain.runs, card), busted: false, bustCard: null };
 }
 
 export function scoreChain(chain) {
@@ -117,30 +107,7 @@ export function stackOnCard(chain, colIndex, card) {
     power: allPowers.find((p) => p !== 'freegame') || allPowers[0] || null,
   };
 
-  const newCards = chain.cards.map((c, i) => (i === colIndex ? updatedCard : c));
-
-  let runs = [...new Set(newCards[0].symbols)].map((symbol) => ({
-    symbol,
-    length: timesIn(newCards[0], symbol),
-    cards: 1,
-    alive: true,
-  }));
-
-  for (let i = 1; i < newCards.length; i++) {
-    const c = newCards[i];
-    runs = runs.map((run) => {
-      if (!run.alive) return run;
-      return c.symbols.includes(run.symbol)
-        ? { ...run, length: run.length + timesIn(c, run.symbol), cards: run.cards + 1 }
-        : { ...run, alive: false };
-    });
-  }
-
-  return {
-    ...chain,
-    cards: newCards,
-    runs,
-    busted: false,
-    bustCard: null,
-  };
+  const cards = chain.cards.map((c, i) => (i === colIndex ? updatedCard : c));
+  const [first, ...rest] = cards;
+  return { ...chain, cards, runs: rest.reduce(extendRuns, openRuns(first)), busted: false, bustCard: null };
 }

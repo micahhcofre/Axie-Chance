@@ -1,4 +1,4 @@
-import { SYMBOLS, POWERS, cardLabel, crest, iconUrl, powerIcon } from './data.js';
+import { SYMBOLS, POWERS, cardLabel, crest, iconUrl, powerIcon, powersOf } from './data.js';
 import { axie, axieArt } from './axies.js';
 import { createMotion } from './axie-motion.js';
 import { isScoringCell, scoreChain, survivalOdds } from './rules.js';
@@ -79,9 +79,7 @@ function symChip(symbol, on) {
  * mira, así que tampoco se lee como un eslabón más.
  */
 function powerChip(card) {
-  const powers = card.stackedCards
-    ? card.stackedCards.map((c) => c.power).filter(Boolean)
-    : (card.powers || (card.power ? [card.power] : []));
+  const powers = powersOf(card);
   if (powers.length === 0) return '';
   const classPower = powers.find((p) => POWERS[p]?.symbol);
   const color = classPower ? (SYMBOLS[POWERS[classPower].symbol]?.color ?? '#f5c542') : '#f5c542';
@@ -181,18 +179,9 @@ export function statusHtml(state, player) {
     chips.push(pipIcon(POWERS.bubble.icon, '🫧',
       'Burbuja de Retorno: apertura lista para la próxima ronda'));
   }
-  // Lo ya reservado, esperando a la ronda que viene.
-  const held = state.top[player].length;
-  if (held) {
-    chips.push(pipIcon(POWERS.octopus.icon, `▲${held}`,
-      `${held === 1 ? 'Una carta reservada' : `${held} cartas reservadas`}: ` +
-      'abre la ronda que viene'));
-  }
-  const leafCount = typeof st.leaf === 'number' ? st.leaf : (st.leaf?.length || (typeof st.oak === 'number' ? st.oak : (st.oak?.length || 0)));
-  if (leafCount > 0) {
-    const totalRegen = leafCount * (TUNING.leafHeal ?? 4);
-    chips.push(pip('leaf', leafCount,
-      `Hoja (Leaf): ${leafCount} hoja${leafCount > 1 ? 's' : ''} (cura +${totalRegen} al final de tu turno y consume 1)`));
+  if (st.leaf > 0) {
+    chips.push(pip('leaf', st.leaf,
+      `Hoja (Leaf): ${st.leaf} hoja${st.leaf > 1 ? 's' : ''} (cura +${st.leaf * TUNING.leafHeal} al final de tu turno y consume 1)`));
   }
   if (st.steelskin) {
     chips.push(pipIcon(POWERS.steelskin.icon, `≤${st.steelskin}`,
@@ -608,6 +597,10 @@ function finaleHtml(state) {
     (won ? confettiHtml() : '');
 }
 
+/** En el tutorial solo vale la acción que habilita el guión ('any' las habilita todas). */
+const gated = (state, action) => Boolean(state?.tutorial && state.tutorialAllowed
+  && state.tutorialAllowed !== action && state.tutorialAllowed !== 'any');
+
 function controlsHtml(state, { picking, acting }) {
   if (state.phase === 'draft') {
     const bonus = state.draft?.step === 'bonus';
@@ -698,12 +691,10 @@ function controlsHtml(state, { picking, acting }) {
     return pie(`<span class="controls-msg">${msg}</span>`);
   }
 
-  const hitDisabled = (state.busy || (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'hit' && state.tutorialAllowed !== 'any')) ? 'disabled' : '';
-  const standDisabled = (state.busy || (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'stand' && state.tutorialAllowed !== 'any')) ? 'disabled' : '';
-  const hitCls = (state.tutorial && state.tutorialAllowed === 'hit') ? 'btn btn-danger tuto-allowed' : 'btn btn-danger';
-  const standCls = (state.tutorial && state.tutorialAllowed === 'stand') ? 'btn btn-primary tuto-allowed' : 'btn btn-primary';
-  const acts = `<button class="${hitCls}" data-action="hit" ${hitDisabled}>Robar carta</button>
-     <button class="${standCls}" data-action="stand" ${standDisabled}>Atacar</button>`;
+  const off = (action) => (state.busy || gated(state, action) ? 'disabled' : '');
+  const lit = (action) => (state.tutorial && state.tutorialAllowed === action ? ' tuto-allowed' : '');
+  const acts = `<button class="btn btn-danger${lit('hit')}" data-action="hit" ${off('hit')}>Robar carta</button>
+     <button class="btn btn-primary${lit('stand')}" data-action="stand" ${off('stand')}>Atacar</button>`;
 
   if (state.pendingStack && state.pendingStack.player === acting) {
     const card = state.pendingStack.card;
@@ -720,7 +711,6 @@ function controlsHtml(state, { picking, acting }) {
     );
   }
 
-  const disabled = state.busy ? 'disabled' : '';
   const at = addressing(state, acting);
   // En un turno normal el renglón no dice nada, y eso es lo correcto: lo que decía
   // —"sigue viva 🦋🐙"— ya está dibujado dos veces más arriba, en los símbolos
@@ -803,9 +793,7 @@ function deckTitle(state, player) {
 /** Los símbolos de una carta y su poder, en texto plano: es un `title`, no un cartel. */
 function cardTitle(card) {
   const syms = card.symbols.map((sym) => SYMBOLS[sym].name).join(' · ');
-  const powers = card.stackedCards
-    ? card.stackedCards.map((c) => c.power).filter(Boolean)
-    : (card.powers || (card.power ? [card.power] : []));
+  const powers = powersOf(card);
   if (powers.length > 0) {
     const names = powers.map((p) => POWERS[p]?.name).filter(Boolean).join(' + ');
     return `${syms} — ${names}`;
@@ -1153,6 +1141,25 @@ function stanceOf(state, player) {
  * @returns {{restart: (setup?: object) => void}} con qué arrancar una partida desde
  *   afuera. Es lo que usa la portada cuando por fin se elige un modo.
  */
+/** Abre la enciclopedia de símbolos. Los filtros por clase se enganchan la primera vez. */
+export function openSymbols() {
+  const modal = $('symbols-modal');
+  if (!modal) return;
+  if (!modal._symInit && modal.addEventListener) {
+    modal._symInit = true;
+    modal.addEventListener('click', (e) => {
+      const btn = e.target.closest?.('[data-sym-filter]');
+      if (!btn) return;
+      const filter = btn.dataset?.symFilter;
+      modal.querySelectorAll?.('[data-sym-filter]')?.forEach?.((b) => b.classList?.toggle('active', b === btn));
+      modal.querySelectorAll?.('.symbol-card')?.forEach?.((card) => {
+        card.hidden = !(filter === 'all' || card.dataset?.symClass === filter);
+      });
+    });
+  }
+  modal.showModal?.();
+}
+
 export function mount(game, { seat = null, net = false, start = true, leave = null } = {}) {
   mySeat = seat;
   netPlay = net;
@@ -1540,7 +1547,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   $('controls').addEventListener('click', (e) => {
     const action = e.target.closest('[data-action]')?.dataset.action;
     if (action === 'hit') {
-      if (game.state?.tutorial && game.state?.tutorialAllowed && game.state.tutorialAllowed !== 'hit' && game.state.tutorialAllowed !== 'any') return;
+      if (gated(game.state, 'hit')) return;
       if (game.state?.pendingStack && !isDroppingStack) {
         const targets = field.querySelectorAll('[data-stack-col]');
         if (targets.length > 0) {
@@ -1551,8 +1558,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       game.hit();
     }
     else if (action === 'stand') {
-      if (game.state?.tutorial && game.state?.tutorialAllowed && game.state.tutorialAllowed !== 'stand' && game.state.tutorialAllowed !== 'any') return;
-      game.stand();
+      if (!gated(game.state, 'stand')) game.stand();
     }
     else if (action === 'restart') restart();
     else if (action === 'adv-next') {
@@ -1585,25 +1591,12 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     game.newMatch({ ...config });
   }
 
+  // Las restricciones del tutorial las aplica la partida misma (ver `game.js`).
   market.addEventListener('click', (e) => {
-    if (e.target.closest('[data-action="renew"]')) {
-      if (game.state?.tutorial && !game.state?.tutorialAllowRenew) return;
-      return game.renewMarket();
-    }
-    if (e.target.closest('[data-action="skip"]')) {
-      if (game.state?.tutorial && game.state?.tutorialDisallowSkip) return;
-      return game.skipDraft();
-    }
-    const cardEl = e.target.closest('.market-card:not([disabled])');
-    const uid = cardEl?.dataset.uid;
-    if (uid) {
-      if (game.state?.tutorial && game.state?.tutorialAllowedCard && Number(uid) !== game.state.tutorialAllowedCard) return;
-      if (game.state?.tutorial && game.state?.tutorialPlainOnly) {
-        const card = game.state.market.find((c) => c.uid === Number(uid));
-        if (card?.power) return;
-      }
-      game.takeCard(Number(uid));
-    }
+    if (e.target.closest('[data-action="renew"]')) return game.renewMarket();
+    if (e.target.closest('[data-action="skip"]')) return game.skipDraft();
+    const uid = e.target.closest('.market-card:not([disabled])')?.dataset.uid;
+    if (uid) game.takeCard(Number(uid));
   });
 
   function updateFloatingCardPosition(targetEl) {
@@ -1928,25 +1921,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
 
   $('log-btn').addEventListener('click', () => $('log-modal').showModal());
   $('rules-btn').addEventListener('click', () => $('rules-modal').showModal());
-  $('symbols-btn')?.addEventListener('click', () => {
-    const modal = $('symbols-modal');
-    if (modal) {
-      if (!modal._symInit && modal.addEventListener) {
-        modal._symInit = true;
-        modal.addEventListener('click', (e) => {
-          const btn = e.target.closest?.('[data-sym-filter]');
-          if (!btn) return;
-          const filter = btn.dataset?.symFilter;
-          modal.querySelectorAll?.('[data-sym-filter]')?.forEach?.((b) => b.classList?.toggle('active', b === btn));
-          modal.querySelectorAll?.('.symbol-card')?.forEach?.((card) => {
-            const match = filter === 'all' || card.dataset?.symClass === filter;
-            card.hidden = !match;
-          });
-        });
-      }
-      modal.showModal?.();
-    }
-  });
+  $('symbols-btn')?.addEventListener('click', openSymbols);
 
   const openDemoFromUi = (initialPower = null) => {
     const lvl = game.state?.adventure?.level ?? 1;
@@ -1972,13 +1947,9 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
           return;
         }
       }
-      if (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'hit' && state.tutorialAllowed !== 'any') return;
-      game.hit();
+      if (!gated(state, 'hit')) game.hit();
     }
-    if (e.key === 'p' || e.key === 'P') {
-      if (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'stand' && state.tutorialAllowed !== 'any') return;
-      game.stand();
-    }
+    if ((e.key === 'p' || e.key === 'P') && !gated(state, 'stand')) game.stand();
     if (e.key === 'Enter') {
       // La ronda ya viene sola; Enter solo se saltea la pausa del cartel.
       if (state.phase === 'roundEnd') game.nextRound();

@@ -42,11 +42,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         p1: owned(s, 'p1'),
         p2: owned(s, 'p2'),
         pool: s.pool.length + s.market.length,
-        // Cada pulpo puesto paga una carta de más, aparte del reparto. Van a `top` y
-        // no al mazo, así que la pila mide exactamente cuántas se cobraron: dentro de
-        // un reparto nada más la toca, y se vacía recién al arrancar la ronda.
+        // Cada pulpo puesto paga una carta de más, aparte del reparto.
         octopus: s.status[s.draft.order[0]].stacked,
-        top: s.top[s.draft.order[0]].length,
       };
     } else if (s.phase !== 'draft' && before) {
       const p = before.player;
@@ -92,7 +89,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         ...(s.chains[p].bustCard ? [s.chains[p].bustCard] : []),
         ...(s.pendingStack?.player === p ? [s.pendingStack.card] : []),
       ];
-      const uids = [...s.decks[p], ...s.top[p], ...table].map((c) => c.uid);
+      const uids = [...s.decks[p], ...table].map((c) => c.uid);
       assert.equal(new Set(uids).size, uids.length, `${p}: una carta en dos lados`);
     }
     // El centro está siempre lleno mientras quede reserva para reponer.

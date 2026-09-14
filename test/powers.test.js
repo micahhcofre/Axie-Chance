@@ -513,7 +513,6 @@ async function atPlayerDraft(chain) {
 
   assert.equal(game.state.status.p1.stacked, 0, 'el pulpo se gastó');
   assert.equal(game.state.decks.p1.length, deck + 1, 'entró directo al mazo');
-  assert.deepEqual(game.state.top.p1, [], 'y no va a top');
   console.log('  ✓ pulpo (carta extra al mazo)');
 }
 
@@ -533,7 +532,6 @@ async function atPlayerDraft(chain) {
     const extra = game.pickable()[0];
     await game.takeCard(extra.uid);
     assert.equal(game.state.decks.p1.length, deck + 2, 'la del pulpo también va al mazo');
-    assert.deepEqual(game.state.top.p1, [], 'ninguna va a top');
   }
   console.log('  ✓ pulpo (es de más, no en lugar de)');
 }
@@ -572,7 +570,6 @@ async function atPlayerDraft(chain) {
   assert.equal(game.state.draft.step, 'bonus');
   await game.skipDraft();
   assert.equal(game.state.status.p1.stacked, 0, 'la reserva se consumió igual');
-  assert.deepEqual(game.state.top.p1, [], 'y no se llevó nada');
   console.log('  ✓ pulpo (rechazar la gasta)');
 }
 
@@ -802,7 +799,6 @@ async function atPlayerDraft(chain) {
   // La carta otorga 2 hojas. Al final del turno cura 2*4=8 y consume 1 hoja -> queda 1 hoja
   assert.equal(game.state.healed.p1, 8, 'curó +8 al final del turno (2 hojas * 4)');
   assert.equal(st.leaf, 1, 'quedó 1 hoja activa tras consumir 1');
-  assert.equal(st.oak, 1, 'oak sincronizado con leaf');
   console.log('  ✓ brote de roble (compatibilidad)');
 }
 

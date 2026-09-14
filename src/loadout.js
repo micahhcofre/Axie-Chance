@@ -17,7 +17,7 @@ import { AXIE_IDS } from './axies.js';
 const LOADOUT_KEY = 'axie-chance:axie';
 
 /** El almacenamiento, o nada si el navegador lo tiene apagado. */
-function store() {
+export function store() {
   try { return globalThis.localStorage ?? null; } catch { return null; }
 }
 

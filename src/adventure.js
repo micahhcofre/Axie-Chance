@@ -3,6 +3,8 @@
 // todos los disponibles en el juego. Diseñado de forma modular para expandirse con
 // futuras mecánicas (jefes, recompensas, modificadores, etc.).
 
+import { store } from './loadout.js';
+
 export const ADVENTURE_KEY = 'axie-chance:adventure';
 
 /**
@@ -71,14 +73,6 @@ export const ADVENTURE_LEVELS = [
     ],
   },
 ];
-
-function store() {
-  try {
-    return globalThis.localStorage ?? null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Lee el progreso del modo aventura guardado en el navegador.

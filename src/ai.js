@@ -1,4 +1,4 @@
-import { playCard, scoreChain, survivalOdds } from './rules.js';
+import { playCard, scoreChain } from './rules.js';
 import { TUNING } from './data.js';
 
 // El mazo tiene 96 cartas pero solo 41 combinaciones distintas de símbolos.
@@ -18,30 +18,19 @@ function deckProfile(deck) {
 function chainValue(chain, profile, remaining, depth) {
   const stand = scoreChain(chain).total;
   if (depth <= 0 || remaining <= 0) return stand;
-
-  let drawValue = 0;
-  for (const entry of profile) {
-    if (entry.count === 0) continue;
-    const next = playCard(chain, entry);
-    if (next.busted) continue; // aporta 0
-    const p = entry.count / remaining;
-    entry.count--;
-    drawValue += p * chainValue(next, profile, remaining - 1, depth - 1);
-    entry.count++;
-  }
-  return Math.max(stand, drawValue);
+  return Math.max(stand, drawEV(chain, profile, remaining, depth));
 }
 
-function drawEV(chain, deck, depth) {
-  const profile = deckProfile(deck);
+// Lo que se espera ganar robando una carta más: las que cortan aportan 0.
+function drawEV(chain, profile, remaining, depth) {
   let ev = 0;
   for (const entry of profile) {
     if (entry.count === 0) continue;
     const next = playCard(chain, entry);
     if (next.busted) continue;
-    const p = entry.count / deck.length;
+    const p = entry.count / remaining;
     entry.count--;
-    ev += p * chainValue(next, profile, deck.length - 1, depth - 1);
+    ev += p * chainValue(next, profile, remaining - 1, depth - 1);
     entry.count++;
   }
   return ev;
@@ -78,7 +67,7 @@ export function decideDraw(chain, deck, { needs = null, difficulty = 'normal' } 
   // el golpe final salía en 0 casi siempre. Juega su turno normal y pega lo que pueda.
   if (needs !== null && style.playsEndgame && stand >= needs) return false;
 
-  return drawEV(chain, deck, style.depth) > stand * style.margin;
+  return drawEV(chain, deckProfile(deck), deck.length, style.depth) > stand * style.margin;
 }
 
 // ---- elección de cartas de la reserva ---------------------------------------
@@ -96,15 +85,7 @@ export function connectivity(card, deck) {
 }
 
 /** La carta de `options` que mejor se enlaza con `deck`. */
-export function pickBest(options, deck) {
-  let best = null;
-  let bestValue = -1;
-  for (const card of options) {
-    const v = connectivity(card, deck);
-    if (v > bestValue) { bestValue = v; best = card; }
-  }
-  return best;
-}
+export const pickBest = (options, deck) => argmax(options, (card) => connectivity(card, deck), -1).best;
 
 /** Las `n` mejores de `options`, reevaluando después de cada elección. */
 function bestCards(options, deck, n) {
@@ -197,19 +178,32 @@ const POWER_WORTH = {
  * vez de dos y **solo los símbolos de la primera carta puntúan**.
  */
 export function pickBonus(pool, deck) {
-  if (!pool.length) return null;
-  const plain = pool.filter((c) => !c.power);
-  const two = bestCards(plain, deck, 2);
-  const perCard = two.cards.length ? two.value / two.cards.length : 0;
+  const { perCard } = plainPair(pool, deck);
+  return argmax(pool, (card) => worth(card, deck, perCard)).best;
+}
 
+/**
+ * Las dos mejores cartas sin poder de `pool`, y lo que vale cada una en promedio: con
+ * eso se convierte el efecto de un poder a conectividad.
+ */
+function plainPair(pool, deck) {
+  const two = bestCards(pool.filter((c) => !c.power), deck, 2);
+  return { two, perCard: two.cards.length ? two.value / two.cards.length : 0 };
+}
+
+/** Conectividad de la carta más lo que vale su efecto, si tiene. */
+const worth = (card, deck, perCard) =>
+  connectivity(card, deck) + (card.power ? POWER_WORTH[card.power] * TUNING.powerBias * perCard : 0);
+
+/** El primer elemento de `items` con el valor más alto por encima de `floor`. */
+function argmax(items, value, floor = -Infinity) {
   let best = null;
-  let bestValue = -Infinity;
-  for (const card of pool) {
-    const bonus = card.power ? POWER_WORTH[card.power] * TUNING.powerBias * perCard : 0;
-    const value = connectivity(card, deck) + bonus;
-    if (value > bestValue) { bestValue = value; best = card; }
+  let bestValue = floor;
+  for (const item of items) {
+    const v = value(item);
+    if (v > bestValue) { bestValue = v; best = item; }
   }
-  return best;
+  return { best, bestValue };
 }
 
 /**
@@ -225,22 +219,15 @@ export function pickBonus(pool, deck) {
  */
 export function planDraft(pool, deck, { kind }) {
   if (pool.length === 0) return { mode: null, cards: [] };
-  const plain = pool.filter((c) => !c.power);
-  const powered = pool.filter((c) => c.power);
 
   if (kind === 'bust') {
+    const plain = pool.filter((c) => !c.power);
     return plain.length ? { mode: 'plain', ...bestCards(plain, deck, 1) } : { mode: null, cards: [] };
   }
 
-  const two = bestCards(plain, deck, 2);
-  const perCard = two.cards.length ? two.value / two.cards.length : 0;
-
-  let best = null;
-  let bestValue = -1;
-  for (const card of powered) {
-    const value = connectivity(card, deck) + POWER_WORTH[card.power] * TUNING.powerBias * perCard;
-    if (value > bestValue) { bestValue = value; best = card; }
-  }
+  const { two, perCard } = plainPair(pool, deck);
+  const powered = pool.filter((c) => c.power);
+  const { best, bestValue } = argmax(powered, (card) => worth(card, deck, perCard), -1);
 
   if (best && bestValue > two.value) return { mode: 'power', cards: [best], value: bestValue };
   return two.cards.length ? { mode: 'plain', ...two } : { mode: null, cards: [] };

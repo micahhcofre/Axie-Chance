@@ -43,7 +43,7 @@
 // de donde salen los rascados y los bostezos— y arranca de nuevo.
 import { AXIE_IDS, AXIES, axie, axieArt, deckFor } from './axies.js';
 import { createMotion } from './axie-motion.js';
-import { POWERS, SYMBOLS, SYMBOL_IDS, boostOptions, crest, powerIcon } from './data.js';
+import { POWERS, SYMBOLS, SYMBOL_IDS, boostOptions, crest, powerIcon, shuffle } from './data.js';
 import { readLoadout, writeLoadout } from './loadout.js';
 import { netAvailable } from './net.js';
 import { createTutorial } from './tutorial.js';
@@ -51,6 +51,7 @@ import {
   ADVENTURE_LEVELS, getAdventureProgress, getAdventureLevel, isLevelUnlocked,
 } from './adventure.js';
 import { createPowerDemoController } from './power-demos.js';
+import { openSymbols } from './ui.js';
 
 // `el` y no `$` como en `ui.js` ni `byId` como en `net.js`: el build de un solo
 // archivo concatena los módulos sin envolverlos, así que dos nombres iguales en
@@ -117,14 +118,7 @@ const stillness = () =>
   Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
 
 /** Unos cuantos Axies del roster, distintos entre sí y en otro orden cada vez. */
-function cast(size, rnd = Math.random) {
-  const ids = [...AXIE_IDS];
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(rnd() * (i + 1));
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-  }
-  return ids.slice(0, size);
-}
+const cast = (size) => shuffle(AXIE_IDS).slice(0, size);
 
 /**
  * Un Axie paseándose. Se dibuja una sola vez y de ahí en más lo único que cambia son
@@ -347,7 +341,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
    * cuál es cuál. Se cierra al elegir, al sacar una mejora y al cambiar de Axie.
    */
   let boostOpen = null;
-  /** Cuál de los seis se está mirando: un índice sobre `pool()`. */
+  /** Cuál de los seis se está mirando: un índice sobre `AXIE_IDS`. */
   let at = 0;
   /** El Axie grande, respirando. Es el mismo reproductor de la mesa y del paseo. */
   const heroMotion = createMotion(el('lobby-choose-art'), 0);
@@ -384,22 +378,14 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   }
 
   /**
-   * Entre cuáles se puede elegir: los seis, sin restas.
-   *
-   * Hubo una: al Jugador 2 del teclado compartido le faltaba el del primero, porque las
-   * clases tienen que ser distintas. Ese asiento ya no elige acá —el de una sala elige
-   * en su aparato, y contra la CPU el suyo se sortea de otra clase (ver `newMatch`)—,
-   * así que la vuelta es entera. Elegís tu Axie sin saber contra quién vas a jugar, que
-   * es como tiene que ser: es tu bicho, no tu respuesta a algo.
+   * El que se está mirando ahora. Se elige entre los seis, sin restas: elegís tu Axie
+   * sin saber contra quién vas a jugar, que es como tiene que ser.
    */
-  const pool = () => AXIE_IDS;
-
-  /** El que se está mirando ahora. */
-  const shown = () => pool()[at] ?? pool()[0];
+  const shown = () => AXIE_IDS[at];
 
   /** Repinta la pantalla entera con el Axie que se está mirando. */
   function paintChoose() {
-    const ring = pool();
+    const ring = AXIE_IDS;
     const id = ring[at];
     const a = AXIES[id];
     const sym = SYMBOLS[a.class];
@@ -460,13 +446,13 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
 
   /** Deja la vuelta parada en un Axie, o en el primero libre si ese ya no está. */
   function focusOn(id) {
-    const ring = pool();
+    const ring = AXIE_IDS;
     at = Math.max(ring.indexOf(id), 0);
   }
 
   /** Un lugar para adelante o para atrás en la vuelta. Da la vuelta entera: es un aro. */
   function browse(step) {
-    const ring = pool();
+    const ring = AXIE_IDS;
     at = (at + step + ring.length) % ring.length;
     boostOpen = null;
     paintChoose();
@@ -699,27 +685,8 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   });
   el('lobby-prev').addEventListener('click', () => browse(-1));
   el('lobby-next').addEventListener('click', () => browse(1));
-  function initSymbolsFilter() {
-    const modal = el('symbols-modal');
-    if (!modal || modal._symInit || !modal.addEventListener) return;
-    modal._symInit = true;
-    modal.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-sym-filter]');
-      if (!btn) return;
-      const filter = btn.dataset.symFilter;
-      modal.querySelectorAll('[data-sym-filter]').forEach((b) => b.classList.toggle('active', b === btn));
-      modal.querySelectorAll('.symbol-card').forEach((card) => {
-        const match = filter === 'all' || card.dataset.symClass === filter;
-        card.hidden = !match;
-      });
-    });
-  }
-
   el('lobby-rules').addEventListener('click', () => el('rules-modal').showModal());
-  el('lobby-symbols')?.addEventListener('click', () => {
-    initSymbolsFilter();
-    el('symbols-modal').showModal();
-  });
+  el('lobby-symbols')?.addEventListener('click', openSymbols);
 
   // El tutorial: una partida guionada con tooltips. Arranca un game propio y lo
   // monta en la misma mesa. Al terminar vuelve a la portada.

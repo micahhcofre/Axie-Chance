@@ -522,6 +522,9 @@ function createSteps() {
 
 // ---- Overlay del tutorial ----------------------------------------------------
 
+/** Un texto de un paso: fijo, o calculado del estado. */
+const stepText = (value, state) => (typeof value === 'function' ? value(state) : (value || ''));
+
 export function createOverlay() {
   let el = document.getElementById('tutorial-overlay');
   if (!el) {
@@ -549,18 +552,7 @@ export function createOverlay() {
     clearHighlights();
     if (!selector) return;
     try {
-      let fullSelector = selector;
-      if (fullSelector.includes('#fighter-p2')) {
-        fullSelector = fullSelector.replaceAll('#fighter-p2', '#axie-p2');
-      }
-      if (fullSelector.includes('#fighter-p1')) {
-        fullSelector = fullSelector.replaceAll('#fighter-p1', '#axie-p1');
-      }
-      if (fullSelector.includes('#swing') && !fullSelector.includes('.sym[data-on="true"]')) {
-        fullSelector += ', #field .sym[data-on="true"], #field .runs .run';
-      }
-      const targets = document.querySelectorAll(fullSelector);
-      targets.forEach((target) => {
+      document.querySelectorAll(selector).forEach((target) => {
         target.classList.add('tuto-hl');
         activeHighlights.push(target);
       });
@@ -578,10 +570,10 @@ export function createOverlay() {
       el.hidden = false;
       el.className = `tuto-overlay is-on ${isModal ? 'is-modal' : 'is-coach'}`;
 
-      const title = typeof step.title === 'function' ? step.title(state) : step.title;
-      const desc = typeof step.desc === 'function' ? step.desc(state) : (step.desc || '');
-      const action = typeof step.action === 'function' ? step.action(state) : (step.action || '');
-      const messageHtml = typeof step.message === 'function' ? step.message(state) : (step.message || '');
+      const title = stepText(step.title, state);
+      const desc = stepText(step.desc, state);
+      const action = stepText(step.action, state);
+      const messageHtml = stepText(step.message, state);
       const ctaText = step.ctaText ?? (isModal ? 'Continuar →' : 'Entendido');
       const roundNum = step.round ?? state?.round ?? 1;
 
@@ -626,12 +618,10 @@ export function createOverlay() {
     },
     updateText({ step, state }) {
       if (el.hidden || !step || step.type !== 'coach') return;
-      const desc = typeof step.desc === 'function' ? step.desc(state) : (step.desc || '');
-      const action = typeof step.action === 'function' ? step.action(state) : (step.action || '');
       const descEl = el.querySelector('.tuto-coach-desc');
-      if (descEl) descEl.innerHTML = desc;
+      if (descEl) descEl.innerHTML = stepText(step.desc, state);
       const actSpan = el.querySelector('.tuto-coach-act span:last-child');
-      if (actSpan) actSpan.innerHTML = action;
+      if (actSpan) actSpan.innerHTML = stepText(step.action, state);
     },
     refreshHighlight(selector) {
       applyHighlights(selector);
@@ -663,34 +653,17 @@ export function createTutorial(game, onDone = () => {}) {
   function applyStepGating(step, state) {
     if (!state) return;
     state.tutorialAllowed = step.allowedAction ?? 'any';
-
-    if (step.id === 'r1-draft' || step.id === 'r2-draft') {
-      state.tutorialPlainOnly = true;
-      state.tutorialAllowedCard = null;
-      state.tutorialDisallowSkip = false;
-      state.tutorialAllowRenew = false;
-    } else if (step.allowedCard === 'pot') {
-      let potInMarket = state.market.find((c) => c.power === 'pot');
-      if (!potInMarket) {
-        if (!potCardRef) potCardRef = makeCard(['aquatic', 'plant', 'reptile'], 'pot');
-        state.market[0] = potCardRef;
-        potInMarket = potCardRef;
-      }
-      state.tutorialPlainOnly = false;
-      state.tutorialAllowedCard = potInMarket.uid;
-      state.tutorialDisallowSkip = true;
-      state.tutorialAllowRenew = false;
-    } else if (step.allowedAction === 'draft') {
-      state.tutorialPlainOnly = false;
-      state.tutorialAllowedCard = null;
-      state.tutorialDisallowSkip = false;
-      state.tutorialAllowRenew = false;
-    } else {
-      state.tutorialPlainOnly = false;
-      state.tutorialAllowedCard = null;
-      state.tutorialDisallowSkip = false;
-      state.tutorialAllowRenew = false;
+    // En los repartos de las rondas 1 y 2 solo hay cartas sin poder; en el de la 3, la
+    // Maceta y nada más, sin poder saltearla.
+    const pot = step.allowedCard === 'pot';
+    if (pot && !state.market.some((c) => c.power === 'pot')) {
+      potCardRef ??= makeCard(['aquatic', 'plant', 'reptile'], 'pot');
+      state.market[0] = potCardRef;
     }
+    state.tutorialPlainOnly = step.id === 'r1-draft' || step.id === 'r2-draft';
+    state.tutorialAllowedCard = pot ? state.market.find((c) => c.power === 'pot').uid : null;
+    state.tutorialDisallowSkip = pot;
+    state.tutorialAllowRenew = false;
     game.refresh();
   }
 

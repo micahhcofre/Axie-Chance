@@ -86,17 +86,11 @@ export const TUNING = {
   octopusStacks: true,
   octopusOnStand: true,
   powerBias: 1,
-  brutalMinCards: 1,
   brutalStep: 2,
   featherDamage: 5,
-  leafRounds: 3,
   leafHeal: 4,
   leafGain: 2,
   leafMax: 5,
-  oakRounds: 3,
-  oakHeal: 4,
-  oakGain: 2,
-  oakMax: 5,
   leechDrain: 6,
   leechBonusThreshold: 4,
   leechBonusDrain: 12,
@@ -104,6 +98,8 @@ export const TUNING = {
   steelskinStep: 2,
   steelskinFloor: 6,
 };
+
+const LEAF_NOTE = `+${TUNING.leafGain} hojas (hasta ${TUNING.leafMax}): cada hoja te cura ${TUNING.leafHeal} de vida al final de tu turno y se gasta 1 hoja`;
 
 export const POWERS = {
   egg: {
@@ -146,14 +142,9 @@ export const POWERS = {
     id: 'freegame', symbol: null, name: 'Free Game',
     note: 'al entrar en mesa alarga una carta existente sumando sus símbolos',
   },
-  leaf: {
-    id: 'leaf', symbol: 'plant', name: 'Hoja',
-    note: '+2 hojas (hasta 5): cada hoja te cura 4 de vida al final de tu turno y se gasta 1 hoja',
-  },
-  oak: {
-    id: 'oak', symbol: 'plant', name: 'Hoja',
-    note: '+2 hojas (hasta 5): cada hoja te cura 4 de vida al final de tu turno y se gasta 1 hoja',
-  },
+  leaf: { id: 'leaf', symbol: 'plant', name: 'Hoja', note: LEAF_NOTE },
+  // Alias viejo de la hoja: mismo poder con otro id.
+  oak: { id: 'oak', symbol: 'plant', name: 'Hoja', note: LEAF_NOTE },
   leech: {
     id: 'leech', symbol: 'bug', name: 'Greedy Leech',
     note: `al atacar roba 6 de vida al rival (se duplica a 12 con ${TUNING.leechBonusThreshold} columnas en mesa)`,
@@ -203,62 +194,39 @@ export function powerIcon(id, size = '') {
  *
  * Son 36 cartas sobre 20 tríos posibles, así que el mismo trío aparece con poderes
  * distintos. Encadenan igual y se eligen por el efecto, que es justo la decisión
- * que el centro tiene que ofrecer.
+ * que el centro tiene que ofrecer. Los dos poderes de una clase comparten tríos:
+ * como solo uno de los dos entra en cada partida, el balance es el mismo.
  */
-export const POWER_TRIOS = {
-  egg: [
+const CLASS_TRIOS = {
+  bird: [
     ['beast', 'aquatic'], ['beast', 'plant'], ['aquatic', 'bug'],
     ['plant', 'bug'], ['plant', 'reptile'], ['bug', 'reptile'],
   ],
-  octopus: [
+  aquatic: [
     ['beast', 'bird'], ['beast', 'plant'], ['bird', 'plant'],
     ['bird', 'bug'], ['plant', 'reptile'], ['bug', 'reptile'],
   ],
-  pot: [
+  plant: [
     ['beast', 'aquatic'], ['beast', 'bug'], ['aquatic', 'reptile'],
     ['bird', 'bug'], ['bird', 'reptile'], ['bug', 'reptile'],
   ],
-  poison: [
+  reptile: [
     ['beast', 'aquatic'], ['beast', 'bird'], ['beast', 'plant'],
     ['aquatic', 'bird'], ['aquatic', 'bug'], ['plant', 'bug'],
   ],
-  snail: [
+  bug: [
     ['beast', 'aquatic'], ['beast', 'bird'], ['beast', 'plant'],
     ['aquatic', 'reptile'], ['bird', 'reptile'], ['plant', 'reptile'],
   ],
-  strength: [
+  beast: [
     ['aquatic', 'bird'], ['aquatic', 'plant'], ['aquatic', 'bug'],
     ['bird', 'plant'], ['bird', 'reptile'], ['bug', 'reptile'],
-  ],
-  brutal: [
-    ['aquatic', 'bird'], ['aquatic', 'plant'], ['aquatic', 'bug'],
-    ['bird', 'plant'], ['bird', 'reptile'], ['bug', 'reptile'],
-  ],
-  bubble: [
-    ['beast', 'bird'], ['beast', 'plant'], ['bird', 'plant'],
-    ['bird', 'bug'], ['plant', 'reptile'], ['bug', 'reptile'],
-  ],
-  feather: [
-    ['beast', 'aquatic'], ['beast', 'plant'], ['aquatic', 'bug'],
-    ['plant', 'bug'], ['plant', 'reptile'], ['bug', 'reptile'],
-  ],
-  leaf: [
-    ['beast', 'aquatic'], ['beast', 'bug'], ['aquatic', 'reptile'],
-    ['bird', 'bug'], ['bird', 'reptile'], ['bug', 'reptile'],
-  ],
-  oak: [
-    ['beast', 'aquatic'], ['beast', 'bug'], ['aquatic', 'reptile'],
-    ['bird', 'bug'], ['bird', 'reptile'], ['bug', 'reptile'],
-  ],
-  leech: [
-    ['beast', 'aquatic'], ['beast', 'bird'], ['beast', 'plant'],
-    ['aquatic', 'reptile'], ['bird', 'reptile'], ['plant', 'reptile'],
-  ],
-  steelskin: [
-    ['beast', 'aquatic'], ['beast', 'bird'], ['beast', 'plant'],
-    ['aquatic', 'bird'], ['aquatic', 'bug'], ['plant', 'bug'],
   ],
 };
+
+export const POWER_TRIOS = Object.fromEntries(
+  Object.values(POWERS).filter((p) => p.symbol).map((p) => [p.id, CLASS_TRIOS[p.symbol]]),
+);
 
 // Los uid son únicos entre todos los mazos: la UI los usa para no reanimar cartas ya vistas.
 let nextUid = 0;
@@ -273,21 +241,15 @@ export function makeCard(symbols, power = null, opts = {}) {
   const sorted = symbols.slice().sort(byOrder);
   const key = sorted.join('+');
   const uid = nextUid++;
-  const hasPower = Boolean(power);
-  const powerEffect = power || undefined;
-  const isFavorable = opts.isFavorable ?? false;
-  const associatedPart = opts.associatedPart;
-  const id = opts.id ?? `c_${uid}`;
-  const name = opts.name ?? (hasPower ? (POWERS[power]?.name || 'Poder') : sorted.map((s) => SYMBOLS[s]?.name || s).join(' · '));
   return {
     uid,
-    id,
-    name,
+    id: opts.id ?? `c_${uid}`,
+    name: opts.name ?? (power ? (POWERS[power]?.name || 'Poder') : sorted.map((s) => SYMBOLS[s]?.name || s).join(' · ')),
     symbols: sorted,
-    isFavorable,
-    associatedPart,
-    hasPower,
-    powerEffect,
+    isFavorable: opts.isFavorable ?? false,
+    associatedPart: opts.associatedPart,
+    hasPower: Boolean(power),
+    powerEffect: power || undefined,
     power,
     key: power ? `${key}@${power}` : key,
   };
@@ -371,19 +333,13 @@ export const TRIAD_BEATS = {
   rock: 'scissors',
 };
 
-export const TRIAD_LOSES_TO = {
-  rock: 'paper',
-  paper: 'scissors',
-  scissors: 'rock',
-};
+export const TRIAD_LOSES_TO = Object.fromEntries(
+  Object.entries(TRIAD_BEATS).map(([winner, loser]) => [loser, winner]),
+);
 
 /** Determina la tríada canónica a la que pertenece una clase */
-export function getTriadForClass(cls) {
-  for (const [triad, members] of Object.entries(TRIADS)) {
-    if (members.includes(cls)) return triad;
-  }
-  return null;
-}
+export const getTriadForClass = (cls) =>
+  Object.keys(TRIADS).find((triad) => TRIADS[triad].includes(cls)) ?? null;
 
 /**
  * Sistema de Tríadas y Cartas Desfavorables (Counter Suppression Formula):
@@ -477,21 +433,10 @@ export function baseDeck(baseClass, nftState = null) {
   const parts = state?.parts || {};
 
   // 6 cartas favorables según saltos anatómicos fijos
-  const favorableParts = ['tail', 'mouth', 'eyes', 'ears', 'horn', 'back'];
-  const favorableCards = favorableParts.map((part) => {
-    const jump = ANATOMICAL_JUMPS[part];
-    const baseSymbols = jump === 0
-      ? [baseClass]
-      : [baseClass, CANONICAL_CLASSES[(i + jump) % 6]];
-
-    const partInfo = parts[part];
-    const symbols = baseSymbols.slice();
-
-    // 2.2 Axie Core - Part Evolution (Mutación a 3 símbolos / 2 en cola)
-    if (partInfo?.isEvolved) {
-      const partClass = partInfo.class || baseClass;
-      symbols.push(partClass);
-    }
+  const favorableCards = Object.entries(ANATOMICAL_JUMPS).map(([part, jump]) => {
+    const symbols = jump === 0 ? [baseClass] : [baseClass, CANONICAL_CLASSES[(i + jump) % 6]];
+    // Axie Core - Part Evolution (Mutación a 3 símbolos / 2 en cola)
+    if (parts[part]?.isEvolved) symbols.push(parts[part].class || baseClass);
 
     return makeCard(symbols, null, {
       id: `${baseClass}-${part}`,
@@ -602,14 +547,11 @@ export function shuffle(cards, rng = Math.random) {
   return out;
 }
 
+/** Los poderes de una carta: uno, o todos los de las cartas que lleva montadas. */
+export const powersOf = (card) => (card.stackedCards
+  ? card.stackedCards.map((c) => c.power).filter(Boolean)
+  : (card.powers || (card.power ? [card.power] : [])));
+
 /** Los símbolos de una carta —y su poder, si tiene—, para el registro de la partida. */
-export function cardLabel(card) {
-  const syms = card.symbols.map((s) => crest(s, 'sm')).join('');
-  const powers = card.stackedCards
-    ? card.stackedCards.map((c) => c.power).filter(Boolean)
-    : (card.powers || (card.power ? [card.power] : []));
-  if (powers.length > 0) {
-    return `${syms}${powers.map((p) => powerIcon(p, 'sm')).join('')}`;
-  }
-  return syms;
-}
+export const cardLabel = (card) =>
+  card.symbols.map((s) => crest(s, 'sm')).join('') + powersOf(card).map((p) => powerIcon(p, 'sm')).join('');

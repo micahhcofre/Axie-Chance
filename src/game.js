@@ -38,7 +38,13 @@ export const CLOCK = { turn: 30000, draft: 10000 };
  *   `stacked`  cuántas de las próximas cartas que agarre del centro van arriba del
  *              mazo en vez de perderse en el barajado (ver el pulpo)
  */
-const emptyStatus = () => ({ egg: 0, eggBreak: 0, poison: 0, weak: 0, strength: 0, stacked: 0, bubbles: 0, leaf: 0, oak: 0, steelskin: 0 });
+const emptyStatus = () => ({ egg: 0, eggBreak: 0, poison: 0, weak: 0, strength: 0, stacked: 0, bubbles: 0, leaf: 0, steelskin: 0 });
+
+/** Las cartas de una fila de la mesa, desarmando las montadas (Free Game, burbuja). */
+const unstack = (cards) => cards.flatMap((c) => c.stackedCards || [c]);
+
+/** El largo de la racha más larga de la cadena. */
+const longestRun = (chain) => Math.max(0, ...chain.runs.map((r) => r.length));
 
 // Cada jugador roba de su propio mazo y no hay descarte: cada ronda arranca con el
 // mazo entero barajado de nuevo, como una tragamonedas. Contar lo que salió sigue
@@ -46,24 +52,6 @@ const emptyStatus = () => ({ egg: 0, eggBreak: 0, poison: 0, weak: 0, strength: 
 // nada se arrastra de una ronda a la otra.
 
 const other = (p) => (p === 'p1' ? 'p2' : 'p1');
-
-/**
- * Los dos modos de partida.
- *
- *   `cpu`  la de siempre: vos contra la máquina.
- *   `net`  los dos asientos jugados por personas, cada una en su aparato. Es la
- *          partida de las salas (ver `net.js` y `scripts/net.mjs`), y la partida vive
- *          en el servidor: acá el modo solo dice que el segundo asiento **no** lo
- *          juega la máquina.
- *
- * Hubo un tercero, `local`: los dos asientos en el mismo teclado. Se fue, y no por un
- * problema técnico —andaba— sino porque no era un modo, era una explicación: había que
- * contarle al que abría el juego que existía la posibilidad de que alguien se sentara
- * al lado, y el menú pagaba ese renglón siempre, para todos. Jugar con otra persona es
- * una sola cosa y ahora se pide en un solo lugar: una sala. Lo que sigue viviendo acá
- * de aquel modo es esto: que el segundo asiento pueda ser de alguien.
- */
-export const MODES = ['cpu', 'net', 'tutorial'];
 
 /**
  * Cómo se nombra cada asiento, y en qué persona le habla el registro.
@@ -79,17 +67,13 @@ export const MODES = ['cpu', 'net', 'tutorial'];
  * la preposición, porque el español contrae: "a el Jugador 2" no existe, es "al
  * Jugador 2". Una regla para dos casos se lee peor que los dos casos.
  */
+const YOU = { name: 'Vos', short: 'Vos', mid: 'vos', to: 'a vos', of: 'de vos', you: true };
+const CPU = { name: 'La CPU', short: 'CPU', mid: 'la CPU', to: 'a la CPU', of: 'de la CPU' };
 const VOICE = {
-  cpu: {
-    p1: { name: 'Vos', short: 'Vos', mid: 'vos', to: 'a vos', of: 'de vos', you: true },
-    p2: { name: 'La CPU', short: 'CPU', mid: 'la CPU', to: 'a la CPU', of: 'de la CPU' },
-  },
-  tutorial: {
-    p1: { name: 'Vos', short: 'Vos', mid: 'vos', to: 'a vos', of: 'de vos', you: true },
-    p2: { name: 'La CPU', short: 'CPU', mid: 'la CPU', to: 'a la CPU', of: 'de la CPU' },
-  },
+  cpu: { p1: YOU, p2: CPU },
+  tutorial: { p1: YOU, p2: CPU },
   adventure: {
-    p1: { name: 'Vos', short: 'Vos', mid: 'vos', to: 'a vos', of: 'de vos', you: true },
+    p1: YOU,
     p2: { name: 'Rival', short: 'Rival', mid: 'el rival', to: 'al rival', of: 'del rival' },
   },
   net: {
@@ -113,7 +97,7 @@ export const seatVoice = (state, player) => VOICE[state.mode][player];
  * el turno que corre es de alguien que va a apretar un botón o de alguien a quien hay
  * que esperar— y las dos tienen que contestar lo mismo.
  */
-export const isBotSeat = (state, player) => (state.mode === 'cpu' || state.mode === 'tutorial' || state.mode === 'adventure') && player === 'p2';
+export const isBotSeat = (state, player) => state.mode !== 'net' && player === 'p2';
 
 /**
  * Vida que le queda a `player`: la inicial, menos el daño que le hizo el otro, más
@@ -122,6 +106,13 @@ export const isBotSeat = (state, player) => (state.mode === 'cpu' || state.mode 
  */
 export const hpOf = (state, player) =>
   Math.max(TARGET - state.totals[other(player)] + state.healed[player], 0);
+
+/** Bono de daño por Garra Brutal: +2 de daño por cada símbolo de la cadena más larga. Se activa siempre. */
+export function brutalBonusOf(chain) {
+  if (!chain || chain.busted) return 0;
+  const claws = unstack(chain.cards).filter((c) => c.power === 'brutal').length;
+  return claws * TUNING.brutalStep * longestRun(chain);
+}
 
 /**
  * Lo que pegaría `player` si soltara el ataque ahora: los puntos de su cadena más la
@@ -141,18 +132,6 @@ export const hpOf = (state, player) =>
  * Vive acá y no en la UI porque es la cuenta con la que se reparte el daño: el
  * número grande de la pantalla tiene que ser exactamente el que se va a aplicar.
  */
-/** Bono de daño por Garra Brutal: +2 de daño por cada símbolo de la cadena más larga. Se activa siempre. */
-export function brutalBonusOf(chain) {
-  if (!chain || chain.busted) return 0;
-  const allCards = chain.cards.flatMap((c) => c.stackedCards || [c]);
-  const brutalCount = allCards.filter((c) => c.power === 'brutal').length;
-  if (brutalCount === 0) return 0;
-  const maxRunLength = chain.runs.length > 0
-    ? Math.max(...chain.runs.map((r) => r.length))
-    : 0;
-  return brutalCount * (TUNING.brutalStep ?? 2) * maxRunLength;
-}
-
 export function swingOf(state, player) {
   const chain = state.chains[player];
   const points = chain.busted ? 0 : scoreChain(chain).total;
@@ -297,17 +276,16 @@ export function canRenewFor(state, player) {
 export function onTable(state, player) {
   if (state.returned[player]) return 0;
   const chain = state.chains[player];
-  const allCards = chain.cards.flatMap((c) => c.stackedCards || [c]);
   const pending = state.pendingStack?.player === player ? 1 : 0;
-  return allCards.length - state.recycled[player] + (chain.bustCard ? 1 : 0) + pending;
+  return unstack(chain.cards).length - state.recycled[player] + (chain.bustCard ? 1 : 0) + pending;
 }
 
 /**
- * Todas las cartas de `player`: el mazo, lo que reservó el pulpo para arriba del
- * mazo, y lo que sigue en la mesa sin devolver.
+ * Todas las cartas de `player`: el mazo, la que espera en la burbuja, y lo que sigue
+ * en la mesa sin devolver.
  */
 export const ownedBy = (state, player) =>
-  state.decks[player].length + state.top[player].length + (state.bubbleCard?.[player] ? 1 : 0) + onTable(state, player);
+  state.decks[player].length + (state.bubbleCard?.[player] ? 1 : 0) + onTable(state, player);
 
 /**
  * @param {{pace?: number, seed?: number}} opts
@@ -347,14 +325,13 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   /** El verbo en la persona que le toca al asiento (ver `VOICE`). */
   const verb = (p, second, third) => (voice(p).you ? second : third);
   const cap = (s) => s[0].toUpperCase() + s.slice(1);
-  /**
-   * El color de una línea del registro: el del asiento que la provocó. Antes el color
-   * decía si la noticia era buena o mala, y eso solo tiene sentido cuando hay un solo
-   * lado mirando; con dos personas en la misma pantalla, "bueno" es de quién.
-   */
-  const toneOf = (p) => p;
   const isBot = (p) => isBotSeat(state, p);
 
+  /**
+   * Una línea del registro. `kind` es su color: casi siempre el asiento que la provocó
+   * ('p1'/'p2'). Antes el color decía si la noticia era buena o mala, y eso solo tiene
+   * sentido cuando hay un solo lado mirando; con dos personas, "bueno" es de quién.
+   */
   function log(text, kind = 'info') {
     state.log.unshift({ id: state.logId++, text, kind });
     if (state.log.length > 24) state.log.pop();
@@ -416,7 +393,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // Sin descarte, lo único fuera del mazo es lo que ya salió esta ronda: vuelve
       // adentro. `recycled` marca hasta dónde de la cadena ya se devolvió, para no
       // contarlo otra vez al cerrar la ronda.
-      const played = state.chains[player].cards.flatMap((c) => c.stackedCards || [c]);
+      const played = unstack(state.chains[player].cards);
       state.decks[player] = deal(played.slice(state.recycled[player]));
       state.recycled[player] = played.length;
       log(`${who(player)} ${verb(player, 'rebarajás', 'rebaraja')} lo que ya salió.`, 'muted');
@@ -427,8 +404,8 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
 
   const unseenPool = (player) => unseenOf(state, player);
 
-  /** Las cartas de `player` con las que la CPU mide conectividad: mazo y reservadas. */
-  const cardsOf = (player) => [...state.decks[player], ...state.top[player]];
+  /** Las cartas de `player` con las que la CPU mide conectividad. */
+  const cardsOf = (player) => state.decks[player];
 
   /**
    * @param {{difficulty?: string, mode?: string, axie?: string, axie2?: string,
@@ -519,9 +496,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // todo lo que tiene el jugador, que es lo que cuenta `ownedBy` por el otro lado.
       start,
       added: { p1: [], p2: [] },
-      // Cartas reservadas por el pulpo, esperando el arranque de la ronda siguiente
-      // para entrar arriba del mazo. Ver `takeFromMarket` y `startRound`.
-      top: { p1: [], p2: [] },
+      // La carta que atrapó la burbuja, esperando para abrir la ronda siguiente.
       bubbleCard: { p1: null, p2: null },
       // Cuántas cartas de la cadena en curso ya volvieron al mazo (ver `draw`).
       recycled: { p1: 0, p2: 0 },
@@ -577,15 +552,12 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       } : null,
     };
     refillMarket();
+    const versus = `${mine.name} ${crest(mine.class, 'sm')} contra ${theirs.name} ${crest(theirs.class, 'sm')}`;
+    const hp = `${TARGET} de vida cada uno.`;
     log(
-      mode === 'net'
-        ? `${mine.name} ${crest(mine.class, 'sm')} contra ${theirs.name} ` +
-          `${crest(theirs.class, 'sm')}, dos jugadores. ${TARGET} de vida cada uno.`
-        : mode === 'adventure' && advCfg
-        ? `Modo Aventura (${advCfg.name}): ${mine.name} ${crest(mine.class, 'sm')} contra ` +
-          `${theirs.name} ${crest(theirs.class, 'sm')}. ${TARGET} de vida cada uno.`
-        : `Jugás con ${mine.name} ${crest(mine.class, 'sm')} contra ` +
-          `${theirs.name} ${crest(theirs.class, 'sm')}. ${TARGET} de vida cada uno.`,
+      mode === 'net' ? `${versus}, dos jugadores. ${hp}`
+        : advCfg ? `Modo Aventura (${advCfg.name}): ${versus}. ${hp}`
+        : `Jugás con ${versus}. ${hp}`,
       'muted',
     );
     return startRound(epoch);
@@ -598,17 +570,10 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // tiene los mazos puestos por `scriptedDecks` en `newMatch`; las siguientes las
     // pone el gancho `onRoundStart` si existe.
     if (state.tutorial) {
-      if (state.onRoundStart) state.onRoundStart(state.round);
-      for (const player of PLAYERS) state.top[player] = [];
+      state.onRoundStart?.(state.round);
     } else {
-      // Se rebaraja todo el mazo propio: lo de la ronda pasada y lo que se sumó del
-      // centro. Lo que reservó el pulpo se apoya encima **después** de barajar —es todo
-      // el punto: esas cartas no se sortean—. Van al revés porque `draw` saca del final,
-      // así la primera que se tocó en el centro es la primera que sale.
-      for (const player of PLAYERS) {
-        state.decks[player] = deal(state.decks[player]).concat(state.top[player].reverse());
-        state.top[player] = [];
-      }
+      // Se rebaraja todo el mazo propio: lo de la ronda pasada y lo que se sumó del centro.
+      for (const player of PLAYERS) state.decks[player] = deal(state.decks[player]);
     }
     state.recycled = { p1: 0, p2: 0 };
     state.returned = { p1: false, p2: false };
@@ -636,17 +601,62 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     await beginTurn(state.order[0], era);
   }
 
-  function feathersIn(card) {
-    if (!card) return 0;
-    if (card.stackedCards) {
-      return card.stackedCards.filter((c) => c.power === 'feather').length;
+  /**
+   * Suma daño repartido por `by`. En el tutorial la CPU nunca deja al jugador por debajo
+   * de 20: el guión necesita que llegue entero a la ronda 5.
+   */
+  function addDamage(by, amount) {
+    state.totals[by] += amount;
+    if (state.tutorial && by === 'p2') {
+      state.totals.p2 = Math.min(state.totals.p2, Math.max(0, TARGET + state.healed.p1 - 20));
     }
-    return card.power === 'feather' ? 1 : 0;
   }
 
-  function applyFeatherDamage(player, count) {
+  /** Una carta de Free Game que entra en la cadena deja montado el próximo robo. */
+  function armFreeGame(player, card) {
+    if (card.power !== 'freegame') return;
+    state.freeGame[player] = true;
+    log(`${powerIcon('freegame', 'sm')} Free Game activo: tu próximo robo no corta y se monta sobre una carta`, player);
+  }
+
+  /** Monta `card` sobre la columna `col` de la cadena de `player` (Free Game). */
+  function stackCard(player, col, card) {
+    state.chains[player] = stackOnCard(state.chains[player], col, card);
+    state.lastStacked = { player, colIndex: col, card, id: ++state.stackId };
+    state.freeGame[player] = card.power === 'freegame';
+    if (state.freeGame[player]) {
+      log(`${powerIcon('freegame', 'sm')} Free Game encadenado: el próximo robo también se monta en mesa`, player);
+    }
+    log(`${powerIcon('freegame', 'sm')} ${who(player)} ${verb(player, 'montás', 'monta')} ` +
+      `${cardLabel(card)} sobre la columna ${col + 1} alargándola → ataque de ${swingOf(state, player)}`, player);
+  }
+
+  /**
+   * Juega `card` en la cadena de `player`. Si la corta, deja caer la carta `ms`, cierra
+   * el turno en 0 y devuelve false.
+   */
+  async function extend(player, card, ms, era) {
+    const next = playCard(state.chains[player], card);
+    state.chains[player] = next;
+    if (next.busted) {
+      state.freeGame[player] = false;
+      log(bustLine(player, card), 'bad');
+      emit();
+      if (await tick(ms, era)) await finishTurn(player, 0, era);
+      return false;
+    }
+    armFreeGame(player, card);
+    log(`${who(player)} ${verb(player, 'sacás', 'saca')} ${cardLabel(card)} → ataque de ` +
+      `${swingOf(state, player)}`, player);
+    return true;
+  }
+
+  /** La Pluma Sagrada pega apenas sale del mazo, una vez por cada pluma de la carta. */
+  function applyFeathers(player, card) {
+    const count = unstack([card]).filter((c) => c.power === 'feather').length;
+    if (count === 0) return;
     const foe = other(player);
-    const dmg = count * (TUNING.featherDamage ?? 5);
+    const dmg = count * TUNING.featherDamage;
     state.totals[player] += dmg;
     state.lastHit = {
       id: ++state.hitId,
@@ -660,7 +670,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     log(
       `${powerIcon('feather', 'sm')} Pluma Sagrada le pega ${toWhom(foe)} por ${dmg}: ` +
         `${verb(foe, 'quedás', 'queda')} en ${hpOf(state, foe)}.`,
-      toneOf(player),
+      player,
     );
   }
 
@@ -672,48 +682,28 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     state.turn = player;
     armClock(player, 'turn');
     let card;
-    if (state.bubbleCard?.[player]) {
-      const { card: bCard, count } = state.bubbleCard[player];
+    const bubble = state.bubbleCard[player];
+    if (bubble) {
+      // La carta de la burbuja abre la ronda; con varias burbujas se le funden encima
+      // las primeras del mazo en una carta gigante.
       state.bubbleCard[player] = null;
-      const extra = Math.max(0, count - 1);
-      const extraCards = [];
-      for (let i = 0; i < extra; i++) {
-        const c = draw(player);
-        if (c) extraCards.push(c);
-      }
-      if (extraCards.length > 0) {
-        card = {
-          ...bCard,
-          symbols: [...bCard.symbols, ...extraCards.flatMap((c) => c.symbols)],
-          stackedCards: [bCard, ...extraCards],
-        };
-        state.chains[player] = playCard(state.chains[player], card);
-        log(
-          `${powerIcon('bubble', 'sm')} ${who(player)} ${verb(player, 'abrís', 'abre')} con ` +
-            `${cardLabel(bCard)} y ${extraCards.length} carta${extraCards.length > 1 ? 's' : ''} más en una carta gigante`,
-          toneOf(player),
-        );
-      } else {
-        card = bCard;
-        state.chains[player] = playCard(state.chains[player], card);
-        log(
-          `${powerIcon('bubble', 'sm')} ${who(player)} ${verb(player, 'abrís', 'abre')} con ${cardLabel(card)} de la burbuja`,
-          toneOf(player),
-        );
-      }
+      const extra = [];
+      for (let i = 1; i < bubble.count; i++) extra.push(draw(player));
+      card = extra.length === 0 ? bubble.card : {
+        ...bubble.card,
+        symbols: [...bubble.card.symbols, ...extra.flatMap((c) => c.symbols)],
+        stackedCards: [bubble.card, ...extra],
+      };
+      log(`${powerIcon('bubble', 'sm')} ${who(player)} ${verb(player, 'abrís', 'abre')} con ${cardLabel(bubble.card)}` +
+        (extra.length ? ` y ${extra.length} carta${extra.length > 1 ? 's' : ''} más en una carta gigante` : ' de la burbuja'),
+      player);
     } else {
       card = draw(player);
-      state.chains[player] = playCard(state.chains[player], card);
-      log(`${who(player)} ${verb(player, 'abrís', 'abre')} con ${cardLabel(card)}`, toneOf(player));
+      log(`${who(player)} ${verb(player, 'abrís', 'abre')} con ${cardLabel(card)}`, player);
     }
-    const fCount = feathersIn(card);
-    if (fCount > 0) {
-      applyFeatherDamage(player, fCount);
-    }
-    if (card.power === 'freegame') {
-      state.freeGame[player] = true;
-      log(`${powerIcon('freegame', 'sm')} Free Game activo: tu próximo robo no corta y se monta sobre una carta`, toneOf(player));
-    }
+    state.chains[player] = playCard(state.chains[player], card);
+    applyFeathers(player, card);
+    armFreeGame(player, card);
     emit();
     if (isBot(player)) {
       if (!(await tick(800, era))) return;
@@ -795,45 +785,15 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       if (willStand) {
         const points = scoreChain(chain).total;
         log(`${who(player)} ${verb(player, 'cerrás', 'cierra')} su ataque con ${points}.`,
-          toneOf(player));
+          player);
         await finishTurn(player, points, era);
         return;
       }
 
       const card = draw(player);
-      const fCount = feathersIn(card);
-      if (fCount > 0) {
-        applyFeatherDamage(player, fCount);
-      }
-      if (isFree) {
-        const colIdx = pickStackColumn(chain, card);
-        const next = stackOnCard(chain, colIdx, card);
-        state.chains[player] = next;
-        state.lastStacked = { player, colIndex: colIdx, card, id: ++state.stackId };
-        state.freeGame[player] = (card.power === 'freegame');
-        if (state.freeGame[player]) {
-          log(`${powerIcon('freegame', 'sm')} Free Game encadenado: el próximo robo también se monta en mesa`, toneOf(player));
-        }
-        log(`${powerIcon('freegame', 'sm')} ${who(player)} ${verb(player, 'montás', 'monta')} ` +
-          `${cardLabel(card)} sobre la columna ${colIdx + 1} alargándola → ataque de ${swingOf(state, player)}`, toneOf(player));
-      } else {
-        const next = playCard(chain, card);
-        state.chains[player] = next;
-        if (next.busted) {
-          state.freeGame[player] = false;
-          log(bustLine(player, card), 'bad');
-          emit();
-          if (!(await tick(600, era))) return;
-          await finishTurn(player, 0, era);
-          return;
-        }
-        if (card.power === 'freegame') {
-          state.freeGame[player] = true;
-          log(`${powerIcon('freegame', 'sm')} Free Game activo: tu próximo robo no corta y se monta sobre una carta`, toneOf(player));
-        }
-        log(`${who(player)} ${verb(player, 'sacás', 'saca')} ${cardLabel(card)} → ataque de ` +
-          `${swingOf(state, player)}`, toneOf(player));
-      }
+      applyFeathers(player, card);
+      if (isFree) stackCard(player, pickStackColumn(chain, card), card);
+      else if (!(await extend(player, card, 600, era))) return;
     }
   }
 
@@ -873,7 +833,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     const foe = other(player);
     const mine = state.status[player];
     const theirs = state.status[foe];
-    const kind = toneOf(player);
+    const kind = player;
     const mark = (id) => powerIcon(id, 'sm');
 
     for (const power of powersPlayed(player)) {
@@ -930,37 +890,22 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         log(`${mark('poison')} ${who(foe)} ${verb(foe, 'quedás', 'queda')} con ` +
           `${theirs.poison} de veneno.`, kind);
       } else if (power === 'brutal') {
-        const chain = state.chains[player];
-        const maxRunLength = chain.runs.length > 0
-          ? Math.max(...chain.runs.map((r) => r.length))
-          : 0;
-        if (maxRunLength > 0) {
-          const step = TUNING.brutalStep ?? 2;
-          const bonus = step * maxRunLength;
-          log(
-            `${mark('brutal')} ${who(player)} ${verb(player, 'desgarrás', 'desgarra')}: ` +
-              `+${bonus} de daño (+${step} × ${maxRunLength} de tu cadena más larga).`,
-            kind,
-          );
+        const longest = longestRun(state.chains[player]);
+        if (longest > 0) {
+          const step = TUNING.brutalStep;
+          log(`${mark('brutal')} ${who(player)} ${verb(player, 'desgarrás', 'desgarra')}: ` +
+            `+${step * longest} de daño (+${step} × ${longest} de tu cadena más larga).`, kind);
         }
       } else if (power === 'feather') {
         // La pluma ya pegó directo al salir del mazo.
       } else if (power === 'leaf' || power === 'oak') {
-        const gain = TUNING.leafGain ?? 2;
-        const max = TUNING.leafMax ?? 5;
-        const current = typeof mine.leaf === 'number' ? mine.leaf : (Array.isArray(mine.leaf) ? mine.leaf.length : (mine.oak || 0));
-        mine.leaf = Math.min(max, current + gain);
-        mine.oak = mine.leaf;
-        const healAmt = TUNING.leafHeal ?? 4;
-        log(
-          `${mark(power)} ${who(player)} ${verb(player, 'sumás', 'suma')} +${gain} hojas (Leaf) ` +
-            `(${mine.leaf}/${max}): curará +${mine.leaf * healAmt} de vida al final del turno.`,
-          kind,
-        );
+        mine.leaf = Math.min(TUNING.leafMax, mine.leaf + TUNING.leafGain);
+        log(`${mark(power)} ${who(player)} ${verb(player, 'sumás', 'suma')} +${TUNING.leafGain} hojas (Leaf) ` +
+          `(${mine.leaf}/${TUNING.leafMax}): curará +${mine.leaf * TUNING.leafHeal} de vida al final del turno.`, kind);
       } else if (power === 'leech') {
         const columnsCount = state.chains[player].cards.length;
-        const isBonus = columnsCount >= (TUNING.leechBonusThreshold ?? 4);
-        const drain = isBonus ? (TUNING.leechBonusDrain ?? 12) : (TUNING.leechDrain ?? 6);
+        const isBonus = columnsCount >= TUNING.leechBonusThreshold;
+        const drain = isBonus ? TUNING.leechBonusDrain : TUNING.leechDrain;
         state.totals[player] += drain;
         const got = heal(player, drain);
         log(
@@ -971,11 +916,10 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
           kind,
         );
       } else if (power === 'steelskin') {
-        if (!mine.steelskin || mine.steelskin <= 0) {
-          mine.steelskin = TUNING.steelskinBaseCap ?? 12;
-        } else {
-          mine.steelskin = Math.max(TUNING.steelskinFloor ?? 6, mine.steelskin - (TUNING.steelskinStep ?? 2));
-        }
+        // La primera pone el tope; cada una más lo baja, hasta el piso.
+        mine.steelskin = mine.steelskin > 0
+          ? Math.max(TUNING.steelskinFloor, mine.steelskin - TUNING.steelskinStep)
+          : TUNING.steelskinBaseCap;
         log(
           `${mark('steelskin')} ${who(player)} ${verb(player, 'endurecés', 'endurece')} su Piel de Escamas: ` +
             `limitará el próximo golpe rival a un máximo de ${mine.steelskin} de daño.`,
@@ -1018,7 +962,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         log(
           `${powerIcon('steelskin', 'sm')} Piel de Escamas ${ofWhom(foe)} frena el golpe: ` +
             `mitiga ${mitigated} de daño (tope máximo ${theirs.steelskin}).`,
-          toneOf(foe),
+          foe,
         );
       }
       theirs.steelskin = 0;
@@ -1055,11 +999,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     stopClock();
     // El daño entra acá y no al cerrar la ronda: el golpe tiene que verse cuando el
     // jugador lo suelta, no dos turnos después. Los totales terminan iguales.
-    state.totals[player] += landed;
-    if (state.tutorial && foe === 'p1') {
-      const maxP2Damage = Math.max(0, TARGET + state.healed.p1 - 20);
-      state.totals[player] = Math.min(state.totals[player], maxP2Damage);
-    }
+    addDamage(player, landed);
     state.busy = false;
     const target = effectiveSwing > 0 ? foe : player;
     // Un ataque hace 0 por dos motivos distintos y la pantalla los cuenta distinto: si
@@ -1074,7 +1014,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (landed > 0) {
       log(`${who(player)} ${verb(player, 'pegás', 'pega')} por ${landed}. ` +
         `${who(target)} ${verb(target, 'quedás', 'queda')} en ${hpOf(state, target)}.`,
-        toneOf(player));
+        player);
     }
     applyPowers(player, effectiveSwing);
     emit();
@@ -1110,17 +1050,13 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // no lo pierde: cuando `tick` da false es porque arrancó otra partida y `state` ya
     // es otro objeto. Sumárselo ahí le metería daño de la partida anterior a la nueva.
     if (thorns > 0) {
-      state.totals[foe] += thorns;
-      if (state.tutorial && player === 'p1') {
-        const maxP2Damage = Math.max(0, TARGET + state.healed.p1 - 20);
-        state.totals[foe] = Math.min(state.totals[foe], maxP2Damage);
-      }
+      addDamage(foe, thorns);
       state.lastHit = {
         id: ++state.hitId, by: foe, target: player, amount: thorns, blocked: 0, broke: false,
         kind: 'thorns',
       };
       log(`${powerIcon('egg', 'sm')} La cáscara le vuelve ${toWhom(player)} por ${thorns}: ` +
-        `${verb(player, 'quedás', 'queda')} en ${hpOf(state, player)}.`, toneOf(foe));
+        `${verb(player, 'quedás', 'queda')} en ${hpOf(state, player)}.`, foe);
       emit();
       // La cáscara sale en el momento —no hay efecto de clase que esperar—, así que
       // con 900 alcanzaba justo para su número y ni un instante más: cerraba al mismo
@@ -1128,10 +1064,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       if (!(await tick(1300, era))) return;
     }
 
-    const leafCount = typeof state.status[player].leaf === 'number'
-      ? state.status[player].leaf
-      : (Array.isArray(state.status[player].leaf) ? state.status[player].leaf.length : (state.status[player].oak || 0));
-    if (leafCount > 0) {
+    if (state.status[player].leaf > 0) {
       tickLeaf(player);
       emit();
       if (!(await tick(1000, era))) return;
@@ -1181,15 +1114,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
    */
   function tickLeaf(player) {
     const st = state.status[player];
-    const leaves = typeof st.leaf === 'number'
-      ? st.leaf
-      : (Array.isArray(st.leaf) ? st.leaf.length : (st.oak || 0));
-    if (leaves <= 0) return 0;
-    const healAmt = leaves * (TUNING.leafHeal ?? 4);
-    const got = heal(player, healAmt);
-    st.leaf = leaves - 1;
-    st.oak = st.leaf;
-    const left = st.leaf;
+    const leaves = st.leaf;
+    const got = heal(player, leaves * TUNING.leafHeal);
+    const left = --st.leaf;
     const leftMsg = left > 0
       ? ` (le queda${left > 1 ? 'n' : ''} ${left} hoja${left > 1 ? 's' : ''})`
       : ' (se consumió la última hoja)';
@@ -1199,7 +1126,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
           ? `${verb(player, 'te curás', 'se cura')} +${got} de vida (${leaves} hoja${leaves > 1 ? 's' : ''}) y ${verb(player, 'quedás', 'queda')} en ${hpOf(state, player)}.`
           : `ya ${verb(player, 'estás', 'está')} entero (${leaves} hoja${leaves > 1 ? 's' : ''}).`) +
         leftMsg,
-      toneOf(player),
+      player,
     );
     return got;
   }
@@ -1218,16 +1145,12 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     const st = state.status[player];
     if (st.poison <= 0) return;
     const bite = st.poison;
-    state.totals[other(player)] += bite;
-    if (state.tutorial && other(player) === 'p2') {
-      const maxP2Damage = Math.max(0, TARGET + state.healed.p1 - 20);
-      state.totals.p2 = Math.min(state.totals.p2, maxP2Damage);
-    }
+    addDamage(other(player), bite);
     const half = Math.floor(bite / TUNING.poisonHalve);
     const left = half <= TUNING.poisonFloor ? 0 : half;
     log(`${powerIcon('poison', 'sm')} El veneno le saca ${bite} ${toWhom(player)}: ` +
       `${verb(player, 'quedás', 'queda')} en ${hpOf(state, player)}` +
-      `${left > 0 ? ` y le baja a ${left}` : ' y se le va'}.`, toneOf(other(player)));
+      `${left > 0 ? ` y le baja a ${left}` : ' y se le va'}.`, other(player));
     st.poison = left;
   }
 
@@ -1289,36 +1212,24 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   }
 
 
-  /**
-   * @param {boolean} toTop  carta del pulpo: no se pierde en el barajado, sale arriba
-   *   del mazo en la ronda que viene. Va aparte en `state.top` (ver `startRound`).
-   */
-  function takeFromMarket(player, card, toTop = false) {
+  /** Pasa `card` del centro al mazo de `player`, o a su burbuja si tiene una puesta. */
+  function takeFromMarket(player, card) {
     const at = state.market.indexOf(card);
     if (at < 0) return;
     state.market.splice(at, 1);
-    const tone = toneOf(player);
-    if (state.status[player].bubbles > 0 && !toTop) {
-      const count = state.status[player].bubbles;
+    state.added[player].push(card);
+    const count = state.status[player].bubbles;
+    if (count > 0) {
       state.status[player].bubbles = 0;
-      state.bubbleCard = state.bubbleCard || { p1: null, p2: null };
       state.bubbleCard[player] = { card, count };
-      state.added[player].push(card);
       log(
         `${powerIcon('bubble', 'sm')} ${who(player)} ${verb(player, 'atrapás', 'atrapa')} ${cardLabel(card)} ` +
           `en la burbuja: abrirá tu próxima ronda${count > 1 ? ` junto a ${count - 1} carta${count > 2 ? 's' : ''} más en una carta gigante` : ''}.`,
-        tone,
+        player,
       );
-    } else if (toTop) {
-      state.top[player].push(card);
-      state.added[player].push(card);
-      log(`${powerIcon('octopus', 'sm')} ${who(player)} ${verb(player, 'reservás', 'reserva')} ` +
-        `${cardLabel(card)}: ` +
-        `sale arriba del mazo la ronda que viene.`, tone);
     } else {
       state.decks[player].push(card);
-      state.added[player].push(card);
-      log(`${who(player)} ${verb(player, 'sumás', 'suma')} ${cardLabel(card)} al mazo.`, tone);
+      log(`${who(player)} ${verb(player, 'sumás', 'suma')} ${cardLabel(card)} al mazo.`, player);
     }
     // Se repone en el acto, en el mismo hueco para que las cartas no salten de lugar.
     if (state.pool.length) state.market.splice(at, 0, state.pool.pop());
@@ -1335,7 +1246,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     log(
       `${who(player)} ${verb(player, 'renovás', 'renueva')} el centro: no había nada con ` +
         `${crest(state.symbols[player], 'sm')}.`,
-      toneOf(player),
+      player,
     );
   }
 
@@ -1607,70 +1518,20 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     state.busy = true;
     emit();
     const card = draw(player);
-    const fCount = feathersIn(card);
-    if (fCount > 0) {
-      applyFeatherDamage(player, fCount);
-    }
+    applyFeathers(player, card);
 
-    if (state.freeGame[player]) {
-      const chain = state.chains[player];
-      if (chain.cards.length === 0) {
-        const next = playCard(chain, card);
-        state.chains[player] = next;
-        if (next.busted) {
-          state.freeGame[player] = false;
-          log(bustLine(player, card), 'bad');
-          emit();
-          if (!(await tick(700, era))) return;
-          await finishTurn(player, 0, era);
-          return;
-        }
-        if (card.power === 'freegame') {
-          state.freeGame[player] = true;
-          log(`${powerIcon('freegame', 'sm')} Free Game activo: tu próximo robo no corta y se monta sobre una carta`, toneOf(player));
-        }
-        log(`${who(player)} ${verb(player, 'sacás', 'saca')} ${cardLabel(card)} → ataque de ` +
-          `${swingOf(state, player)}`, toneOf(player));
-        state.busy = false;
-        emit();
-        return;
-      }
+    // Con Free Game activo la carta no se encadena: se monta sobre una columna. Si no
+    // vino una elegida, queda esperando a que el jugador la elija.
+    const chain = state.chains[player];
+    if (state.freeGame[player] && chain.cards.length > 0) {
       if (targetCol !== null && targetCol >= 0 && targetCol < chain.cards.length) {
-        state.chains[player] = stackOnCard(chain, targetCol, card);
-        state.lastStacked = { player, colIndex: targetCol, card, id: ++state.stackId };
-        state.freeGame[player] = (card.power === 'freegame');
-        if (state.freeGame[player]) {
-          log(`${powerIcon('freegame', 'sm')} Free Game encadenado: el próximo robo también se monta en mesa`, toneOf(player));
-        }
-        log(`${powerIcon('freegame', 'sm')} ${who(player)} ${verb(player, 'montás', 'monta')} ` +
-          `${cardLabel(card)} sobre la columna ${targetCol + 1} alargándola → ataque de ${swingOf(state, player)}`, toneOf(player));
-        state.busy = false;
-        emit();
-        return;
+        stackCard(player, targetCol, card);
+      } else {
+        state.pendingStack = { player, card };
+        log(`${powerIcon('freegame', 'sm')} Free Game: ${who(player)} ${verb(player, 'sacás', 'saca')} ` +
+          `${cardLabel(card)}. Elegí sobre qué carta montarla.`, player);
       }
-      state.pendingStack = { player, card };
-      log(`${powerIcon('freegame', 'sm')} Free Game: ${who(player)} ${verb(player, 'sacás', 'saca')} ${cardLabel(card)}. Elegí sobre qué carta montarla.`, toneOf(player));
-      state.busy = false;
-      emit();
-      return;
-    }
-
-    const next = playCard(state.chains[player], card);
-    state.chains[player] = next;
-    if (next.busted) {
-      state.freeGame[player] = false;
-      log(bustLine(player, card), 'bad');
-      emit();
-      if (!(await tick(700, era))) return;
-      await finishTurn(player, 0, era);
-      return;
-    }
-    if (card.power === 'freegame') {
-      state.freeGame[player] = true;
-      log(`${powerIcon('freegame', 'sm')} Free Game activo: tu próximo robo no corta y se monta sobre una carta`, toneOf(player));
-    }
-    log(`${who(player)} ${verb(player, 'sacás', 'saca')} ${cardLabel(card)} → ataque de ` +
-      `${swingOf(state, player)}`, toneOf(player));
+    } else if (!(await extend(player, card, 700, era))) return;
     state.busy = false;
     emit();
   }
@@ -1679,17 +1540,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (!state || !state.pendingStack) return;
     const { player, card } = state.pendingStack;
     if (!allowed(player, as)) return;
-    const chain = state.chains[player];
-    if (colIndex < 0 || colIndex >= chain.cards.length) return;
-    state.chains[player] = stackOnCard(chain, colIndex, card);
-    state.lastStacked = { player, colIndex, card, id: ++state.stackId };
-    state.freeGame[player] = (card.power === 'freegame');
+    if (colIndex < 0 || colIndex >= state.chains[player].cards.length) return;
     state.pendingStack = null;
-    if (state.freeGame[player]) {
-      log(`${powerIcon('freegame', 'sm')} Free Game encadenado: el próximo robo también se monta en mesa`, toneOf(player));
-    }
-    log(`${powerIcon('freegame', 'sm')} ${who(player)} ${verb(player, 'montás', 'monta')} ` +
-      `${cardLabel(card)} sobre la columna ${colIndex + 1} alargándola → ataque de ${swingOf(state, player)}`, toneOf(player));
+    stackCard(player, colIndex, card);
     emit();
   }
 
@@ -1697,10 +1550,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     const player = canAct();
     if (!allowed(player, as)) return;
     if (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'stand' && state.tutorialAllowed !== 'any') return;
-    if (state.pendingStack && state.pendingStack.player === player) {
-      const { card } = state.pendingStack;
-      state.chains[player] = stackOnCard(state.chains[player], 0, card);
-      state.pendingStack = null;
+    // Una carta de Free Game sin columna elegida se monta sobre la primera.
+    if (state.pendingStack?.player === player) {
+      state.chains[player] = stackOnCard(state.chains[player], 0, state.pendingStack.card);
     }
     state.freeGame[player] = false;
     state.pendingStack = null;
@@ -1708,7 +1560,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     state.busy = true;
     const points = scoreChain(state.chains[player]).total;
     log(`${who(player)} ${verb(player, 'soltás', 'suelta')} el ataque con ${points}.`,
-      toneOf(player));
+      player);
     await finishTurn(player, points, era);
   }
 
