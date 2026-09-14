@@ -225,4 +225,10 @@ for (const cls of [
   assert.match(css, new RegExp(`\\.${cls}[\\s,{:.\\[]`), `\`.${cls}\` no está dibujada en el CSS`);
 }
 
+// Carta gigante de Free Game y apilados: mantiene el modo de columnas y la carta soporta zoom out automático
+const card = regla('.card');
+assert.match(card, /--zoom/, 'la carta soporta zoom out dinámico con --zoom');
+assert.match(regla('.card.card--giant'), /card--giant/, 'existe la regla .card.card--giant');
+assert.match(regla('.field'), /max-height:/, '.field debe tener límite de alto para no tapar los controles');
+
 console.log(`✓ estilos ok (\`hidden\` oculta, ${remotas.length} texturas del kit con piso propio)`);

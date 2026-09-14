@@ -315,6 +315,8 @@ fire('lobby-back', 'click');
 assert.equal(nodes['lobby-front'].hidden, false, '"Volver" vuelve a la tapa');
 fire('lobby-rules', 'click');
 assert.equal(nodes['rules-modal'].open, true, 'las reglas se abren desde la portada');
+fire('lobby-symbols', 'click');
+assert.equal(nodes['symbols-modal'].open, true, 'los símbolos especiales se abren desde la portada');
 
 portada.close();
 assert.equal(nodes.lobby.hidden, true);

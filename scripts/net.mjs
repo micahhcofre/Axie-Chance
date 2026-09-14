@@ -219,6 +219,7 @@ export function createRoom({ code, name, pace, seed, grace = GRACE } = {}) {
     skipDraft: (seat) => game.skipDraft(seat),
     renewMarket: (seat) => game.renewMarket(seat),
     takeCard: (seat, arg) => game.takeCard(Number(arg), seat),
+    chooseStackTarget: (seat, arg) => game.chooseStackTarget(Number(arg), seat),
     // Con qué bicho entrás. Lo manda la pantalla al sentarse y cada vez que lo cambiás
     // ahí mismo, y de acá lo saca la mesa cuando arranca: entre las dos cosas puede
     // pasar un rato largo —el que uno tarda en esperar al otro— y por eso se guarda en

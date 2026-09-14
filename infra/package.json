@@ -1,0 +1,22 @@
+{
+  "name": "axie-chance-infra",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "infra": "bin/infra.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "aws-cdk": "^2.269.0",
+    "aws-cdk-lib": "^2.269.0",
+    "constructs": "^10.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}
+

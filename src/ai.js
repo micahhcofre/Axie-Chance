@@ -6,9 +6,10 @@ import { TUNING } from './data.js';
 function deckProfile(deck) {
   const byKey = new Map();
   for (const card of deck) {
-    const entry = byKey.get(card.key);
+    const symKey = card.symbols.join('+');
+    const entry = byKey.get(symKey);
     if (entry) entry.count++;
-    else byKey.set(card.key, { symbols: card.symbols, count: 1 });
+    else byKey.set(symKey, { symbols: card.symbols, count: 1 });
   }
   return [...byKey.values()];
 }
@@ -170,10 +171,18 @@ function bestCards(options, deck, n) {
 const POWER_WORTH = {
   poison: 1.7,
   octopus: 1.55,
+  bubble: 1.55,
+  leech: 1.45,
   egg: 1.3,
+  feather: 1.3,
+  steelskin: 1.3,
   strength: 1.25,
+  brutal: 1.25,
+  leaf: 1.2,
+  oak: 1.2,
   snail: 1.15,
   pot: 0.95,
+  freegame: 1.2,
 };
 
 /**

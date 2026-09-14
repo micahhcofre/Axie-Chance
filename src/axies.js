@@ -14,7 +14,7 @@
 // enojados y contentos, pero en varias el dibujo cerrado es casi el mismo que el
 // abierto —`aquatic-02` cambia el 4% de los píxeles y `bug-08` el 2%—, así que el
 // Axie parpadea y no se le nota. Los seis de acá están elegidos por eso.
-import { SYMBOLS, buildPersonalDeck, crest } from './data.js';
+import { SYMBOLS, buildPersonalDeck, buildAxieDeck, toAxieNFTState, crest } from './data.js';
 import { AVATAR_BASE, AVATARS } from './axie-avatars.js';
 import { VARIANTS } from './axie-poses.js';
 
@@ -90,15 +90,23 @@ export function axie(id) {
 }
 
 /**
- * El mazo con el que arranca un Axie: el de su clase, 10 cartas.
- * Acá entran las partes el día que modifiquen la baraja.
+ * Obtiene el estado AxieNFTState formal correspondiente a un Axie del roster.
+ */
+export function getAxieNFTState(id) {
+  return toAxieNFTState(axie(id));
+}
+
+/**
+ * El mazo con el que arranca un Axie: 10 cartas según la taxonomía canónica y Axie Core.
+ * Si se pasa `nftState`, tiene prioridad para mutaciones de Part Evolution.
  *
  * `boosts` son las mejoras elegidas en la pantalla de elección —un símbolo de más en
  * algunas cartas— y van de la clave de la carta al símbolo que se le suma (ver
  * `buildPersonalDeck`). Sin ellas es el mazo pelado de siempre.
  */
-export function deckFor(id, boosts = {}) {
-  return buildPersonalDeck(axie(id).class, boosts);
+export function deckFor(id, boosts = {}, nftState = null) {
+  const state = nftState ? toAxieNFTState(nftState) : toAxieNFTState(axie(id));
+  return buildPersonalDeck(state, boosts);
 }
 
 const pc = (n) => `${(n * 100).toFixed(3)}%`;

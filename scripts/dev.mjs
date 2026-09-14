@@ -10,7 +10,7 @@
 //   npm start            # http://localhost:8000
 //   PORT=3000 npm start
 import { createServer } from 'node:http';
-import { watch } from 'node:fs';
+import { watch, readdirSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { extname, join, normalize, sep } from 'node:path';
@@ -68,6 +68,16 @@ function lanUrls() {
   return out;
 }
 
+function serverUrls(req) {
+  if (process.env.PUBLIC_URL) return [process.env.PUBLIC_URL];
+  const host = req?.headers?.['x-forwarded-host'] || req?.headers?.host;
+  if (host && !host.startsWith('localhost') && !host.startsWith('127.0.0.1')) {
+    const proto = req?.headers?.['x-forwarded-proto'] || 'http';
+    return [`${proto}://${host}`];
+  }
+  return lanUrls();
+}
+
 /** El cuerpo de un POST, con un tope: nadie tiene por qué mandar más que una acción. */
 async function readBody(req) {
   const chunks = [];
@@ -89,13 +99,47 @@ function notify() {
   }, 80);
 }
 
-watch(ROOT, { recursive: true }, (_event, name) => {
-  if (!name) return;
-  const [top] = name.split(sep);
-  if (IGNORED.includes(top) || name.startsWith('.')) return;
-  console.log(`  ~ ${name}`);
-  notify();
-});
+function startWatching() {
+  const onFileChange = (_event, name) => {
+    if (!name) return;
+    const [top] = name.split(sep);
+    if (IGNORED.includes(top) || name.startsWith('.')) return;
+    console.log(`  ~ ${name}`);
+    notify();
+  };
+
+  try {
+    watch(ROOT, { recursive: true }, onFileChange);
+  } catch (err) {
+    if (err?.code === 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM') {
+      const watchDir = (d) => {
+        try {
+          watch(d, (_ev, filename) => {
+            const rel = d === ROOT ? filename : join(d.slice(ROOT.length + 1), filename ?? '');
+            onFileChange(_ev, rel);
+          });
+        } catch {}
+      };
+      watchDir(ROOT);
+      const walk = (d) => {
+        try {
+          for (const entry of readdirSync(d, { withFileTypes: true })) {
+            if (entry.isDirectory() && !IGNORED.includes(entry.name) && !entry.name.startsWith('.')) {
+              const sub = join(d, entry.name);
+              watchDir(sub);
+              walk(sub);
+            }
+          }
+        } catch {}
+      };
+      walk(ROOT);
+    } else {
+      throw err;
+    }
+  }
+}
+
+startWatching();
 
 const sendJson = (res, code, body) => {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -138,7 +182,7 @@ async function handle(req, res) {
   // abierta como archivo suelto o con un servidor estático cualquiera, no contesta y
   // el botón de jugar en red no aparece.
   if (url.pathname === '/net/hello') {
-    return sendJson(res, 200, { net: true, urls: lanUrls() });
+    return sendJson(res, 200, { net: true, urls: serverUrls(req) });
   }
 
   // La lista de salas, y crear una. Se pide de a ratos mientras se mira el lobby: son
@@ -148,7 +192,7 @@ async function handle(req, res) {
       const room = lobby.create();
       return sendJson(res, 200, { room: room.info() });
     }
-    return sendJson(res, 200, { rooms: lobby.list(), urls: lanUrls() });
+    return sendJson(res, 200, { rooms: lobby.list(), urls: serverUrls(req) });
   }
 
   if (url.pathname === '/net/stream') {

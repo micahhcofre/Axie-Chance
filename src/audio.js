@@ -280,6 +280,12 @@ export function createAudio() {
      *   `delay` esperar tantos ms antes de largarlo
      */
     sfx(key, { rate = RATE[key] ?? 1, gain = 1, cut = CUT[key] ?? 0, delay = 0 } = {}) {
+      if (key === 'freegame' || key === 'liquid') {
+        this.sfx('octopus', { rate: 1.35, gain: 0.95, delay });
+        this.sfx('take', { rate: 1.15, gain: 0.8, delay });
+        this.liquidDrop(delay);
+        return;
+      }
       const clip = SOUNDS[key];
       if (!ctx || !prefs.sfx || !clip) return;
       const at = ctx.currentTime + delay / 1000;
@@ -302,6 +308,49 @@ export function createAudio() {
           vol.gain.linearRampToValueAtTime(0, ends);
         }
       });
+    },
+
+    /**
+     * Resonancia líquida procedural (gota de agua / burbuja orgánica).
+     * Sintetiza una curva sinusoidal suave y armónico brillante conectado al bus de efectos.
+     */
+    liquidDrop(delay = 0) {
+      if (!ctx || !prefs.sfx || typeof ctx.createOscillator !== 'function') return;
+      try {
+        const at = ctx.currentTime + delay / 1000;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(380, at);
+        osc.frequency.exponentialRampToValueAtTime(780, at + 0.09);
+
+        gain.gain.setValueAtTime(0.001, at);
+        gain.gain.linearRampToValueAtTime(0.42, at + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
+
+        osc.connect(gain);
+        gain.connect(sfxBus);
+
+        osc.start(at);
+        osc.stop(at + 0.18);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(1180, at + 0.02);
+        osc2.frequency.exponentialRampToValueAtTime(1420, at + 0.1);
+        gain2.gain.setValueAtTime(0.001, at);
+        gain2.gain.linearRampToValueAtTime(0.18, at + 0.025);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
+
+        osc2.connect(gain2);
+        gain2.connect(sfxBus);
+
+        osc2.start(at + 0.01);
+        osc2.stop(at + 0.16);
+      } catch {
+        // En navegadores sin osciladores o mocks, ignora en silencio
+      }
     },
 
     /**

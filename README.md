@@ -550,8 +550,8 @@ el ataque**, con el daño del turno ya contado.
 | | poder | efecto |
 |---|---|---|
 | ⚔️ | fuerza | +1 de daño en este ataque y en todos los que siguen. Acumulable |
-| ☠️ | veneno | la mitad de tu daño; muerde al cerrar cada intercambio y después se parte al medio. Con 2 o menos se va. Acumulable |
-| 🥚 | huevo | escudo de la mitad de tu daño; aguanta golpes y se queda puesto hasta que lo rompan. Al romperse le devuelve 5 fijos al que lo rompió |
+| ☠️ | veneno | la mitad de tu daño; muerde al finalizar su turno y después se parte al medio. Con 2 o menos se va. Acumulable |
+| 🥚 | huevo | escudo por la mitad del golpe infligido (se reemplaza si se gana de nuevo); aguanta hasta romperse y pasa a ser 8 de daño fijo acumulable al romperse |
 | 🪴 | maceta | te curás lo que pegaste, sin pasar de 100 |
 | 🐌 | caracol | el próximo ataque del rival sale **partido al medio** (redondeando para arriba). Se gasta solo con un ataque que haya hecho daño. Acumulable: dos caracoles, los dos próximos |
 | 🐙 | pulpo | una carta **de más** del centro, la que quieras: no se baraja, abre tu próxima ronda. Hay que haberse plantado. Acumulable |

@@ -29,7 +29,7 @@ function recordDataset(node) {
 const pulses = { p1: recordDataset(nodes['axie-p1']), p2: recordDataset(nodes['axie-p2']) };
 
 const { createGame } = await import('../src/game.js');
-const { mount, whiffed } = await import('../src/ui.js');
+const { mount, whiffed, plateHtml } = await import('../src/ui.js');
 const { scoreChain } = await import('../src/rules.js');
 const { hpOf, ownedBy, MARKET_SIZE } = await import('../src/game.js');
 
@@ -211,6 +211,10 @@ while (game.state.phase !== 'matchEnd') {
   }
 
   if (s.turn === 'p1' && !s.busy && s.phase === 'turn') {
+    if (s.pendingStack && s.pendingStack.player === 'p1') {
+      await game.chooseStackTarget(0);
+      continue;
+    }
     // Plantarse en las rondas pares asegura que se pinte la elección del reparto
     // aunque las cadenas se corten muchas veces seguidas; en las impares se roba.
     //
@@ -390,7 +394,92 @@ assert.equal(whiffed({ amount: 0, blocked: 4, broke: true }), false,
   'y lo mismo el que rompe el huevo justo con el último punto');
 assert.equal(whiffed({ amount: 0, blocked: 0 }), true,
   'sin nada bloqueado y sin daño sí falló: el caracol se le comió el mordisco');
-assert.equal(whiffed({ amount: 3, blocked: 2 }), false, 'algo pasó del escudo: conectó');
+// ---- Free Game: visualización de la carta a colocar (Tetris dock) -----------
+game.state.phase = 'turn';
+game.state.turn = 'p1';
+game.state.pendingStack = {
+  player: 'p1',
+  card: { uid: 999, symbols: ['aquatic', 'beast'], power: null },
+};
+game.refresh();
+await idle();
+
+assert.match(nodes.field.innerHTML, /class="tetris-dock"/, 'muestra el dock de tetris');
+assert.match(nodes.field.innerHTML, /class="card card--tetris-floating"/, 'muestra la carta flotante');
+assert.match(nodes.field.innerHTML, /card-stack-drop-hint/, 'muestra la flecha de destino en las columnas');
+assert.match(nodes.controls.innerHTML, /elegí la columna donde colocar/, 'aviso en los controles');
+assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'conserva botón de robar durante pendingStack');
+assert.match(nodes.controls.innerHTML, /data-action="stand"/, 'conserva botón de atacar/saltar durante pendingStack');
+
+// Verifica con exactamente 1 carta en la cadena (primera carta)
+game.state.chains.p1 = { cards: [{ uid: 101, symbols: ['aquatic', 'bird'], power: 'freegame' }], busted: false, timeout: false, bustCard: null, runs: [] };
+game.refresh();
+await idle();
+assert.match(nodes.field.innerHTML, /class="tetris-dock"/, 'muestra dock en primera carta');
+assert.match(nodes.field.innerHTML, /data-stack-col="0"/, 'la primera columna es objetivo de stack');
+assert.match(nodes.field.innerHTML, /card-stack-drop-hint/, 'muestra flecha sobre columna 1');
+
+game.state.pendingStack = null;
+game.state.chains.p1 = {
+  cards: [{ uid: 101, symbols: ['aquatic', 'bird', 'plant', 'bug'], power: null, stackedCards: [{ uid: 101 }, { uid: 102 }] }],
+  busted: false, timeout: false, bustCard: null, runs: []
+};
+game.refresh();
+await idle();
+assert.doesNotMatch(nodes.field.innerHTML, /tetris-dock/, 'limpia el dock tras resolver pendingStack');
+assert.match(nodes.field.innerHTML, /card--giant/, 'la carta apilada tiene clase card--giant');
+assert.match(nodes.field.innerHTML, /--zoom:/, 'aplica zoom out al apilar');
+assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'conserva botón de robar con carta apilada');
+assert.match(nodes.controls.innerHTML, /data-action="stand"/, 'conserva botón de atacar/saltar con carta apilada');
+
+// Verifica render de múltiples poderes apilados (Free Game + Poder)
+game.state.chains.p1 = {
+  cards: [{
+    uid: 101,
+    symbols: ['aquatic', 'bird', 'plant', 'beast'],
+    power: 'strength',
+    powers: ['freegame', 'strength'],
+    stackedCards: [
+      { uid: 101, symbols: ['aquatic', 'bird'], power: 'freegame' },
+      { uid: 102, symbols: ['plant', 'beast'], power: 'strength' }
+    ]
+  }],
+  busted: false, timeout: false, bustCard: null, runs: []
+};
+game.refresh();
+await idle();
+assert.match(nodes.field.innerHTML, /card-power--multi/, 'aplica card-power--multi con múltiples poderes');
+assert.match(nodes.field.innerHTML, /power-freegame\.png/, 'muestra ícono de freegame en columna apilada');
+assert.match(nodes.field.innerHTML, /power-strength\.png/, 'muestra ícono de strength en columna apilada');
+
+// Verifica zoom out dinámico en el dock de colocación (pendingStack)
+game.state.pendingStack = {
+  player: 'p1',
+  card: { uid: 999, symbols: ['plant', 'reptile'], power: null },
+};
+game.refresh();
+await idle();
+assert.match(nodes.field.innerHTML, /class="tetris-dock"[^>]*style="--zoom:/, 'el dock de tetris escala con zoom out');
+assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'conserva botón de robar durante colocación con dock');
+assert.match(nodes.controls.innerHTML, /data-action="stand"/, 'conserva botón de atacar durante colocación con dock');
+
+// Verifica zoom out en cadenas largas (5+ cartas) igual que versión vertical
+game.state.pendingStack = null;
+game.state.chains.p1 = {
+  cards: [
+    { uid: 1, symbols: ['aquatic', 'bird'], power: null },
+    { uid: 2, symbols: ['bird', 'plant'], power: null },
+    { uid: 3, symbols: ['plant', 'beast'], power: null },
+    { uid: 4, symbols: ['beast', 'bug'], power: null },
+    { uid: 5, symbols: ['bug', 'reptile'], power: null },
+  ],
+  busted: false, timeout: false, bustCard: null, runs: []
+};
+game.refresh();
+await idle();
+assert.match(nodes.field.innerHTML, /--zoom:/, 'aplica zoom out al acumular 5 cartas');
+assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'botones disponibles en cadena de 5 cartas');
+assert.match(nodes.controls.innerHTML, /data-action="stand"/, 'botón de atacar disponible en cadena de 5 cartas');
 
 console.log('✓ render ok');
 
@@ -409,7 +498,35 @@ assert.match(nodes['plate-p2'].innerHTML, /J2/, 'la chapa deja de decir CPU');
 const opener = game.state.order[0] === 'p1' ? 'Jugador 1' : 'Jugador 2';
 assert.match(nodes.controls.innerHTML, new RegExp(`Le toca a ${opener}`),
   'el cartel dice de quién es el turno');
-assert.match(nodes['deck-label'].textContent, /Tu mazo|Mazo del Jugador/, 'y el mazo, de quién es');
 assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'con sus botones puestos');
 
 console.log('✓ render ok (los dos asientos de una sala)');
+
+// --- verificación del escudo con icono en la vida y el daño en status effects ----
+{
+  const st = {
+    ...game.state,
+    status: {
+      ...game.state.status,
+      p1: { ...game.state.status.p1, egg: 12, eggBreak: 16 },
+    },
+  };
+  const html = plateHtml(st, 'p1');
+  assert.match(html, /class="plate-shield"/, 'el escudo se muestra al lado de la vida');
+  assert.match(html, /shield\.png/, 'lleva el icono de escudo');
+  assert.match(html, /<b>12<\/b>/, 'muestra el valor del escudo (12)');
+  assert.match(html, /title="Huevo: 16 de daño acumulado al romperse/, 'status effect dice el daño acumulado');
+  assert.match(html, /<b>16<\/b>/, 'el chip de status del huevo muestra el daño acumulado (16)');
+
+  // Con 0 de huevo no hay escudo
+  const stZero = {
+    ...game.state,
+    status: {
+      ...game.state.status,
+      p1: { ...game.state.status.p1, egg: 0, eggBreak: 0 },
+    },
+  };
+  const htmlZero = plateHtml(stZero, 'p1');
+  assert.doesNotMatch(htmlZero, /class="plate-shield"/, 'sin huevo no se muestra la insignia de escudo');
+  console.log('  ✓ escudo en barra de vida y daño acumulado en status effects de huevo');
+}

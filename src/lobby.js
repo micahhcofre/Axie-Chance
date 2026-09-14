@@ -43,9 +43,14 @@
 // de donde salen los rascados y los bostezos— y arranca de nuevo.
 import { AXIE_IDS, AXIES, axie, axieArt, deckFor } from './axies.js';
 import { createMotion } from './axie-motion.js';
-import { SYMBOLS, SYMBOL_IDS, boostOptions, crest } from './data.js';
+import { POWERS, SYMBOLS, SYMBOL_IDS, boostOptions, crest, powerIcon } from './data.js';
 import { readLoadout, writeLoadout } from './loadout.js';
 import { netAvailable } from './net.js';
+import { createTutorial } from './tutorial.js';
+import {
+  ADVENTURE_LEVELS, getAdventureProgress, getAdventureLevel, isLevelUnlocked,
+} from './adventure.js';
+import { createPowerDemoController } from './power-demos.js';
 
 // `el` y no `$` como en `ui.js` ni `byId` como en `net.js`: el build de un solo
 // archivo concatena los módulos sin envolverlos, así que dos nombres iguales en
@@ -305,8 +310,13 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   const front = el('lobby-front');
   const menu = el('lobby-menu');
   const choose = el('lobby-choose');
+  const adv = el('lobby-adventure');
+  const advBack = el('lobby-adventure-back');
+  const advLevels = el('adventure-levels');
+  const advCard = el('adventure-card');
   const board = el('lobby-cast');
   let strollers = null;
+  let selectedAdvLevel = 1;
   /** Lo que elegiste la última vez, si esta máquina se acuerda (ver `loadout.js`). */
   const saved = readLoadout();
   /**
@@ -367,6 +377,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     front.hidden = which !== 'front';
     menu.hidden = which !== 'menu';
     choose.hidden = which !== 'choose';
+    if (adv) adv.hidden = which !== 'adventure';
     // El Axie grande deja de respirar al salir de su pantalla: un clip en bucle sobre
     // un nodo que nadie está viendo es trabajo que el navegador hace para nadie.
     if (which !== 'choose') heroMotion.stop();
@@ -489,6 +500,112 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     view('choose');
   }
 
+  function toAdventure() {
+    const progress = getAdventureProgress();
+    if (!isLevelUnlocked(selectedAdvLevel)) {
+      selectedAdvLevel = progress.unlockedLevel;
+    }
+    paintAdventure();
+    view('adventure');
+  }
+
+  function paintAdventure() {
+    if (!advLevels || !advCard) return;
+    const progress = getAdventureProgress();
+    const current = getAdventureLevel(selectedAdvLevel);
+    const rivalAxie = AXIES[current.rival];
+    const rivalSym = SYMBOLS[rivalAxie.class];
+
+    advLevels.innerHTML = ADVENTURE_LEVELS.map((lvl) => {
+      const unlocked = isLevelUnlocked(lvl.id);
+      const completed = progress.completedLevels.includes(lvl.id);
+      const active = lvl.id === selectedAdvLevel;
+      const statusIcon = completed ? '★' : (unlocked ? `${lvl.id}` : '🔒');
+      const cls = [
+        'adv-level-btn',
+        active ? 'active' : '',
+        completed ? 'completed' : '',
+        !unlocked ? 'locked' : '',
+      ].filter(Boolean).join(' ');
+
+      return `<button class="${cls}" data-adv-level="${lvl.id}" ${!unlocked ? 'disabled' : ''}>` +
+        `<span class="adv-level-num">${statusIcon}</span>` +
+        `<span class="adv-level-name">Nivel ${lvl.id}</span>` +
+      `</button>`;
+    }).join('');
+
+    const isLevel1 = current.id === 1;
+    const powersToShow = isLevel1 ? [...current.newPowers, 'freegame'] : current.newPowers;
+
+    const powersHtml = powersToShow.map((pId) => {
+      const p = POWERS[pId];
+      if (!p) return '';
+      const isNeutral = pId === 'freegame';
+      const label = isNeutral ? `${p.name} (Comodín Neutral)` : p.name;
+      const note = isNeutral
+        ? 'Carta comodín apilable: no corta la cadena jamás y se monta sobre cualquier carta en mesa para extenderla.'
+        : p.note;
+      return `<div class="adv-power-item" data-power-id="${pId}" role="button" tabindex="0" title="Ver demostración de ${label}">` +
+        `<div class="adv-power-icon">${powerIcon(pId, 'lg')}</div>` +
+        `<div class="adv-power-text">` +
+          `<b>${label} <span class="adv-power-demo-hint">🎬 Demo</span></b>` +
+          `<p>${note}</p>` +
+        `</div>` +
+      `</div>`;
+    }).join('');
+
+    const completed = progress.completedLevels.includes(current.id);
+    const diffLabel = current.difficulty === 'facil' ? 'Fácil' : current.difficulty === 'duro' ? 'Dura' : 'Normal';
+    const sectionTitle = isLevel1
+      ? 'Nuevos poderes y especiales en este nivel (+2 poderes + Free Game)'
+      : 'Nuevos poderes en este nivel (+2)';
+
+    advCard.innerHTML = `
+      <div class="adv-card-header">
+        <div class="adv-card-title-group">
+          <span class="adv-badge ${completed ? 'adv-badge--won' : ''}">${completed ? '★ Nivel Superado' : 'Combate Disponible'}</span>
+          <h2 class="adv-card-title">${current.name}</h2>
+          <p class="adv-card-desc">${current.description}</p>
+        </div>
+      </div>
+
+      <div class="adv-card-section">
+        <h3 class="adv-section-title">${sectionTitle}</h3>
+        <div class="adv-powers-grid">${powersHtml}</div>
+      </div>
+
+      <div class="adv-card-section">
+        <h3 class="adv-section-title">Rival</h3>
+        <div class="adv-rival-box">
+          <div class="adv-rival-info">
+            <span class="adv-rival-crest" style="--c:${rivalSym.color}">${crest(rivalAxie.class, 'sm')}</span>
+            <b>${rivalAxie.name}</b>
+            <span class="adv-rival-diff">Dificultad: ${diffLabel}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="adv-card-actions">
+        <button class="btn btn-ghost adv-demo-btn" id="lobby-adventure-demo" type="button" title="Ver demostración de los poderes de este nivel">
+          🎬 Ver demostración de poderes
+        </button>
+        <button class="lobby-play choose-go" id="lobby-adventure-play">
+          ${completed ? 'Volver a Jugar' : 'Comenzar Nivel'}
+        </button>
+      </div>
+    `;
+  }
+
+  function playAdventure(lvlId) {
+    ui.restart({
+      mode: 'adventure',
+      adventureLevel: lvlId,
+      axie: pick,
+      boosts: boosts[pick] ?? {},
+    });
+    close();
+  }
+
   /**
    * Empieza la partida contra la CPU con el Axie que tenés puesto, y se va de la
    * pantalla. Es el único modo que arranca desde acá: la sala es otra pantalla y se
@@ -523,7 +640,16 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     view('front');
   }
 
+  let activeTutorial = null;
+  function cleanupTutorial() {
+    if (activeTutorial) {
+      activeTutorial.destroy();
+      activeTutorial = null;
+    }
+  }
+
   function open(which = 'front') {
+    cleanupTutorial();
     // El paseo es de la portada. En una sala se abre una sola de estas pantallas —la
     // elección—, y tapa el terreno entero: poner cuatro Axies a caminar detrás sería
     // trabajo que el navegador hace para nadie.
@@ -536,6 +662,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     // dibujadas, venga del botón de la portada o de la sala: las dos cosas las hace
     // `toChoose`, así que abrir esa pantalla es pasar por ahí y no solo mostrarla.
     if (which === 'choose') toChoose();
+    else if (which === 'adventure') toAdventure();
     else view(which);
     lobby.hidden = false;
     for (const s of strollers ?? []) s.wake();
@@ -551,9 +678,59 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   el('lobby-loadout').addEventListener('click', toChoose);
   el('lobby-back').addEventListener('click', () => view('front'));
   el('lobby-choose-back').addEventListener('click', () => (net ? close() : view('front')));
+  advBack.addEventListener('click', () => view('menu'));
+  adv.addEventListener('click', (e) => {
+    const lvlBtn = e.target.closest('[data-adv-level]');
+    if (lvlBtn) {
+      selectedAdvLevel = Number(lvlBtn.dataset.advLevel);
+      paintAdventure();
+      return;
+    }
+    const demoBtn = e.target.closest('#lobby-adventure-demo') || e.target.closest('.adv-power-item');
+    if (demoBtn) {
+      const pId = demoBtn.dataset?.powerId || null;
+      createPowerDemoController({ levelId: selectedAdvLevel, initialPower: pId });
+      return;
+    }
+    const playBtn = e.target.closest('#lobby-adventure-play');
+    if (playBtn) {
+      playAdventure(selectedAdvLevel);
+    }
+  });
   el('lobby-prev').addEventListener('click', () => browse(-1));
   el('lobby-next').addEventListener('click', () => browse(1));
+  function initSymbolsFilter() {
+    const modal = el('symbols-modal');
+    if (!modal || modal._symInit || !modal.addEventListener) return;
+    modal._symInit = true;
+    modal.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-sym-filter]');
+      if (!btn) return;
+      const filter = btn.dataset.symFilter;
+      modal.querySelectorAll('[data-sym-filter]').forEach((b) => b.classList.toggle('active', b === btn));
+      modal.querySelectorAll('.symbol-card').forEach((card) => {
+        const match = filter === 'all' || card.dataset.symClass === filter;
+        card.hidden = !match;
+      });
+    });
+  }
+
   el('lobby-rules').addEventListener('click', () => el('rules-modal').showModal());
+  el('lobby-symbols')?.addEventListener('click', () => {
+    initSymbolsFilter();
+    el('symbols-modal').showModal();
+  });
+
+  // El tutorial: una partida guionada con tooltips. Arranca un game propio y lo
+  // monta en la misma mesa. Al terminar vuelve a la portada.
+  el('lobby-tutorial').addEventListener('click', () => {
+    cleanupTutorial();
+    activeTutorial = createTutorial(ui._game, () => {
+      cleanupTutorial();
+      open('front');
+    });
+    close();
+  });
 
   menu.addEventListener('click', (e) => {
     const mode = e.target.closest('[data-play]:not([disabled])')?.dataset.play;
@@ -562,6 +739,10 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     // que se entra por la URL igual que entra el que llega del celular.
     if (mode === 'net') {
       location.search = '?red';
+      return;
+    }
+    if (mode === 'adventure') {
+      toAdventure();
       return;
     }
     // Contra la CPU no falta nada que preguntar: tu Axie ya está elegido y el de la
@@ -618,6 +799,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   // partida en red no hay portada a la que volver.
   el('controls').addEventListener('click', (e) => {
     if (e.target.closest('[data-action="menu"]')) open('menu');
+    if (e.target.closest('[data-action="adv-map"]')) open('adventure');
   });
 
   // Jugar en red solo existe si la página la sirvió el servidor del juego: abierta

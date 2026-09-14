@@ -8,7 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 
 const MODULES = [
-  'data', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'rules', 'ai', 'game',
+  'data', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'rules', 'ai', 'adventure', 'game',
   'vfx-clips', 'vfx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'ui', 'net', 'lobby',
   'main',
 ];

@@ -21,7 +21,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.equal(game.state.symbols.p1, 'aquatic', 'la clase del Axie es su símbolo');
   assert.notEqual(game.state.symbols.p2, 'aquatic', 'la CPU juega otra clase');
   assert.equal(game.state.market.length, MARKET_SIZE, `el centro arranca con ${MARKET_SIZE}`);
-  assert.equal(game.state.pool.length, 71 - MARKET_SIZE);
+  assert.equal(game.state.pool.length, 86 - MARKET_SIZE);
 
   // Qué terminó llevándose el humano en cada draft. No se elige un modo aparte: lo
   // decide la carta que toca —con poder cierra el reparto, sin poder deja una
@@ -58,7 +58,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         poolAfter: s.pool.length + s.market.length,
         busted: s.chains[p].busted,
         octopus: before.octopus,
-        extra: s.top[p].length - before.top,
+        extra: before.octopus - s.status[p].stacked,
       });
       before = null;
     }
@@ -75,10 +75,10 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       openers.push(s.order[0]);
     }
 
-    // Invariante: 35 comunes + 10 de cada mazo base, nunca se pierde ni se duplica nada.
+    // Invariante: 86 comunes + 10 de cada mazo base, nunca se pierde ni se duplica nada.
     assert.equal(
       s.pool.length + s.market.length + owned(s, 'p1') + owned(s, 'p2'),
-      91,
+      106,
       'cartas totales en juego',
     );
     // Ninguna carta está en dos lados a la vez: el pulpo saca cartas del reparto y
@@ -88,8 +88,9 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       // cadena ya volvió al mazo, y `returned` que volvió entera. Esas sí están en
       // los dos lados a propósito (ver `draw`), así que no cuentan acá.
       const table = s.returned[p] ? [] : [
-        ...s.chains[p].cards.slice(s.recycled[p]),
+        ...s.chains[p].cards.flatMap((c) => c.stackedCards || [c]).slice(s.recycled[p]),
         ...(s.chains[p].bustCard ? [s.chains[p].bustCard] : []),
+        ...(s.pendingStack?.player === p ? [s.pendingStack.card] : []),
       ];
       const uids = [...s.decks[p], ...s.top[p], ...table].map((c) => c.uid);
       assert.equal(new Set(uids).size, uids.length, `${p}: una carta en dos lados`);
@@ -175,7 +176,9 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       }
     }
 
-    if (s.turn === 'p1' && !s.busy) {
+    if (s.pendingStack && s.pendingStack.player === 'p1') {
+      await game.chooseStackTarget(0);
+    } else if (s.turn === 'p1' && !s.busy) {
       // En las rondas pares se planta con la primera carta. Robar hasta 6 se corta el
       // ~65% de las veces, y una racha de cortes deja el reparto de quien se planta
       // (1 trío o 2 pares) sin probar: plantarse seguro cada dos rondas lo garantiza.
@@ -194,7 +197,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   // turnos seguidos al cambiar de ronda.
   assert.deepEqual(openers, openers.map(() => 'p1'), 'abre siempre el jugador');
   assert.ok(gains.includes(1) && gains.includes(2), 'se probaron poder y cantidad');
-  assert.equal(s.pool.length + s.market.length + owned(s, 'p1') + owned(s, 'p2'), 91);
+  assert.equal(s.pool.length + s.market.length + owned(s, 'p1') + owned(s, 'p2'), 106);
   console.log(
     `  ${difficulty.padEnd(6)} ${s.totals.p1} — ${s.totals.p2} en ${s.round} rondas` +
       ` · mazos ${owned(s, 'p1')}/${owned(s, 'p2')}` +
@@ -213,7 +216,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.equal(game.state.round, 1);
   assert.equal(game.state.totals.p1, 0);
   assert.equal(game.state.market.length, MARKET_SIZE, `el centro arranca con ${MARKET_SIZE}`);
-  assert.equal(game.state.pool.length, 71 - MARKET_SIZE);
+  assert.equal(game.state.pool.length, 86 - MARKET_SIZE);
 }
 
 // El reloj: al que no juega su turno a tiempo se le desarma el ataque, como si se le

@@ -44,7 +44,7 @@ export function crest(symbol, size = '') {
  *
  *   strengthStep   cuánto suma cada carta de fuerza, para siempre
  *   poisonShare    divisor del golpe con que se envenena (2 = la mitad)
- *   poisonHalve    en cuánto se parte el veneno al cerrar la ronda, después de morder
+ *   poisonHalve    en cuánto se parte el veneno al finalizar el turno, después de morder
  *   poisonFloor    con esto o menos encima, el veneno se va: la cola de un veneno
  *                  partiéndose al medio es infinita y no decide nada
  *   poisonStacks   true suma venenos; false se queda con el mayor, como el caracol
@@ -52,7 +52,7 @@ export function crest(symbol, size = '') {
  *                  Redondea para arriba: un caracol nunca deja un ataque en cero
  *   snailAttacks   cuántos ataques debilita cada caracol. Se suman
  *   eggShare       divisor del golpe con que se arma el escudo
- *   eggBreak       daño fijo que le vuelve al que rompió el huevo. 0 lo apaga: el
+ *   eggBreak       daño fijo que le vuelve al que rompió el huevo (acumulable por cada huevo). 0 lo apaga: el
  *                  huevo solo tapa
  *   octopusPowers  si la carta que paga el pulpo puede llevar poder
  *   octopusStacks  true: cada pulpo paga una carta. false: una por reparto, salgan
@@ -81,45 +81,112 @@ export const TUNING = {
   snailShare: 2,
   snailAttacks: 1,
   eggShare: 2,
-  eggBreak: 5,
+  eggBreak: 8,
   octopusPowers: true,
   octopusStacks: true,
   octopusOnStand: true,
   powerBias: 1,
+  brutalMinCards: 1,
+  brutalStep: 2,
+  featherDamage: 5,
+  leafRounds: 3,
+  leafHeal: 4,
+  leafGain: 2,
+  leafMax: 5,
+  oakRounds: 3,
+  oakHeal: 4,
+  oakGain: 2,
+  oakMax: 5,
+  leechDrain: 6,
+  leechBonusThreshold: 4,
+  leechBonusDrain: 12,
+  steelskinBaseCap: 12,
+  steelskinStep: 2,
+  steelskinFloor: 6,
 };
 
 export const POWERS = {
   egg: {
     id: 'egg', symbol: 'bird', name: 'Huevo',
-    note: `escudo de medio golpe: aguanta hasta que lo rompan, y al romperse le ` +
-      `devuelve ${TUNING.eggBreak} al que lo rompió`,
+    note: `escudo por la mitad de tu golpe; al romperse devuelve ${TUNING.eggBreak} de daño directo al rival`,
+  },
+  feather: {
+    id: 'feather', symbol: 'bird', name: 'Pluma Sagrada',
+    note: `inflige ${TUNING.featherDamage} de daño directo al rival apenas sale la carta (incluso si te cortás)`,
   },
   octopus: {
     id: 'octopus', symbol: 'aquatic', name: 'Pulpo',
-    note: 'una carta de más del centro, la que quieras: abre tu próxima ronda',
+    note: 'te llevás 1 carta extra del mercado para tu mazo',
   },
   pot: {
     id: 'pot', symbol: 'plant', name: 'Maceta',
-    note: 'te curás lo mismo que pegaste',
+    note: 'te curás todo el daño que pegaste',
   },
   poison: {
     id: 'poison', symbol: 'reptile', name: 'Veneno',
-    note: 'la mitad del daño: muerde al cerrar cada ronda y se parte al medio',
+    note: 'envenena por la mitad de tu golpe; daña cada turno y se reduce a la mitad',
   },
   snail: {
     id: 'snail', symbol: 'bug', name: 'Caracol',
-    note: 'el próximo ataque del rival pega la mitad. Se acumulan: dos caracoles, ' +
-      'los dos próximos',
+    note: 'el próximo ataque del rival hace la mitad de daño (acumulable en siguientes ataques)',
   },
   strength: {
     id: 'strength', symbol: 'beast', name: 'Fuerza',
-    note: `+${TUNING.strengthStep} de daño en este ataque y en todos los que siguen`,
+    note: `+${TUNING.strengthStep} de daño permanente en todos tus ataques`,
+  },
+  brutal: {
+    id: 'brutal', symbol: 'beast', name: 'Garra Brutal',
+    note: `+${TUNING.brutalStep} de daño por cada símbolo de tu cadena más larga`,
+  },
+  bubble: {
+    id: 'bubble', symbol: 'aquatic', name: 'Burbuja de Retorno',
+    note: 'la carta que elijas del mercado abrirá tu próxima ronda',
+  },
+  freegame: {
+    id: 'freegame', symbol: null, name: 'Free Game',
+    note: 'al entrar en mesa alarga una carta existente sumando sus símbolos',
+  },
+  leaf: {
+    id: 'leaf', symbol: 'plant', name: 'Hoja',
+    note: '+2 hojas (hasta 5): cada hoja te cura 4 de vida al final de tu turno y se gasta 1 hoja',
+  },
+  oak: {
+    id: 'oak', symbol: 'plant', name: 'Hoja',
+    note: '+2 hojas (hasta 5): cada hoja te cura 4 de vida al final de tu turno y se gasta 1 hoja',
+  },
+  leech: {
+    id: 'leech', symbol: 'bug', name: 'Greedy Leech',
+    note: `al atacar roba 6 de vida al rival (se duplica a 12 con ${TUNING.leechBonusThreshold} columnas en mesa)`,
+  },
+  steelskin: {
+    id: 'steelskin', symbol: 'reptile', name: 'Piel de Escamas',
+    note: 'tope defensivo: el próximo ataque rival no superará los 12 de daño',
   },
 };
 
 for (const p of Object.values(POWERS)) p.icon = iconUrl(`power-${p.id}.png`);
 
 export const POWER_IDS = Object.keys(POWERS);
+
+/** Los poderes disponibles por cada clase para sortear uno por partida. */
+export const CLASS_POWERS = {
+  beast:   ['strength', 'brutal'],
+  aquatic: ['octopus', 'bubble'],
+  bird:    ['egg', 'feather'],
+  plant:   ['pot', 'leaf'],
+  bug:     ['snail', 'leech'],
+  reptile: ['poison', 'steelskin'],
+};
+
+export const CLASS_POWER_IDS = Object.values(CLASS_POWERS).flat();
+
+/** Sortea un poder activo para cada clase. */
+export function chooseActivePowers(rng = Math.random) {
+  return SYMBOL_IDS.map((sym) => {
+    const list = CLASS_POWERS[sym] || [];
+    return list[Math.floor(rng() * list.length)];
+  }).filter(Boolean);
+}
 
 /** El símbolo de poder como HTML, para la carta y para el registro. */
 export function powerIcon(id, size = '') {
@@ -163,6 +230,34 @@ export const POWER_TRIOS = {
     ['aquatic', 'bird'], ['aquatic', 'plant'], ['aquatic', 'bug'],
     ['bird', 'plant'], ['bird', 'reptile'], ['bug', 'reptile'],
   ],
+  brutal: [
+    ['aquatic', 'bird'], ['aquatic', 'plant'], ['aquatic', 'bug'],
+    ['bird', 'plant'], ['bird', 'reptile'], ['bug', 'reptile'],
+  ],
+  bubble: [
+    ['beast', 'bird'], ['beast', 'plant'], ['bird', 'plant'],
+    ['bird', 'bug'], ['plant', 'reptile'], ['bug', 'reptile'],
+  ],
+  feather: [
+    ['beast', 'aquatic'], ['beast', 'plant'], ['aquatic', 'bug'],
+    ['plant', 'bug'], ['plant', 'reptile'], ['bug', 'reptile'],
+  ],
+  leaf: [
+    ['beast', 'aquatic'], ['beast', 'bug'], ['aquatic', 'reptile'],
+    ['bird', 'bug'], ['bird', 'reptile'], ['bug', 'reptile'],
+  ],
+  oak: [
+    ['beast', 'aquatic'], ['beast', 'bug'], ['aquatic', 'reptile'],
+    ['bird', 'bug'], ['bird', 'reptile'], ['bug', 'reptile'],
+  ],
+  leech: [
+    ['beast', 'aquatic'], ['beast', 'bird'], ['beast', 'plant'],
+    ['aquatic', 'reptile'], ['bird', 'reptile'], ['plant', 'reptile'],
+  ],
+  steelskin: [
+    ['beast', 'aquatic'], ['beast', 'bird'], ['beast', 'plant'],
+    ['aquatic', 'bird'], ['aquatic', 'bug'], ['plant', 'bug'],
+  ],
 };
 
 // Los uid son únicos entre todos los mazos: la UI los usa para no reanimar cartas ya vistas.
@@ -174,10 +269,28 @@ const byOrder = (a, b) => SYMBOL_IDS.indexOf(a) - SYMBOL_IDS.indexOf(b);
  * `power` entra en la clave porque dos cartas con los mismos tres símbolos y poderes
  * distintos son cartas distintas —encadenan igual, pero no valen lo mismo—.
  */
-function makeCard(symbols, power = null) {
+export function makeCard(symbols, power = null, opts = {}) {
   const sorted = symbols.slice().sort(byOrder);
   const key = sorted.join('+');
-  return { uid: nextUid++, symbols: sorted, power, key: power ? `${key}@${power}` : key };
+  const uid = nextUid++;
+  const hasPower = Boolean(power);
+  const powerEffect = power || undefined;
+  const isFavorable = opts.isFavorable ?? false;
+  const associatedPart = opts.associatedPart;
+  const id = opts.id ?? `c_${uid}`;
+  const name = opts.name ?? (hasPower ? (POWERS[power]?.name || 'Poder') : sorted.map((s) => SYMBOLS[s]?.name || s).join(' · '));
+  return {
+    uid,
+    id,
+    name,
+    symbols: sorted,
+    isFavorable,
+    associatedPart,
+    hasPower,
+    powerEffect,
+    power,
+    key: power ? `${key}@${power}` : key,
+  };
 }
 
 function combinations(items, size) {
@@ -197,39 +310,215 @@ function combinations(items, size) {
  * salen las cartas que los jugadores suman a su mazo personal; los mazos iniciales
  * de 10 no llevan poderes.
  */
-export function buildPool() {
+export function buildPool(activePowers = null, rng = Math.random) {
   const plain = [2, 3].flatMap((size) =>
     combinations(SYMBOL_IDS, size).map((symbols) => makeCard(symbols)),
   );
-  const powered = POWER_IDS.flatMap((id) =>
+  const powers = activePowers || chooseActivePowers(rng);
+  const powered = powers.flatMap((id) =>
     POWER_TRIOS[id].map((pair) => makeCard([POWERS[id].symbol, ...pair], id)),
   );
-  return [...plain, ...powered];
+  const freegame = combinations(SYMBOL_IDS, 2).map((symbols) => makeCard(symbols, 'freegame'));
+  return [...plain, ...powered, ...freegame];
 }
 
-// Las 6 cartas "no favorables": dos triángulos disjuntos de tres símbolos.
-// Cada símbolo aparece en exactamente dos, así que a cualquier jugador le sobran 4.
-export const UNFAVORABLE = [
-  ['beast', 'bird'],
-  ['bird', 'plant'],
-  ['beast', 'plant'],
-  ['bug', 'reptile'],
-  ['reptile', 'aquatic'],
-  ['aquatic', 'bug'],
-];
+// ---- Taxonomía Canónica y Axie Core ------------------------------------------
+
+/** Orden cíclico canónico de las 6 clases (índices 0 a 5) */
+export const CANONICAL_CLASSES = ['plant', 'beast', 'aquatic', 'bird', 'bug', 'reptile'];
+
+/** Partes anatómicas NFT del Axie */
+export const ANATOMICAL_PARTS = ['eyes', 'ears', 'horn', 'mouth', 'back', 'tail'];
+
+export const PART_NAMES = {
+  tail: 'Cola',
+  mouth: 'Boca',
+  eyes: 'Ojos',
+  ears: 'Orejas',
+  horn: 'Cuerno',
+  back: 'Espalda',
+};
 
 /**
- * Mazo base del jugador que juega `symbol`: 10 cartas.
- *  - 5 pares del símbolo propio con cada uno de los otros cinco
- *  - 1 carta con el símbolo propio solo
- *  - las 4 cartas no favorables que no lo incluyen
+ * Saltos anatómicos fijos sobre el ciclo canónico:
+ *   tail:  0  (mono-símbolo pura: [C_i])
+ *   mouth: +1 [C_i, C_{(i+1)%6}]
+ *   eyes:  +2 [C_i, C_{(i+2)%6}]
+ *   ears:  +3 [C_i, C_{(i+3)%6}]
+ *   horn:  +4 [C_i, C_{(i+4)%6}]
+ *   back:  +5 [C_i, C_{(i+5)%6}]
  */
-function baseDeck(symbol) {
+export const ANATOMICAL_JUMPS = {
+  tail: 0,
+  mouth: 1,
+  eyes: 2,
+  ears: 3,
+  horn: 4,
+  back: 5,
+};
+
+/** Tríadas canónicas (Piedra, Papel o Tijera) */
+export const TRIADS = {
+  rock: ['plant', 'reptile'],
+  paper: ['beast', 'bug'],
+  scissors: ['bird', 'aquatic'],
+};
+
+/** Regla de combate: Paper vence a Rock, Scissors vence a Paper, Rock vence a Scissors */
+export const TRIAD_BEATS = {
+  paper: 'rock',
+  scissors: 'paper',
+  rock: 'scissors',
+};
+
+export const TRIAD_LOSES_TO = {
+  rock: 'paper',
+  paper: 'scissors',
+  scissors: 'rock',
+};
+
+/** Determina la tríada canónica a la que pertenece una clase */
+export function getTriadForClass(cls) {
+  for (const [triad, members] of Object.entries(TRIADS)) {
+    if (members.includes(cls)) return triad;
+  }
+  return null;
+}
+
+/**
+ * Sistema de Tríadas y Cartas Desfavorables (Counter Suppression Formula):
+ * Para cualquier clase base:
+ *   A: Aliado (la otra clase de su misma tríada).
+ *   P1, P2: Presas (las 2 clases de la tríada a la que vence).
+ *   C1, C2: Counters (las 2 clases de la tríada que la vence).
+ *
+ * Retorna las 4 cartas desfavorables:
+ *   Card 1: [A, P1]
+ *   Card 2: [A, P2]
+ *   Card 3: [P1, P2]
+ *   Card 4: [C1, C2] (confinamiento de amenaza)
+ *
+ * Verificación matemática: En las cartas desfavorables, las Presas y el Aliado
+ * aparecen 2 veces cada una, mientras que los Counters aparecen exactamente 1 vez.
+ */
+export function getCounterSuppressionCards(baseClass) {
+  const triad = getTriadForClass(baseClass);
+  if (!triad) throw new Error(`Clase no reconocida: ${baseClass}`);
+
+  const ally = TRIADS[triad].find((c) => c !== baseClass);
+  const byCanonical = (a, b) => CANONICAL_CLASSES.indexOf(a) - CANONICAL_CLASSES.indexOf(b);
+
+  const preyTriad = TRIAD_BEATS[triad];
+  const counterTriad = TRIAD_LOSES_TO[triad];
+
+  const preys = TRIADS[preyTriad].slice().sort(byCanonical);
+  const counters = TRIADS[counterTriad].slice().sort(byCanonical);
+
+  const [p1, p2] = preys;
+  const [c1, c2] = counters;
+
   return [
-    ...SYMBOL_IDS.filter((s) => s !== symbol).map((s) => makeCard([symbol, s])),
-    makeCard([symbol]),
-    ...UNFAVORABLE.filter((pair) => !pair.includes(symbol)).map((pair) => makeCard(pair)),
+    [ally, p1],
+    [ally, p2],
+    [p1, p2],
+    [c1, c2],
   ];
+}
+
+// Compatibilidad retroactiva: todas las cartas desfavorables posibles
+export const UNFAVORABLE = CANONICAL_CLASSES.flatMap(getCounterSuppressionCards);
+
+/** Normaliza un id de clase, objeto Axie o estado NFT a la estructura AxieNFTState */
+export function toAxieNFTState(input) {
+  if (!input) return null;
+  if (typeof input === 'string') {
+    const parts = {};
+    for (const p of ANATOMICAL_PARTS) {
+      parts[p] = { class: input, isEvolved: false };
+    }
+    return { id: input, baseClass: input, parts };
+  }
+  if (input.baseClass && input.parts) {
+    return input;
+  }
+  if (input.class && input.parts) {
+    const parts = {};
+    for (const p of ANATOMICAL_PARTS) {
+      const val = input.parts[p];
+      if (typeof val === 'string') {
+        const cls = val.split('-')[0];
+        parts[p] = { class: cls, isEvolved: false };
+      } else if (val && typeof val === 'object') {
+        parts[p] = { class: val.class || input.class, isEvolved: Boolean(val.isEvolved) };
+      } else {
+        parts[p] = { class: input.class, isEvolved: false };
+      }
+    }
+    return {
+      id: input.id || input.class,
+      baseClass: input.class,
+      parts,
+    };
+  }
+  return null;
+}
+
+/**
+ * Genera el mazo base de 10 cartas según la taxonomía canónica y Axie Core:
+ *  - 6 cartas favorables asociadas a las partes anatómicas con saltos canónicos
+ *    y mutación por Part Evolution (isEvolved: true incorpora C_{part})
+ *  - 4 cartas desfavorables calculadas por la Counter Suppression Formula
+ */
+export function baseDeck(baseClass, nftState = null) {
+  const i = CANONICAL_CLASSES.indexOf(baseClass);
+  if (i === -1) throw new Error(`Clase base inválida: ${baseClass}`);
+
+  const state = nftState ? toAxieNFTState(nftState) : null;
+  const parts = state?.parts || {};
+
+  // 6 cartas favorables según saltos anatómicos fijos
+  const favorableParts = ['tail', 'mouth', 'eyes', 'ears', 'horn', 'back'];
+  const favorableCards = favorableParts.map((part) => {
+    const jump = ANATOMICAL_JUMPS[part];
+    const baseSymbols = jump === 0
+      ? [baseClass]
+      : [baseClass, CANONICAL_CLASSES[(i + jump) % 6]];
+
+    const partInfo = parts[part];
+    const symbols = baseSymbols.slice();
+
+    // 2.2 Axie Core - Part Evolution (Mutación a 3 símbolos / 2 en cola)
+    if (partInfo?.isEvolved) {
+      const partClass = partInfo.class || baseClass;
+      symbols.push(partClass);
+    }
+
+    return makeCard(symbols, null, {
+      id: `${baseClass}-${part}`,
+      name: PART_NAMES[part],
+      isFavorable: true,
+      associatedPart: part,
+    });
+  });
+
+  // 4 cartas desfavorables (Counter Suppression Formula)
+  const unfavorablePairs = getCounterSuppressionCards(baseClass);
+  const unfavorableNames = [
+    'Alianza Presa 1',
+    'Alianza Presa 2',
+    'Doble Presa',
+    'Confinamiento',
+  ];
+
+  const unfavorableCards = unfavorablePairs.map((pair, idx) =>
+    makeCard(pair, null, {
+      id: `${baseClass}-unfav-${idx + 1}`,
+      name: unfavorableNames[idx],
+      isFavorable: false,
+    })
+  );
+
+  return [...favorableCards, ...unfavorableCards];
 }
 
 /**
@@ -254,24 +543,32 @@ export function boostOptions(card, symbol) {
 }
 
 /**
- * El mazo de 10 con las mejoras puestas.
- *
- * `boosts` va de la clave de la carta **sin mejorar** al símbolo que se le suma
- * —`{ 'beast+bird': 'beast' }`—, que es lo que la pantalla de elección junta con los
- * botones de (+). La clave alcanza porque en un mazo personal no hay dos cartas
- * iguales, y viaja bien: es texto, no un índice que se corre si el mazo cambia de
- * orden.
- *
- * Lo que no esté en la lista de `boostOptions` se ignora en silencio. Las mejoras
- * quedan guardadas por Axie y el mismo `boosts` puede llegar acompañando a otro mazo
- * —volviste, cambiaste de bicho—, y una mejora que no le corresponde a esta carta no
- * es una mejora.
+ * Genera el mazo completo de 10 cartas a partir de un AxieNFTState.
  */
-export function buildPersonalDeck(symbol, boosts = {}) {
-  return baseDeck(symbol).map((card) => {
+export function buildAxieDeck(nftState) {
+  const state = toAxieNFTState(nftState);
+  if (!state) throw new Error('Estado NFT inválido para buildAxieDeck');
+  return baseDeck(state.baseClass, state);
+}
+
+/**
+ * El mazo de 10 con las mejoras puestas y/o estado AxieNFTState.
+ * Compatible con strings de clase, objetos Axie del roster y AxieNFTState.
+ */
+export function buildPersonalDeck(axieOrClass, boosts = {}) {
+  const nftState = toAxieNFTState(axieOrClass);
+  const baseClass = nftState.baseClass;
+  const cards = baseDeck(baseClass, nftState);
+
+  return cards.map((card) => {
     const add = boosts[card.key];
-    return add && boostOptions(card, symbol).includes(add)
-      ? makeCard([...card.symbols, add])
+    return add && boostOptions(card, baseClass).includes(add)
+      ? makeCard([...card.symbols, add], card.power, {
+          id: card.id,
+          name: card.name,
+          isFavorable: card.isFavorable,
+          associatedPart: card.associatedPart,
+        })
       : card;
   });
 }
@@ -308,5 +605,11 @@ export function shuffle(cards, rng = Math.random) {
 /** Los símbolos de una carta —y su poder, si tiene—, para el registro de la partida. */
 export function cardLabel(card) {
   const syms = card.symbols.map((s) => crest(s, 'sm')).join('');
-  return card.power ? `${syms}${powerIcon(card.power, 'sm')}` : syms;
+  const powers = card.stackedCards
+    ? card.stackedCards.map((c) => c.power).filter(Boolean)
+    : (card.powers || (card.power ? [card.power] : []));
+  if (powers.length > 0) {
+    return `${syms}${powers.map((p) => powerIcon(p, 'sm')).join('')}`;
+  }
+  return syms;
 }

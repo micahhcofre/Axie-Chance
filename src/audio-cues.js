@@ -125,9 +125,9 @@ export function createCues(audio, { seat = null } = {}) {
       if (now.stacked > was.stacked) powers.push('octopus');
       if (now.healed > was.healed) powers.push('pot');
 
-      // El veneno cobra al cerrar el intercambio, no cuando se puso.
-      if (state.phase !== before.phase && (state.phase === 'roundEnd' || state.phase === 'matchEnd')) {
-        if (was.poison > 0) audio.sfx('poison', { rate: 0.85, delay: 200 });
+      // El veneno muerde al finalizar el turno de quien lo tiene, no cuando se puso.
+      if (was.poison > 0 && now.poison < was.poison) {
+        audio.sfx('poison', { rate: 0.85, delay: 200 });
       }
 
       // Una carta más en el mazo es una carta que se llevó del centro.

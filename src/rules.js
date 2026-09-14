@@ -95,3 +95,52 @@ export function survivalOdds(chain, deck) {
   const ok = deck.filter((c) => c.symbols.some((s) => alive.includes(s))).length;
   return { ok, total: deck.length, p: ok / deck.length };
 }
+
+/**
+ * Alarga una columna existente en la mesa montando una carta sobre ella (Free Game).
+ * No suma casillero (`cards.length` se mantiene igual) y no corta la cadena.
+ * Si se monta sobre la columna 1, sus símbolos quedan en la apertura y pueden
+ * abrir nuevas rachas puntuables; en cualquier columna suma al largo de las
+ * rachas vivas que coincidan con los símbolos nuevos.
+ */
+export function stackOnCard(chain, colIndex, card) {
+  if (chain.busted || colIndex < 0 || colIndex >= chain.cards.length) return chain;
+
+  const target = chain.cards[colIndex];
+  const stacked = target.stackedCards ? [...target.stackedCards, card] : [target, card];
+  const allPowers = stacked.map((c) => c.power).filter(Boolean);
+  const updatedCard = {
+    ...target,
+    symbols: [...target.symbols, ...card.symbols],
+    stackedCards: stacked,
+    powers: allPowers,
+    power: allPowers.find((p) => p !== 'freegame') || allPowers[0] || null,
+  };
+
+  const newCards = chain.cards.map((c, i) => (i === colIndex ? updatedCard : c));
+
+  let runs = [...new Set(newCards[0].symbols)].map((symbol) => ({
+    symbol,
+    length: timesIn(newCards[0], symbol),
+    cards: 1,
+    alive: true,
+  }));
+
+  for (let i = 1; i < newCards.length; i++) {
+    const c = newCards[i];
+    runs = runs.map((run) => {
+      if (!run.alive) return run;
+      return c.symbols.includes(run.symbol)
+        ? { ...run, length: run.length + timesIn(c, run.symbol), cards: run.cards + 1 }
+        : { ...run, alive: false };
+    });
+  }
+
+  return {
+    ...chain,
+    cards: newCards,
+    runs,
+    busted: false,
+    bustCard: null,
+  };
+}

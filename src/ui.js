@@ -1,4 +1,4 @@
-import { SYMBOLS, POWERS, crest, iconUrl, powerIcon } from './data.js';
+import { SYMBOLS, POWERS, cardLabel, crest, iconUrl, powerIcon } from './data.js';
 import { axie, axieArt } from './axies.js';
 import { createMotion } from './axie-motion.js';
 import { isScoringCell, scoreChain, survivalOdds } from './rules.js';
@@ -10,6 +10,8 @@ import {
   matchResult, ownedBy,
   seatVoice, swingOf,
 } from './game.js';
+import { markLevelCompleted } from './adventure.js';
+import { createPowerDemoController, shouldAutoShowDemo } from './power-demos.js';
 
 const $ = (id) => document.getElementById(id);
 const settled = new Set();
@@ -77,16 +79,26 @@ function symChip(symbol, on) {
  * mira, así que tampoco se lee como un eslabón más.
  */
 function powerChip(card) {
-  if (!card.power) return '';
-  return `<span class="card-power" style="--c:${SYMBOLS[POWERS[card.power].symbol].color}"
-    >${powerIcon(card.power)}</span>`;
+  const powers = card.stackedCards
+    ? card.stackedCards.map((c) => c.power).filter(Boolean)
+    : (card.powers || (card.power ? [card.power] : []));
+  if (powers.length === 0) return '';
+  const classPower = powers.find((p) => POWERS[p]?.symbol);
+  const color = classPower ? (SYMBOLS[POWERS[classPower].symbol]?.color ?? '#f5c542') : '#f5c542';
+  const cls = powers.length > 1 ? 'card-power card-power--multi' : 'card-power';
+  return `<span class="${cls}" style="--c:${color}"
+    >${powers.map((p) => powerIcon(p)).join('')}</span>`;
 }
 
-function cardHtml(chain, card, index) {
-  const cls = settled.has(card.uid) ? 'card is-settled' : 'card';
+function cardHtml(chain, card, index, isStackTarget = false) {
+  const giant = card.stackedCards ? ' card--giant' : '';
+  const targetCls = isStackTarget ? ' card--stack-target' : '';
+  const cls = (settled.has(card.uid) ? 'card is-settled' : 'card') + giant + targetCls;
   settled.add(card.uid);
   const syms = card.symbols.map((s) => symChip(s, isScoringCell(chain, index, s))).join('');
-  return `<div class="${cls}"><span class="card-no">${index + 1}</span>${syms}${powerChip(card)}</div>`;
+  const targetAttr = isStackTarget ? ` data-stack-col="${index}" role="button" tabindex="0" title="Alargar columna ${index + 1}"` : '';
+  const dropHint = isStackTarget ? '<span class="card-stack-drop-hint" aria-hidden="true">↓</span>' : '';
+  return `<div class="${cls}" data-col="${index}"${targetAttr}>${dropHint}<span class="card-no">${index + 1}</span>${syms}${powerChip(card)}</div>`;
 }
 
 function bustCardHtml(card) {
@@ -94,6 +106,24 @@ function bustCardHtml(card) {
   settled.add(card.uid);
   const syms = card.symbols.map((s) => symChip(s, false)).join('');
   return `<div class="card-gap"></div><div class="${cls}">${syms}${powerChip(card)}</div>`;
+}
+
+function pendingStackHtml(card, zoomAttr = '') {
+  const syms = card.symbols.map((s) => symChip(s, true)).join('');
+  return `
+    <div class="tetris-dock"${zoomAttr} id="tetris-dock" aria-label="Carta de Free Game para colocar">
+      <div class="tetris-badge">
+        <i>✨</i>
+        <span>Free Game — Elegí qué columna colocar</span>
+      </div>
+      <div class="tetris-lane" id="tetris-lane">
+        <div class="card card--tetris-floating" id="tetris-floating-card">
+          <span class="card-no">✨</span>
+          ${syms}
+          ${powerChip(card)}
+        </div>
+      </div>
+    </div>`;
 }
 
 function runsHtml(chain) {
@@ -115,7 +145,7 @@ function runsHtml(chain) {
  * el caracol que lo debilita y la fuerza que juntó. Solo aparece lo que está activo,
  * con el número al lado — sin esto los poderes serían invisibles después de la carta.
  */
-function statusHtml(state, player) {
+export function statusHtml(state, player) {
   const st = state.status[player];
   const pipIcon = (src, value, title) =>
     `<span class="pip-status" title="${title}"><img src="${src}" alt=""><b>${value}</b></span>`;
@@ -123,12 +153,13 @@ function statusHtml(state, player) {
 
   const chips = [];
   if (st.egg) {
-    chips.push(pip('egg', st.egg, `Huevo: aguanta ${st.egg} de daño y sigue puesto hasta que ` +
-      `se gaste; al romperse le devuelve ${TUNING.eggBreak} al que lo rompió`));
+    const breakDmg = st.eggBreak || TUNING.eggBreak;
+    chips.push(pip('egg', breakDmg,
+      `Huevo: ${breakDmg} de daño acumulado al romperse (escudo: ${st.egg})`));
   }
   if (st.poison) {
     chips.push(pip('poison', st.poison,
-      `Veneno: ${st.poison} de daño al cerrar la ronda, después se parte al medio`));
+      `Veneno: ${st.poison} de daño al finalizar su turno, después se parte al medio`));
   }
   if (st.weak) {
     chips.push(pip('weak', st.weak, st.weak === 1
@@ -138,8 +169,17 @@ function statusHtml(state, player) {
   if (st.strength) chips.push(pip('strength', `+${st.strength}`, `Fuerza: +${st.strength} de daño en cada ataque`));
   if (st.stacked) {
     chips.push(pipIcon(POWERS.octopus.icon, st.stacked,
-      `Pulpo: las próximas ${st.stacked} cartas que agarre del centro salen arriba del ` +
-      'mazo, sin barajar'));
+      `Pulpo: +${st.stacked} carta${st.stacked > 1 ? 's' : ''} extra para tu mazo al cerrar el turno`));
+  }
+  if (st.bubbles) {
+    chips.push(pipIcon(POWERS.bubble.icon, st.bubbles,
+      st.bubbles === 1
+        ? 'Burbuja de Retorno: la carta que elijas del centro abrirá tu próxima ronda'
+        : `Burbuja de Retorno: ${st.bubbles} cartas apiladas abrirán tu próxima ronda como carta gigante`));
+  }
+  if (state.bubbleCard?.[player]) {
+    chips.push(pipIcon(POWERS.bubble.icon, '🫧',
+      'Burbuja de Retorno: apertura lista para la próxima ronda'));
   }
   // Lo ya reservado, esperando a la ronda que viene.
   const held = state.top[player].length;
@@ -147,6 +187,16 @@ function statusHtml(state, player) {
     chips.push(pipIcon(POWERS.octopus.icon, `▲${held}`,
       `${held === 1 ? 'Una carta reservada' : `${held} cartas reservadas`}: ` +
       'abre la ronda que viene'));
+  }
+  const leafCount = typeof st.leaf === 'number' ? st.leaf : (st.leaf?.length || (typeof st.oak === 'number' ? st.oak : (st.oak?.length || 0)));
+  if (leafCount > 0) {
+    const totalRegen = leafCount * (TUNING.leafHeal ?? 4);
+    chips.push(pip('leaf', leafCount,
+      `Hoja (Leaf): ${leafCount} hoja${leafCount > 1 ? 's' : ''} (cura +${totalRegen} al final de tu turno y consume 1)`));
+  }
+  if (st.steelskin) {
+    chips.push(pipIcon(POWERS.steelskin.icon, `≤${st.steelskin}`,
+      `Piel de Escamas: limita el próximo ataque rival a máximo ${st.steelskin} de daño`));
   }
   return chips.length ? `<span class="plate-status">${chips.join('')}</span>` : '';
 }
@@ -162,11 +212,12 @@ function statusHtml(state, player) {
  * el ancho puesto en el HTML, la vida saltaba de un número al otro. Naciendo con el
  * ancho de afuera nace donde estaba, y de ahí se vacía sola.
  */
-function plateHtml(state, player) {
+export function plateHtml(state, player) {
   const own = axie(state.axies[player]);
   const chain = state.chains[player];
   const hp = hpOf(state, player);
   const dealt = state.roundScores[player];
+  const shield = state.status[player].egg;
 
   // Una sola marca por vez: cómo terminó su ataque. El turno no se escribe acá —lo
   // cuenta el aro de color que se prende alrededor de la chapa entera mientras dura
@@ -179,6 +230,10 @@ function plateHtml(state, player) {
     tag = `<span class="plate-tag" data-kind="hit">${dealt} de daño</span>`;
   }
 
+  const shieldBadge = shield > 0
+    ? `<span class="plate-shield" title="Escudo: aguanta ${shield} de daño"><img src="${iconUrl('shield.png')}" alt="" class="shield-icon"><b>${shield}</b></span>`
+    : '';
+
   return `
     <span class="plate-top" style="--c:${SYMBOLS[own.class].color}">
       ${crest(own.class, 'sm')}<span class="plate-name">${own.name}</span>
@@ -188,6 +243,7 @@ function plateHtml(state, player) {
     <span class="plate-hp" data-low="${hp <= TARGET / 4}">
       <span class="hpbar"><i></i></span>
       <b>${hp}</b>
+      ${shieldBadge}
     </span>
     ${statusHtml(state, player)}`;
 }
@@ -268,11 +324,47 @@ function swingHtml(state, player) {
 
 function fieldHtml(state, player) {
   const chain = state.chains[player];
-  const cards = chain.cards.map((c, i) => cardHtml(chain, c, i)).join('');
+  const isStackTarget = Boolean(state.pendingStack && state.pendingStack.player === player);
+  const cards = chain.cards.map((c, i) => cardHtml(chain, c, i, isStackTarget)).join('');
   const bust = chain.bustCard ? bustCardHtml(chain.bustCard) : '';
+
+  let maxSyms = 2;
+  if (chain?.cards) {
+    for (const c of chain.cards) {
+      if (c.symbols && c.symbols.length > maxSyms) {
+        maxSyms = c.symbols.length;
+      }
+    }
+  }
+
+  // Zoom out dinámico y progresivo:
+  // 1. Durante Free Game (pendingStack): el dock y la hilera de cartas conviven verticalmente.
+  // 2. Al apilar símbolos en Free Game (4+ símbolos): reduce la altura vertical de la carta.
+  // 3. Al acumular cartas en la cadena (5+ cartas): escala hacia afuera progresivamente.
+  let zoom = 1;
+  if (isStackTarget) {
+    const base = Math.max(maxSyms, 3);
+    zoom = base <= 3 ? 0.74 : base === 4 ? 0.66 : 0.58;
+  } else if (maxSyms >= 4) {
+    zoom = maxSyms === 4 ? 0.72
+      : maxSyms === 5 ? 0.64
+      : maxSyms === 6 ? 0.56
+      : 0.48;
+  }
+  if (chain?.cards?.length >= 5) {
+    const cardZoom = chain.cards.length === 5 ? 0.90
+      : chain.cards.length === 6 ? 0.82
+      : 0.74;
+    zoom = Math.min(zoom, cardZoom);
+  }
+
+  const zoomAttr = zoom < 1 ? ` style="--zoom:${zoom}"` : '';
+  const pending = isStackTarget ? pendingStackHtml(state.pendingStack.card, zoomAttr) : '';
+
   return `
-    <div class="strip">${cards}${bust}</div>
-    <div class="runs">${runsHtml(chain)}</div>`;
+    ${pending}
+    <div class="strip"${zoomAttr}>${cards}${bust}</div>
+    <div class="runs"${zoomAttr}>${runsHtml(chain)}</div>`;
 }
 
 // Arriba solo queda dónde estamos parados: la vida se lee sobre cada Axie y las cartas
@@ -361,18 +453,25 @@ function marketHtml(state, { picking, pickable, canRenew }) {
     head = `<span class="overlay-title">${addressing(state, picking)}Elegí del centro</span>` +
       `<p class="overlay-note">${note}</p>`;
     // Nada de lo que podés llevarte lleva tu símbolo: te queda una renovación del centro.
-    const renew = canRenew
+    const renew = (canRenew && !(state.tutorial && !state.tutorialAllowRenew))
       ? `<button class="btn" data-action="renew"
           title="Ninguna carta que podés llevarte tiene tu símbolo">Renovar el centro ⟳</button>`
       : '';
+    const skipDisabled = (state.tutorial && state.tutorialDisallowSkip) ? 'disabled style="opacity:0.3;pointer-events:none;"' : '';
     actions = `<div class="overlay-actions">${renew}
-      <button class="btn" data-action="skip"
+      <button class="btn" data-action="skip" ${skipDisabled}
         title="Cerrá el reparto sin sumar cartas al mazo">${
           state.draft.took ? 'No agarrar más' : 'No agarrar'
         }</button></div>`;
   }
 
-  const slots = state.market.map((c) => marketCardHtml(c, open.has(c.uid))).join('');
+  const slots = state.market.map((c) => {
+    let isPick = state.tutorial && state.tutorialAllowedCard ? c.uid === state.tutorialAllowedCard : open.has(c.uid);
+    if (state.tutorial && state.tutorialPlainOnly && c.power) {
+      isPick = false;
+    }
+    return marketCardHtml(c, isPick);
+  }).join('');
   const empty = '<div class="market-slot"></div>'.repeat(
     Math.max(MARKET_SIZE - state.market.length, 0),
   );
@@ -492,7 +591,14 @@ const wonMatch = (state) => matchResult(state) === (mySeat ?? 'p1');
 function finaleHtml(state) {
   const won = wonMatch(state);
   const voided = matchResult(state) === 'void';
-  const text = won ? '¡Victoria!' : voided ? 'Partida anulada' : 'La suerte no estuvo de tu lado…';
+  let text;
+  if (state.mode === 'adventure') {
+    text = won
+      ? (state.adventure?.level === 6 ? '¡Aventura Completada!' : `¡${state.adventure?.name ?? 'Nivel'} Superado!`)
+      : 'Derrota en la Aventura';
+  } else {
+    text = won ? '¡Victoria!' : voided ? 'Partida anulada' : 'La suerte no estuvo de tu lado…';
+  }
   const gone = state.forfeit && seatVoice(state, state.forfeit.by).name;
   const note = !gone ? ''
     : voided ? `${gone} abandonó en las primeras ${FORFEIT_ROUNDS} rondas: no gana nadie.`
@@ -530,6 +636,26 @@ function controlsHtml(state, { picking, acting }) {
     // vacío y no hay contra quién. Queda una sola puerta, la de volver a las salas.
     if (netPlay && state.forfeit) {
       return pie('', '<button class="btn btn-primary" data-action="leave">Volver a las salas</button>');
+    }
+    if (state.mode === 'adventure') {
+      const won = wonMatch(state);
+      const isLastLevel = (state.adventure?.level ?? 1) >= 6;
+      if (won) {
+        return pie(
+          '',
+          (!isLastLevel
+            ? '<button class="btn btn-primary" data-action="adv-next">Siguiente Nivel</button>'
+            : '<button class="btn btn-primary" data-action="adv-map">Ver Aventura</button>') +
+          '<button class="btn" data-action="adv-map">Aventura</button>' +
+          '<button class="btn" data-action="menu">Menú principal</button>',
+        );
+      }
+      return pie(
+        '',
+        '<button class="btn btn-primary" data-action="restart">Reintentar Nivel</button>' +
+        '<button class="btn" data-action="adv-map">Aventura</button>' +
+        '<button class="btn" data-action="menu">Menú principal</button>',
+      );
     }
     return pie(
       '',
@@ -572,6 +698,28 @@ function controlsHtml(state, { picking, acting }) {
     return pie(`<span class="controls-msg">${msg}</span>`);
   }
 
+  const hitDisabled = (state.busy || (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'hit' && state.tutorialAllowed !== 'any')) ? 'disabled' : '';
+  const standDisabled = (state.busy || (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'stand' && state.tutorialAllowed !== 'any')) ? 'disabled' : '';
+  const hitCls = (state.tutorial && state.tutorialAllowed === 'hit') ? 'btn btn-danger tuto-allowed' : 'btn btn-danger';
+  const standCls = (state.tutorial && state.tutorialAllowed === 'stand') ? 'btn btn-primary tuto-allowed' : 'btn btn-primary';
+  const acts = `<button class="${hitCls}" data-action="hit" ${hitDisabled}>Robar carta</button>
+     <button class="${standCls}" data-action="stand" ${standDisabled}>Atacar</button>`;
+
+  if (state.pendingStack && state.pendingStack.player === acting) {
+    const card = state.pendingStack.card;
+    return pie(
+      `<span class="controls-msg">✨ Free Game: elegí la columna donde colocar ${cardLabel(card)}</span>`,
+      acts,
+    );
+  }
+
+  if (state.freeGame?.[acting]) {
+    return pie(
+      `<span class="controls-msg">✨ Free Game activo: robando carta automáticamente…</span>`,
+      acts,
+    );
+  }
+
   const disabled = state.busy ? 'disabled' : '';
   const at = addressing(state, acting);
   // En un turno normal el renglón no dice nada, y eso es lo correcto: lo que decía
@@ -596,8 +744,7 @@ function controlsHtml(state, { picking, acting }) {
   // aun así ninguno de los dos es el botón grande.
   return pie(
     `<span class="controls-msg">${msg}</span>`,
-    `<button class="btn btn-danger" data-action="hit" ${disabled}>Robar carta</button>
-     <button class="btn btn-primary" data-action="stand" ${disabled}>Atacar</button>`,
+    acts,
   );
 }
 
@@ -656,7 +803,14 @@ function deckTitle(state, player) {
 /** Los símbolos de una carta y su poder, en texto plano: es un `title`, no un cartel. */
 function cardTitle(card) {
   const syms = card.symbols.map((sym) => SYMBOLS[sym].name).join(' · ');
-  return card.power ? `${syms} — ${POWERS[card.power].name}` : syms;
+  const powers = card.stackedCards
+    ? card.stackedCards.map((c) => c.power).filter(Boolean)
+    : (card.powers || (card.power ? [card.power] : []));
+  if (powers.length > 0) {
+    const names = powers.map((p) => POWERS[p]?.name).filter(Boolean).join(' + ');
+    return `${syms} — ${names}`;
+  }
+  return syms;
 }
 
 /**
@@ -890,6 +1044,16 @@ function playHit(vfx, audio, arena, portraits, motions, hit, klass) {
     return;
   }
 
+  if (hit.kind === 'feather') {
+    audio.sfx('thorns');
+    pulse(el, 'react', 'hit', 900);
+    motions[hit.target].pulse('hurt');
+    pulse(arena, 'shake', shakeOf(hit.amount) || 'soft', 500);
+    floatTag(el, 'feather',
+      `<span class="dmg-label">${powerIcon('feather', 'sm')} Pluma</span>−${hit.amount}`);
+    return;
+  }
+
   // El único fallo que llega hasta acá es el del que se plantó y quedó en cero igual
   // —el caracol le comió el mordisco—. Ese sí no se vio venir: el ataque salió y se
   // desarmó en el aire, y este es el primer y único momento en que se cuenta.
@@ -998,7 +1162,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // Los Axies solo cambian entre partidas: se repintan aparte del resto de la
   // pantalla, que se rehace en cada carta. Recrear sus capas a cada rato la haría
   // parpadear entera.
-  const shown = { p1: null, p2: null, match: null, finale: null };
+  const shown = { p1: null, p2: null, match: null, finale: null, demoMatch: null };
   // Las animaciones que traen los propios Axies. Viven aparte del repintado: son del
   // muñeco, no de la partida, y siguen corriendo entre carta y carta.
   const motions = {
@@ -1047,6 +1211,27 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // repintado —la pantalla se rehace a cada carta— es un temblequeo, no una entrada.
   let held = null;
   let acted = false;
+  let animatedStack = 0;
+  let autoDrawing = false;
+  let autoDrawTimer = null;
+  let isDroppingStack = false;
+  let hadPendingStack = false;
+  let activePowerDemo = null;
+
+  function openPowerDemo(levelId, initialPower = null) {
+    if (activePowerDemo) {
+      activePowerDemo.destroy();
+      activePowerDemo = null;
+    }
+    activePowerDemo = createPowerDemoController({
+      levelId,
+      initialPower,
+      onClose: () => {
+        activePowerDemo = null;
+      },
+    });
+    return activePowerDemo;
+  }
 
   game.subscribe((state) => {
     // Una partida nueva se olvida de la anterior: las cartas ya animadas y el último
@@ -1055,7 +1240,30 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     if (shown.match !== state.match) {
       shown.match = state.match;
       forget();
+      if (activePowerDemo) {
+        activePowerDemo.destroy();
+        activePowerDemo = null;
+      }
     }
+
+    const isAdv = state.mode === 'adventure' && Boolean(state.adventure?.level);
+    const powersDemoBtn = $('powers-demo-btn');
+    const hudPowersBtn = $('hud-powers-btn');
+    if (powersDemoBtn) powersDemoBtn.hidden = !isAdv;
+    if (hudPowersBtn) hudPowersBtn.hidden = !isAdv;
+
+    // Demostración automática no invasiva al inicio de los primeros 3 niveles (7 símbolos)
+    if (
+      isAdv &&
+      state.round === 1 &&
+      shown.demoMatch !== state.match
+    ) {
+      shown.demoMatch = state.match;
+      if (shouldAutoShowDemo(state.adventure.level)) {
+        openPowerDemo(state.adventure.level);
+      }
+    }
+
     // El terreno es el de tu clase: cambia al elegir otro Axie, no a cada carta.
     arena.dataset.arena = axie(state.axies[mySeat ?? 'p1']).class;
     paint($('scoreboard'), scoreboardHtml(state));
@@ -1189,6 +1397,9 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       // El color y los papelitos cuelgan de una sola cosa: si ganó el que mira.
       finale.dataset.won = ended ? String(wonMatch(state)) : '';
       finale.innerHTML = ended ? finaleHtml(state) : '';
+      if (ended && state.mode === 'adventure' && wonMatch(state) && state.adventure?.level) {
+        markLevelCompleted(state.adventure.level);
+      }
     }
     // El medidor es de quien decide, y solo si esa decisión es de esta pantalla: la
     // probabilidad del otro sale de su mazo, y mostrársela sería jugarle el turno.
@@ -1214,6 +1425,33 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     }
     // Todo lo demás que suena sale de comparar este estado con el anterior.
     cues.watch(state);
+
+    if (state.lastStacked && state.lastStacked.id !== animatedStack) {
+      animatedStack = state.lastStacked.id;
+      if (!isDroppingStack && state.lastStacked.player === focus) {
+        playAutoStackAnimation(state.lastStacked);
+      }
+    }
+
+    if (state.pendingStack && !hadPendingStack && state.pendingStack.player === (mySeat ?? 'p1')) {
+      audio?.sfx?.('pot', { rate: 1.25, gain: 0.8 });
+      audio?.sfx?.('open', { rate: 1.4, gain: 0.65 });
+    }
+    hadPendingStack = Boolean(state.pendingStack);
+
+    // Auto-draw de Free Game: si está activo y todavía no se sacó la carta para montar,
+    // se roba automáticamente sin obligar al jugador a apretar un botón.
+    const canAutoDraw = mine && Boolean(state.freeGame?.[acting]) && !state.pendingStack && !state.busy;
+    if (canAutoDraw && !autoDrawing) {
+      autoDrawing = true;
+      clearTimeout(autoDrawTimer);
+      autoDrawTimer = setTimeout(() => {
+        autoDrawing = false;
+        if (game.state && game.state.freeGame?.[acting] && !game.state.pendingStack && !game.state.busy) {
+          game.hit();
+        }
+      }, 420);
+    }
   });
 
   /**
@@ -1301,9 +1539,26 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
 
   $('controls').addEventListener('click', (e) => {
     const action = e.target.closest('[data-action]')?.dataset.action;
-    if (action === 'hit') game.hit();
-    else if (action === 'stand') game.stand();
+    if (action === 'hit') {
+      if (game.state?.tutorial && game.state?.tutorialAllowed && game.state.tutorialAllowed !== 'hit' && game.state.tutorialAllowed !== 'any') return;
+      if (game.state?.pendingStack && !isDroppingStack) {
+        const targets = field.querySelectorAll('[data-stack-col]');
+        if (targets.length > 0) {
+          dropTetrisCard(0, targets[0]);
+          return;
+        }
+      }
+      game.hit();
+    }
+    else if (action === 'stand') {
+      if (game.state?.tutorial && game.state?.tutorialAllowed && game.state.tutorialAllowed !== 'stand' && game.state.tutorialAllowed !== 'any') return;
+      game.stand();
+    }
     else if (action === 'restart') restart();
+    else if (action === 'adv-next') {
+      const nextLvl = (game.state?.adventure?.level ?? 1) + 1;
+      restart({ mode: 'adventure', adventureLevel: nextLvl });
+    }
     else if (action === 'leave') leave?.();
   });
 
@@ -1312,6 +1567,11 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     settled.clear();
     lastPoints.p1 = null;
     lastPoints.p2 = null;
+    autoDrawing = false;
+    clearTimeout(autoDrawTimer);
+    isDroppingStack = false;
+    hadPendingStack = false;
+    animatedStack = 0;
   }
 
   /**
@@ -1326,10 +1586,317 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   }
 
   market.addEventListener('click', (e) => {
-    if (e.target.closest('[data-action="renew"]')) return game.renewMarket();
-    if (e.target.closest('[data-action="skip"]')) return game.skipDraft();
-    const uid = e.target.closest('.market-card:not([disabled])')?.dataset.uid;
-    if (uid) game.takeCard(Number(uid));
+    if (e.target.closest('[data-action="renew"]')) {
+      if (game.state?.tutorial && !game.state?.tutorialAllowRenew) return;
+      return game.renewMarket();
+    }
+    if (e.target.closest('[data-action="skip"]')) {
+      if (game.state?.tutorial && game.state?.tutorialDisallowSkip) return;
+      return game.skipDraft();
+    }
+    const cardEl = e.target.closest('.market-card:not([disabled])');
+    const uid = cardEl?.dataset.uid;
+    if (uid) {
+      if (game.state?.tutorial && game.state?.tutorialAllowedCard && Number(uid) !== game.state.tutorialAllowedCard) return;
+      if (game.state?.tutorial && game.state?.tutorialPlainOnly) {
+        const card = game.state.market.find((c) => c.uid === Number(uid));
+        if (card?.power) return;
+      }
+      game.takeCard(Number(uid));
+    }
+  });
+
+  function updateFloatingCardPosition(targetEl) {
+    if (isDroppingStack) return;
+    const floating = typeof document !== 'undefined' ? document.getElementById('tetris-floating-card') : null;
+    const lane = typeof document !== 'undefined' ? document.getElementById('tetris-lane') : null;
+    if (!floating || !lane) return;
+    if (!targetEl) {
+      floating.style.transform = '';
+      return;
+    }
+    const tRect = targetEl.getBoundingClientRect?.();
+    const lRect = lane.getBoundingClientRect?.();
+    if (!tRect || !lRect) return;
+    const initialCenterX = lRect.left + (lRect.width / 2);
+    const targetCenterX = tRect.left + (tRect.width / 2);
+    const shiftX = targetCenterX - initialCenterX;
+    floating.style.transform = `translateX(${shiftX}px)`;
+  }
+
+  function spawnLiquidImpactVfx(tRect) {
+    if (typeof document === 'undefined' || !tRect) return;
+    const centerX = tRect.left + (tRect.width / 2);
+    const centerY = tRect.top + (tRect.height / 2);
+    const rippleSize = Math.max(tRect.width, tRect.height) * 1.3;
+
+    // 1. Doble onda concéntrica líquida (Ripples)
+    for (let i = 0; i < 2; i++) {
+      const ripple = document.createElement('div');
+      ripple.className = 'tetris-liquid-ripple';
+      ripple.style.left = `${centerX - rippleSize / 2}px`;
+      ripple.style.top = `${centerY - rippleSize / 2}px`;
+      ripple.style.width = `${rippleSize}px`;
+      ripple.style.height = `${rippleSize}px`;
+      if (i === 1) {
+        ripple.style.animationDelay = '80ms';
+        ripple.style.borderColor = 'rgba(255, 245, 180, 0.75)';
+      }
+      document.body.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 600);
+    }
+
+    // 2. Destello radial difuso
+    const flash = document.createElement('div');
+    flash.className = 'tetris-impact-flash';
+    flash.style.left = `${tRect.left - 16}px`;
+    flash.style.top = `${tRect.top - 16}px`;
+    flash.style.width = `${tRect.width + 32}px`;
+    flash.style.height = `${tRect.height + 32}px`;
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 400);
+
+    // 3. Salpicadura de micro-gotas doradas fluidas (splash droplets)
+    const dropCount = 8;
+    for (let i = 0; i < dropCount; i++) {
+      const drop = document.createElement('div');
+      drop.className = 'tetris-splash-droplet';
+      const size = 5 + Math.random() * 5;
+      drop.style.width = `${size}px`;
+      drop.style.height = `${size}px`;
+      drop.style.left = `${centerX - size / 2}px`;
+      drop.style.top = `${centerY - size / 2}px`;
+      document.body.appendChild(drop);
+
+      const angle = (Math.PI * 1.08) + (Math.PI * 0.84 * (i / (dropCount - 1)));
+      const distance = 35 + Math.random() * 45;
+      const destX = Math.cos(angle) * distance;
+      const destY = Math.sin(angle) * (distance * 0.75);
+
+      if (typeof drop.animate === 'function') {
+        const dAnim = drop.animate([
+          { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+          { transform: `translate(${destX * 0.6}px, ${destY - 14}px) scale(1.15)`, opacity: 0.95, offset: 0.4 },
+          { transform: `translate(${destX}px, ${destY + 18}px) scale(0.4)`, opacity: 0 }
+        ], {
+          duration: 450 + Math.random() * 80,
+          easing: 'cubic-bezier(0.2, 0.8, 0.35, 1)',
+          fill: 'forwards'
+        });
+        dAnim.finished.then(() => drop.remove()).catch(() => drop.remove());
+      } else {
+        setTimeout(() => drop.remove(), 450);
+      }
+    }
+  }
+
+  async function dropTetrisCard(colIndex, targetEl) {
+    if (isDroppingStack) return;
+    const floating = typeof document !== 'undefined' ? document.getElementById('tetris-floating-card') : null;
+    if (!floating || !targetEl?.getBoundingClientRect) {
+      game.chooseStackTarget(colIndex);
+      return;
+    }
+    isDroppingStack = true;
+    let clone = null;
+    let beam = null;
+    try {
+      const fRect = floating.getBoundingClientRect();
+      const tRect = targetEl.getBoundingClientRect();
+
+      floating.style.opacity = '0';
+
+      if (typeof document !== 'undefined') {
+        beam = document.createElement('div');
+        beam.className = 'tetris-drop-beam';
+        beam.style.left = `${tRect.left - 6}px`;
+        beam.style.top = `${fRect.top}px`;
+        beam.style.width = `${tRect.width + 12}px`;
+        beam.style.height = `${Math.max(10, tRect.bottom - fRect.top)}px`;
+        document.body.appendChild(beam);
+
+        clone = floating.cloneNode(true);
+        clone.id = '';
+        clone.className = 'card card--tetris-falling';
+        clone.style.left = `${fRect.left}px`;
+        clone.style.top = `${fRect.top}px`;
+        clone.style.width = `${fRect.width}px`;
+        clone.style.height = `${fRect.height}px`;
+        clone.style.margin = '0';
+        clone.style.transform = 'none';
+        clone.style.transition = 'none';
+        clone.style.opacity = '1';
+        document.body.appendChild(clone);
+      }
+
+      // Sonido de deslizamiento fluido de la gota
+      audio?.sfx?.('renew', { rate: 1.6, gain: 0.55, cut: 0.35 });
+
+      const deltaX = (tRect.left + (tRect.width - fRect.width) / 2) - fRect.left;
+      const deltaY = tRect.top - fRect.top;
+
+      if (clone && typeof clone.animate === 'function') {
+        // Deformación líquida ("Squash & Stretch" con caída aerodinámica)
+        const anim = clone.animate([
+          { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 },
+          { transform: `translate(${deltaX * 0.2}px, ${deltaY * 0.16}px) scale(0.92, 1.12)`, opacity: 1, offset: 0.2 },
+          { transform: `translate(${deltaX * 0.7}px, ${deltaY * 0.65}px) scale(0.86, 1.20)`, opacity: 1, offset: 0.65 },
+          { transform: `translate(${deltaX}px, ${deltaY}px) scale(1.26, 0.74)`, opacity: 1 }
+        ], {
+          duration: 340,
+          easing: 'cubic-bezier(0.25, 0.1, 0.4, 1)',
+          fill: 'forwards'
+        });
+        await anim.finished.catch(() => {});
+      } else {
+        await new Promise((r) => setTimeout(r, 260));
+      }
+
+      beam?.remove?.();
+      clone?.remove?.();
+
+      // Fusión de sonido al impactar: burbuja + impacto táctil + plop líquido
+      audio?.sfx?.('freegame');
+      spawnLiquidImpactVfx(tRect);
+
+      targetEl.classList?.add?.('card--stack-impact');
+      setTimeout(() => targetEl.classList?.remove?.('card--stack-impact'), 560);
+      await new Promise((r) => setTimeout(r, 50));
+    } finally {
+      beam?.remove?.();
+      clone?.remove?.();
+      try {
+        game.chooseStackTarget(colIndex);
+      } finally {
+        isDroppingStack = false;
+      }
+    }
+  }
+
+  async function playAutoStackAnimation(stackInfo) {
+    if (typeof document === 'undefined') return;
+    const targetEl = field.querySelector?.(`[data-col="${stackInfo.colIndex}"]`);
+    if (!targetEl?.getBoundingClientRect) return;
+    const tRect = targetEl.getBoundingClientRect();
+    if (!tRect || tRect.width === 0) return;
+
+    let clone = null;
+    let beam = null;
+    try {
+      const startY = Math.max(16, tRect.top - 140);
+      const startX = tRect.left;
+
+      beam = document.createElement('div');
+      beam.className = 'tetris-drop-beam';
+      beam.style.left = `${tRect.left - 6}px`;
+      beam.style.top = `${startY}px`;
+      beam.style.width = `${tRect.width + 12}px`;
+      beam.style.height = `${Math.max(10, tRect.bottom - startY)}px`;
+      document.body.appendChild(beam);
+
+      clone = document.createElement('div');
+      clone.className = 'card card--tetris-falling';
+      const syms = stackInfo.card.symbols.map((s) => symChip(s, true)).join('');
+      clone.innerHTML = `<span class="card-no">✨</span>${syms}${powerChip(stackInfo.card)}`;
+      clone.style.left = `${startX}px`;
+      clone.style.top = `${startY}px`;
+      clone.style.width = `${tRect.width}px`;
+      clone.style.height = `${tRect.height}px`;
+      clone.style.margin = '0';
+      clone.style.transform = 'none';
+      clone.style.transition = 'none';
+      document.body.appendChild(clone);
+
+      audio?.sfx?.('renew', { rate: 1.6, gain: 0.55, cut: 0.35 });
+
+      const deltaY = tRect.top - startY;
+      if (typeof clone.animate === 'function') {
+        const anim = clone.animate([
+          { transform: 'translate(0, 0) scale(0.96, 1)', opacity: 0.95 },
+          { transform: `translate(0, ${deltaY * 0.2}px) scale(0.92, 1.12)`, opacity: 1, offset: 0.2 },
+          { transform: `translate(0, ${deltaY * 0.65}px) scale(0.86, 1.20)`, opacity: 1, offset: 0.65 },
+          { transform: `translate(0, ${deltaY}px) scale(1.26, 0.74)`, opacity: 1 }
+        ], {
+          duration: 340,
+          easing: 'cubic-bezier(0.25, 0.1, 0.4, 1)',
+          fill: 'forwards'
+        });
+        await anim.finished.catch(() => {});
+      } else {
+        await new Promise((r) => setTimeout(r, 260));
+      }
+
+      beam?.remove?.();
+      clone?.remove?.();
+
+      audio?.sfx?.('freegame');
+      spawnLiquidImpactVfx(tRect);
+
+      targetEl.classList.add('card--stack-impact');
+      setTimeout(() => targetEl.classList.remove('card--stack-impact'), 560);
+    } catch {
+      beam?.remove?.();
+      clone?.remove?.();
+    }
+  }
+
+  field.addEventListener('click', (e) => {
+    const target = e.target.closest('[data-stack-col]');
+    if (target && !isDroppingStack) {
+      const col = Number(target.dataset.stackCol);
+      dropTetrisCard(col, target);
+      return;
+    }
+    const floating = e.target.closest('#tetris-floating-card, .tetris-dock');
+    if (floating && !isDroppingStack && game.state?.pendingStack) {
+      const targets = field.querySelectorAll('[data-stack-col]');
+      if (targets.length === 1) {
+        dropTetrisCard(0, targets[0]);
+      } else if (targets.length > 1) {
+        const activeTarget = field.querySelector('[data-stack-col]:hover') || targets[0];
+        const col = Number(activeTarget.dataset.stackCol);
+        dropTetrisCard(col, activeTarget);
+      }
+    }
+  });
+
+  let lastHoveredCol = null;
+  field.addEventListener('mousemove', (e) => {
+    if (isDroppingStack) return;
+    const target = e.target.closest('[data-stack-col]');
+    const col = target?.dataset?.stackCol ?? null;
+    if (col !== lastHoveredCol) {
+      lastHoveredCol = col;
+      if (col !== null && game.state?.pendingStack) {
+        audio?.sfx?.('octopus', { rate: 2.2, gain: 0.22, cut: 0.12 });
+      }
+    }
+    updateFloatingCardPosition(target);
+  });
+
+  field.addEventListener('mouseleave', () => {
+    lastHoveredCol = null;
+    if (isDroppingStack) return;
+    updateFloatingCardPosition(null);
+  });
+
+  field.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      const target = e.target.closest('[data-stack-col]');
+      if (target && !isDroppingStack) {
+        e.preventDefault();
+        const col = Number(target.dataset.stackCol);
+        dropTetrisCard(col, target);
+        return;
+      }
+      if (game.state?.pendingStack && !isDroppingStack) {
+        const targets = field.querySelectorAll('[data-stack-col]');
+        if (targets.length === 1) {
+          e.preventDefault();
+          dropTetrisCard(0, targets[0]);
+        }
+      }
+    }
   });
 
   // ---- los dos paneles que reemplazaron a la columna del costado ------------
@@ -1361,26 +1928,75 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
 
   $('log-btn').addEventListener('click', () => $('log-modal').showModal());
   $('rules-btn').addEventListener('click', () => $('rules-modal').showModal());
+  $('symbols-btn')?.addEventListener('click', () => {
+    const modal = $('symbols-modal');
+    if (modal) {
+      if (!modal._symInit && modal.addEventListener) {
+        modal._symInit = true;
+        modal.addEventListener('click', (e) => {
+          const btn = e.target.closest?.('[data-sym-filter]');
+          if (!btn) return;
+          const filter = btn.dataset?.symFilter;
+          modal.querySelectorAll?.('[data-sym-filter]')?.forEach?.((b) => b.classList?.toggle('active', b === btn));
+          modal.querySelectorAll?.('.symbol-card')?.forEach?.((card) => {
+            const match = filter === 'all' || card.dataset?.symClass === filter;
+            card.hidden = !match;
+          });
+        });
+      }
+      modal.showModal?.();
+    }
+  });
+
+  const openDemoFromUi = (initialPower = null) => {
+    const lvl = game.state?.adventure?.level ?? 1;
+    openPowerDemo(lvl, initialPower);
+  };
+  $('powers-demo-btn')?.addEventListener('click', () => openDemoFromUi());
+  $('hud-powers-btn')?.addEventListener('click', () => {
+    $('hud-menu')?.setAttribute('hidden', '');
+    openDemoFromUi();
+  });
 
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, select, textarea')) return;
-    // Con un panel abierto encima —el mazo, el historial, las reglas— las teclas son
-    // del panel y no de la mesa: robar una carta sin ver la mesa es jugar a ciegas.
-    // Antes daba igual porque lo único que se abría eran las reglas, y se abrían desde
-    // la portada; ahora el mazo se consulta en medio de la partida.
-    if (document.querySelector?.('dialog[open]')) return;
+    // Con un panel abierto encima —el mazo, el historial, las reglas o demostración—
+    // las teclas son del panel y no de la mesa.
+    if (document.querySelector?.('dialog[open]') || document.querySelector?.('.power-demo-overlay') || activePowerDemo) return;
     const state = game.state;
-    if (!state) return;
-    if (state.phase === 'draft') return;
-    if (e.key === 'r' || e.key === 'R') game.hit();
-    if (e.key === 'p' || e.key === 'P') game.stand();
+    if (e.key === 'r' || e.key === 'R') {
+      if (state.pendingStack) {
+        const targets = field.querySelectorAll('[data-stack-col]');
+        if (targets.length === 1 && !isDroppingStack) {
+          dropTetrisCard(0, targets[0]);
+          return;
+        }
+      }
+      if (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'hit' && state.tutorialAllowed !== 'any') return;
+      game.hit();
+    }
+    if (e.key === 'p' || e.key === 'P') {
+      if (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'stand' && state.tutorialAllowed !== 'any') return;
+      game.stand();
+    }
     if (e.key === 'Enter') {
       // La ronda ya viene sola; Enter solo se saltea la pausa del cartel.
       if (state.phase === 'roundEnd') game.nextRound();
       // Terminada por abandono no hay otra igual: enfrente no queda nadie.
-      else if (state.phase === 'matchEnd' && !state.forfeit) restart();
+      else if (state.phase === 'matchEnd' && !state.forfeit) {
+        if (state.mode === 'adventure' && wonMatch(state) && (state.adventure?.level ?? 1) < 6) {
+          restart({ mode: 'adventure', adventureLevel: (state.adventure?.level ?? 1) + 1 });
+        } else {
+          restart();
+        }
+      }
     }
   });
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener?.('resize', () => game.refresh?.());
+    window.addEventListener?.('orientationchange', () => game.refresh?.());
+  }
 
   // La partida en red ya está andando cuando esta pantalla se engancha: la arrancó el
   // servidor al juntarse los dos, y arrancar otra acá sería pisarla. Con la portada
@@ -1388,5 +2004,5 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // contra quién juega.
   if (!netPlay && start) restart();
 
-  return { restart };
+  return { restart, _game: game, openPowerDemo };
 }

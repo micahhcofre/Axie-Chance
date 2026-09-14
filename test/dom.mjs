@@ -11,6 +11,8 @@ export const IDS = [
   'peek-p1', 'peek-p2', 'deck-modal', 'deck', 'deck-label', 'deck-sheet',
   'log-btn', 'log-modal', 'log',
   'rules-btn', 'rules-modal',
+  'symbols-btn', 'symbols-modal',
+  'powers-demo-btn', 'hud-powers-btn',
   'market', 'vfx',
   // El menú de las tres rayitas: el sonido con sus dos perillas, y lo que abre otra
   // pantalla. `menu-btn` lo prende la portada, o la sala en una partida en red, que
@@ -42,7 +44,56 @@ export function fakeDom() {
     }]),
   );
 
-  globalThis.document = { getElementById: (id) => nodes[id] ?? null, addEventListener() {} };
+  const makeNode = (tag = 'div', id = '') => {
+    const node = {
+      tagName: tag.toUpperCase(),
+      id,
+      innerHTML: '',
+      textContent: '',
+      dataset: {},
+      classList: {
+        _set: new Set(),
+        add(c) { this._set.add(c); },
+        remove(c) { this._set.delete(c); },
+        toggle(c, force) { if (force !== undefined) { if (force) this.add(c); else this.remove(c); } else { if (this._set.has(c)) this.remove(c); else this.add(c); } },
+        contains(c) { return this._set.has(c); },
+      },
+      value: '',
+      hidden: false,
+      handlers: {},
+      children: [],
+      addEventListener(type, fn) { this.handlers[type] = fn; },
+      showModal() { this.open = true; },
+      setAttribute(name, value) { this[name] = value; },
+      getAttribute(name) { return this[name] ?? null; },
+      style: { props: {}, setProperty(name, value) { this.props[name] = value; } },
+      insertAdjacentHTML(_pos, html) { this.innerHTML += html; },
+      querySelector() { return null; },
+      querySelectorAll() { return []; },
+      appendChild(child) {
+        child.parentNode = this;
+        this.children.push(child);
+        return child;
+      },
+      removeChild(child) {
+        this.children = this.children.filter((c) => c !== child);
+        child.parentNode = null;
+        return child;
+      },
+      remove() { this.parentNode?.removeChild?.(this); },
+    };
+    return node;
+  };
+
+  const body = makeNode('body', 'body');
+  globalThis.document = {
+    body,
+    getElementById: (id) => nodes[id] ?? null,
+    createElement: (tag) => makeNode(tag),
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    addEventListener() {},
+  };
   // Los dos almacenamientos, que no son lo mismo y por eso están los dos: el
   // `localStorage` es del navegador entero —ahí se fija el mezclador si el jugador dejó
   // el sonido prendido (ver `audio.js`)— y el `sessionStorage` es de esta pantalla, que

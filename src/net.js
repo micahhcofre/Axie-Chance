@@ -160,6 +160,7 @@ function createRemoteGame(id, salaOf) {
     hit: () => send('hit'),
     stand: () => send('stand'),
     takeCard: (uid) => send('takeCard', uid),
+    chooseStackTarget: (col) => send('chooseStackTarget', col),
     skipDraft: () => send('skipDraft'),
     renewMarket: () => send('renewMarket'),
     ready: () => send('ready'),

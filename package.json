@@ -10,8 +10,11 @@
     "poses": "node scripts/poses.mjs",
     "vfx": "node scripts/vfx.mjs",
     "sfx": "node scripts/sfx.mjs",
-    "test": "node test/rules.test.js && node test/styles.test.js && node test/match.test.js && node test/powers.test.js && node test/ui.test.js && node test/lobby.test.js && node test/versus.test.js && node test/net.test.js && node test/netui.test.js && node test/motion.test.js && node test/audio.test.js",
+    "test": "node test/rules.test.js && node test/styles.test.js && node test/match.test.js && node test/powers.test.js && node test/ui.test.js && node test/lobby.test.js && node test/versus.test.js && node test/net.test.js && node test/netui.test.js && node test/motion.test.js && node test/audio.test.js && node test/tutorial.test.js && node test/adventure.test.js && node test/power-demos.test.js",
     "build": "node scripts/build.mjs",
-    "balance": "node scripts/balance.mjs"
+    "balance": "node scripts/balance.mjs",
+    "deploy": "npm run build && cd infra && npx cdk deploy --require-approval never --profile dev",
+    "cdk:diff": "cd infra && npx cdk diff --profile dev",
+    "cdk:synth": "cd infra && npx cdk synth"
   }
 }

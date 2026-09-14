@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import {
-  buildPool, buildPersonalDeck, boostOptions, UNFAVORABLE, SYMBOL_IDS, POWER_IDS, POWERS,
-  POWER_TRIOS,
+  buildPool, buildPersonalDeck, buildAxieDeck, toAxieNFTState, boostOptions, UNFAVORABLE, SYMBOL_IDS, POWER_IDS, CLASS_POWER_IDS, POWERS,
+  POWER_TRIOS, CANONICAL_CLASSES, ANATOMICAL_PARTS, ANATOMICAL_JUMPS, TRIADS, TRIAD_BEATS, TRIAD_LOSES_TO,
+  getTriadForClass, getCounterSuppressionCards,
 } from '../src/data.js';
 import {
-  emptyChain, playCard, scoreChain, activeSymbols, isScoringCell, survivalOdds,
+  emptyChain, playCard, scoreChain, activeSymbols, isScoringCell, survivalOdds, stackOnCard,
 } from '../src/rules.js';
 import { decideDraw } from '../src/ai.js';
 
@@ -79,23 +80,23 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 {
   const mazo = (boosts) => buildPersonalDeck('beast', boosts).map((c) => c.symbols.join('+'));
   assert.ok(mazo({ 'beast+bird': 'beast' }).includes('beast+beast+bird'), 'la propia admite el tuyo');
-  assert.ok(mazo({ 'aquatic+reptile': 'reptile' }).includes('aquatic+reptile+reptile'),
+  assert.ok(mazo({ 'plant+reptile': 'reptile' }).includes('plant+reptile+reptile'),
     'la no favorable admite uno de sus dos');
   assert.deepEqual(mazo({ 'beast+bird': 'plant' }), mazo({}),
     'a la propia no se le puede sumar cualquier otro símbolo');
-  assert.deepEqual(mazo({ 'aquatic+reptile': 'beast' }), mazo({}),
+  assert.deepEqual(mazo({ 'plant+reptile': 'beast' }), mazo({}),
     'a la no favorable tampoco: solo los que ya tiene');
   assert.deepEqual(mazo({ 'plant+bird': 'plant' }), mazo({}),
     'una clave de otro mazo se ignora en silencio');
   assert.deepEqual(boostOptions({ symbols: ['beast', 'bird'] }, 'beast'), ['beast']);
-  assert.deepEqual(boostOptions({ symbols: ['aquatic', 'reptile'] }, 'beast'), ['aquatic', 'reptile']);
+  assert.deepEqual(boostOptions({ symbols: ['plant', 'reptile'] }, 'beast'), ['plant', 'reptile']);
   assert.deepEqual(boostOptions({ symbols: ['beast'] }, 'beast'), ['beast'],
     'la carta de un símbolo solo también se puede mejorar');
   // Diecinueve símbolos en diez cartas; cada mejora suma uno.
   const cuenta = (boosts) => buildPersonalDeck('beast', boosts)
     .reduce((n, c) => n + c.symbols.length, 0);
   assert.equal(cuenta({}), 19);
-  assert.equal(cuenta({ 'beast+bird': 'beast', 'aquatic+reptile': 'reptile' }), 21);
+  assert.equal(cuenta({ 'beast+bird': 'beast', 'plant+reptile': 'reptile' }), 21);
 }
 
 // --- inmutabilidad (la IA simula sobre copias) -------------------------------
@@ -111,9 +112,9 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 {
   assert.equal(SYMBOL_IDS.length, 6);
   const pool = buildPool();
-  assert.equal(pool.length, 71, '35 sin poder + 36 con poder');
+  assert.equal(pool.length, 86, '35 sin poder + 36 con poder de clase + 15 neutrales');
   assert.ok(pool.every((c) => c.symbols.length === 2 || c.symbols.length === 3));
-  assert.equal(new Set(pool.map((c) => c.key)).size, 71, 'ninguna carta repetida');
+  assert.equal(new Set(pool.map((c) => c.key)).size, 86, 'ninguna carta repetida');
 
   const plain = pool.filter((c) => !c.power);
   assert.equal(plain.length, 35, '15 pares + 20 tríos, una por combinación');
@@ -125,27 +126,38 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 {
   const pool = buildPool();
   const powered = pool.filter((c) => c.power);
-  assert.equal(powered.length, 36, 'seis cartas por poder');
-  assert.equal(POWER_IDS.length, 6);
+  assert.equal(powered.length, 51, '36 cartas de poderes de clase + 15 neutrales Free Game');
+  const classPowered = powered.filter((c) => c.power !== 'freegame');
+  assert.equal(classPowered.length, 36, 'seis cartas por poder de clase');
+  const active = [...new Set(classPowered.map((c) => c.power))];
+  assert.equal(active.length, 6, 'un poder por clase en la reserva');
+  assert.ok(POWER_IDS.length >= 7);
 
-  // Todas son tríos y todas llevan la clase de su propio poder: el efecto de tu
-  // color tiene que encadenar con tu mazo mejor que con ningún otro.
-  for (const id of POWER_IDS) {
-    const cards = powered.filter((c) => c.power === id);
-    assert.equal(cards.length, 6, `${id}: seis cartas`);
+  // Poderes de clase: todas son tríos y llevan la clase de su propio poder
+  for (const id of CLASS_POWER_IDS) {
     assert.equal(POWER_TRIOS[id].length, 6, `${id}: seis pares de acompañantes`);
-    for (const c of cards) {
-      assert.equal(c.symbols.length, 3, `${id}: son tríos`);
-      assert.ok(c.symbols.includes(POWERS[id].symbol), `${id}: falta su propia clase`);
+    const trios = POWER_TRIOS[id].map((pair) => [POWERS[id].symbol, ...pair].sort());
+    for (const symbols of trios) {
+      assert.equal(symbols.length, 3, `${id}: son tríos`);
+      assert.ok(symbols.includes(POWERS[id].symbol), `${id}: falta su propia clase`);
     }
-    assert.equal(new Set(cards.map((c) => c.key)).size, 6, `${id}: sin tríos repetidos`);
+    const keys = trios.map((s) => s.join('+'));
+    assert.equal(new Set(keys).size, 6, `${id}: sin tríos repetidos`);
   }
 
-  // El reparto está equilibrado: cada clase aparece 18 veces entre las 36 cartas,
-  // 6 como dueña de su poder y 12 como acompañante.
+  // Cartas neutrales de Free Game: 15 pares, 5 apariciones de cada clase
+  const freegameCards = powered.filter((c) => c.power === 'freegame');
+  assert.equal(freegameCards.length, 15, '15 cartas neutrales de Free Game');
+  assert.ok(freegameCards.every((c) => c.symbols.length === 2), 'todas son pares');
+  for (const sym of SYMBOL_IDS) {
+    const count = freegameCards.filter((c) => c.symbols.includes(sym)).length;
+    assert.equal(count, 5, `${sym}: aparece exactamente 5 veces en los pares de Free Game`);
+  }
+
+  // El reparto de clase está equilibrado: cada clase aparece 18 veces entre las 36 cartas de clase
   for (const id of SYMBOL_IDS) {
-    const seen = powered.filter((c) => c.symbols.includes(id)).length;
-    assert.equal(seen, 18, `${id}: aparece ${seen} veces y no 18`);
+    const seen = classPowered.filter((c) => c.symbols.includes(id)).length;
+    assert.equal(seen, 18, `${id}: aparece ${seen} veces y no 18 en cartas de clase`);
     assert.equal(powered.filter((c) => c.power === id).length, 0, `${id} no es un poder`);
   }
 
@@ -159,36 +171,100 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   assert.ok(new Set(trios).size < trios.length, '36 cartas sobre 20 tríos: alguno se repite');
 }
 
-// --- mazo personal -----------------------------------------------------------
+// --- mazo personal, tríadas y Axie Core --------------------------------------
 {
-  // Los 6 pares no favorables son dos triángulos disjuntos, así que cada símbolo
-  // aparece en exactamente dos y a todo jugador le sobran justo cuatro.
-  assert.equal(UNFAVORABLE.length, 6);
-  for (const id of SYMBOL_IDS) {
-    assert.equal(UNFAVORABLE.filter((pair) => pair.includes(id)).length, 2, id);
+  assert.equal(CANONICAL_CLASSES.length, 6);
+  assert.deepEqual(CANONICAL_CLASSES, ['plant', 'beast', 'aquatic', 'bird', 'bug', 'reptile']);
+
+  // Tríadas canónicas (Piedra, Papel o Tijera)
+  assert.deepEqual(TRIADS.rock, ['plant', 'reptile']);
+  assert.deepEqual(TRIADS.paper, ['beast', 'bug']);
+  assert.deepEqual(TRIADS.scissors, ['bird', 'aquatic']);
+
+  // Regla de combate: Paper vence a Rock, Scissors vence a Paper, Rock vence a Scissors
+  assert.equal(TRIAD_BEATS.paper, 'rock');
+  assert.equal(TRIAD_BEATS.scissors, 'paper');
+  assert.equal(TRIAD_BEATS.rock, 'scissors');
+
+  // Saltos anatómicos y Counter Suppression Formula para las 6 clases
+  for (let i = 0; i < CANONICAL_CLASSES.length; i++) {
+    const cls = CANONICAL_CLASSES[i];
+    const deck = buildPersonalDeck(cls);
+    assert.equal(deck.length, 10, `${cls}: mazo de 10`);
+    assert.equal(new Set(deck.map((c) => c.key)).size, 10, `${cls}: sin repetidas`);
+
+    // 6 cartas anatómicas favorables
+    const favorable = deck.filter((c) => c.isFavorable);
+    assert.equal(favorable.length, 6, `${cls}: 6 cartas anatómicas favorables`);
+
+    const tail = favorable.find((c) => c.associatedPart === 'tail');
+    assert.deepEqual(tail.symbols, [cls], `${cls}: cola es mono-símbolo pura`);
+
+    const mouth = favorable.find((c) => c.associatedPart === 'mouth');
+    assert.ok(mouth.symbols.includes(cls) && mouth.symbols.includes(CANONICAL_CLASSES[(i + 1) % 6]));
+
+    const eyes = favorable.find((c) => c.associatedPart === 'eyes');
+    assert.ok(eyes.symbols.includes(cls) && eyes.symbols.includes(CANONICAL_CLASSES[(i + 2) % 6]));
+
+    const ears = favorable.find((c) => c.associatedPart === 'ears');
+    assert.ok(ears.symbols.includes(cls) && ears.symbols.includes(CANONICAL_CLASSES[(i + 3) % 6]));
+
+    const horn = favorable.find((c) => c.associatedPart === 'horn');
+    assert.ok(horn.symbols.includes(cls) && horn.symbols.includes(CANONICAL_CLASSES[(i + 4) % 6]));
+
+    const back = favorable.find((c) => c.associatedPart === 'back');
+    assert.ok(back.symbols.includes(cls) && back.symbols.includes(CANONICAL_CLASSES[(i + 5) % 6]));
+
+    // 4 cartas desfavorables (Counter Suppression Formula)
+    const foreign = deck.filter((c) => !c.isFavorable);
+    assert.equal(foreign.length, 4, `${cls}: 4 cartas no favorables`);
+    assert.ok(foreign.every((c) => !c.symbols.includes(cls)), `${cls}: ninguna desfavorable contiene la clase base`);
+
+    // Verificación matemática canónica:
+    // En las cartas desfavorables, las Presas y el Aliado aparecen 2 veces cada una,
+    // mientras que los Counters aparecen exactamente 1 vez.
+    const triad = getTriadForClass(cls);
+    const ally = TRIADS[triad].find((c) => c !== cls);
+    const preys = TRIADS[TRIAD_BEATS[triad]];
+    const counters = TRIADS[TRIAD_LOSES_TO[triad]];
+
+    const foreignSyms = foreign.flatMap((c) => c.symbols);
+    const countSym = (s) => foreignSyms.filter((sym) => sym === s).length;
+
+    assert.equal(countSym(ally), 2, `${cls}: el Aliado (${ally}) aparece 2 veces`);
+    assert.equal(countSym(preys[0]), 2, `${cls}: Presa 1 (${preys[0]}) aparece 2 veces`);
+    assert.equal(countSym(preys[1]), 2, `${cls}: Presa 2 (${preys[1]}) aparece 2 veces`);
+    assert.equal(countSym(counters[0]), 1, `${cls}: Counter 1 (${counters[0]}) aparece 1 vez`);
+    assert.equal(countSym(counters[1]), 1, `${cls}: Counter 2 (${counters[1]}) aparece 1 vez`);
+    assert.equal(foreignSyms.length, 8, `${cls}: 8 símbolos en las 4 cartas desfavorables`);
   }
 
-  for (const id of SYMBOL_IDS) {
-    const deck = buildPersonalDeck(id);
-    assert.equal(deck.length, 10, `${id}: mazo de 10`);
-    assert.equal(new Set(deck.map((c) => c.key)).size, 10, `${id}: sin repetidas`);
+  // Axie Core - Part Evolution (Mutación a 3 símbolos / 2 en cola)
+  const nftState = {
+    id: 'custom-beast',
+    baseClass: 'beast',
+    parts: {
+      tail: { class: 'beast', isEvolved: true },
+      mouth: { class: 'beast', isEvolved: false },
+      eyes: { class: 'aquatic', isEvolved: true }, // parte híbrida evolucionada
+      ears: { class: 'beast', isEvolved: true },
+      horn: { class: 'plant', isEvolved: true },   // parte híbrida evolucionada
+      back: { class: 'beast', isEvolved: false },
+    },
+  };
 
-    const own = deck.filter((c) => c.symbols.includes(id));
-    assert.equal(own.length, 6, `${id}: 5 pares propios + la carta sola`);
-    assert.equal(own.filter((c) => c.symbols.length === 1).length, 1, `${id}: una carta sola`);
-    // Los 5 pares propios cubren cada uno de los otros símbolos, sin repetir.
-    const partners = own.filter((c) => c.symbols.length === 2).flatMap((c) => c.symbols)
-      .filter((s) => s !== id);
-    assert.deepEqual(partners.sort(), SYMBOL_IDS.filter((s) => s !== id).sort(), id);
+  const evolvedDeck = buildAxieDeck(nftState);
+  assert.equal(evolvedDeck.length, 10);
+  const evoTail = evolvedDeck.find((c) => c.associatedPart === 'tail');
+  assert.deepEqual(evoTail.symbols, ['beast', 'beast'], 'cola evolucionada tiene 2 símbolos');
 
-    const foreign = deck.filter((c) => !c.symbols.includes(id));
-    assert.equal(foreign.length, 4, `${id}: 4 cartas no favorables`);
-    assert.ok(
-      foreign.every((c) => UNFAVORABLE.some((pair) => pair.join('+') === c.symbols.join('+')
-        || pair.slice().reverse().join('+') === c.symbols.join('+'))),
-      `${id}: las ajenas salen de la lista no favorable`,
-    );
-  }
+  const evoEyes = evolvedDeck.find((c) => c.associatedPart === 'eyes');
+  // eyes base es [beast, bird] + mutación aquatic -> [aquatic, beast, bird]
+  assert.equal(evoEyes.symbols.length, 3, 'ojos evolucionados mutan a 3 símbolos');
+  assert.ok(evoEyes.symbols.includes('aquatic'), 'incorpora la clase de la parte NFT');
+
+  const unevoMouth = evolvedDeck.find((c) => c.associatedPart === 'mouth');
+  assert.equal(unevoMouth.symbols.length, 2, 'boca no evolucionada conserva 2 símbolos');
 
   // Los uid no se repiten entre mazos: la UI los usa para no reanimar cartas.
   const all = [...buildPersonalDeck('bird'), ...buildPersonalDeck('bug'), ...buildPool()];
@@ -278,6 +354,34 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 
   // Un id que no existe no rompe el render: cae en el primero del roster.
   assert.equal(axie('no-existe').id, AXIE_IDS[0]);
+}
+
+// --- stackOnCard (Free Game) -------------------------------------------------
+{
+  // Apertura con Pez + Bestia
+  const initial = chainOf(card('aquatic', 'beast'));
+  assert.equal(initial.cards.length, 1);
+  assert.equal(scoreChain(initial).total, 2); // 1^2 + 1^2
+
+  // Montar Pez + Pájaro sobre la Columna 1
+  const stacked = stackOnCard(initial, 0, card('aquatic', 'bird'));
+  assert.equal(stacked.cards.length, 1, 'no avanza la cantidad de cartas');
+  assert.equal(stacked.cards[0].symbols.length, 4, 'contiene los 4 símbolos');
+  assert.equal(stacked.busted, false);
+
+  // Pez ahora tiene racha de 2 (largo 2 -> 4 pts), Bestia 1 pt, Pájaro 1 pt = 6 pts
+  const sc = scoreChain(stacked);
+  assert.equal(sc.total, 6);
+
+  // Continuar la cadena con una segunda columna que conecta
+  const col2 = playCard(stacked, card('bird', 'plant'));
+  assert.equal(col2.busted, false);
+  assert.equal(col2.cards.length, 2);
+
+  // Montar una carta sobre la Columna 2 con símbolos que no están vivos no corta
+  const col2Stacked = stackOnCard(col2, 1, card('reptile', 'bug'));
+  assert.equal(col2Stacked.busted, false, 'alargar columna no produce bust');
+  assert.equal(col2Stacked.cards.length, 2);
 }
 
 console.log('✓ todos los tests pasan');

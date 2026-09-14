@@ -27,6 +27,8 @@
       <div class="clock" id="clock" role="timer" aria-label="Tiempo que queda" data-on="false"></div>
     </div>
     <div class="topbar-actions">
+      <button class="btn btn-ghost btn-powers-demo" id="powers-demo-btn"
+        title="Demostración de poderes" aria-label="Demostración de poderes" hidden>⚡ Poderes</button>
       <!-- Las tres rayitas. Todo lo que no es jugar vive detrás de este botón: el
            sonido, las reglas y la puerta de salida. -->
       <button class="btn btn-burger" id="hud-btn" aria-expanded="false"
@@ -68,6 +70,8 @@
            saca un píxel a la pelea. -->
       <button class="btn btn-ghost hud-item" id="log-btn">Historial</button>
       <button class="btn btn-ghost hud-item" id="rules-btn">Cómo se juega</button>
+      <button class="btn btn-ghost hud-item" id="symbols-btn">Símbolos especiales</button>
+      <button class="btn btn-ghost hud-item" id="hud-powers-btn" hidden>Demostración de poderes</button>
       <!-- La puerta de vuelta a la portada, donde se elige contra quién y con qué
            Axie. La pone `lobby.js`: con la partida en red no hay portada a la que
            volver, y el botón se queda guardado. -->
@@ -186,11 +190,16 @@
     <!-- El menú: contra quién. La dificultad cuelga de la opción a la que le
          corresponde, que es la única con máquina adentro. -->
     <div class="lobby-menu" id="lobby-menu" hidden>
-      <p class="lobby-menu-label">Contra quién</p>
+      <p class="lobby-menu-label">Modo de juego</p>
       <div class="lobby-modes">
         <div class="lobby-mode">
+          <button class="lobby-pick" data-play="adventure">
+            <b>Modo Aventura</b><span>Avanzá nivel a nivel desbloqueando los 12 poderes</span>
+          </button>
+        </div>
+        <div class="lobby-mode">
           <button class="lobby-pick" data-play="cpu">
-            <b>Vs CPU</b><span>Vos contra la máquina, que saca un Axie sorteado</span>
+            <b>Vs CPU</b><span>Vos contra la máquina, partida libre</span>
           </button>
           <label class="select" id="difficulty-box">
             <span>Dificultad</span>
@@ -236,7 +245,9 @@
        ponía a la altura de una puerta, y **levantaba a jugar del piso** lo que mide un
        botón, así que las dos esquinas dejaban de estar a la misma altura. -->
   <div class="lobby-foot" id="lobby-foot">
+    <button class="btn btn-ghost lobby-help" id="lobby-tutorial">Tutorial</button>
     <button class="btn btn-ghost lobby-help" id="lobby-rules">Cómo se juega</button>
+    <button class="btn btn-ghost lobby-help" id="lobby-symbols">Símbolos especiales</button>
   </div>
 
   <!-- Con quién. Es la última pregunta antes del combate y la que hace que la partida
@@ -289,6 +300,20 @@
     <div class="choose-actions">
       <p class="choose-note" id="lobby-choose-note"></p>
       <button class="lobby-play choose-go" id="lobby-start">Elegir Axie</button>
+    </div>
+  </div>
+
+  <!-- El Modo Aventura: lista de niveles, poderes y combate -->
+  <div class="lobby-adventure" id="lobby-adventure" hidden>
+    <div class="choose-bar">
+      <button class="btn btn-ghost" id="lobby-adventure-back">← Volver</button>
+      <p class="choose-step" id="lobby-adventure-title">Modo Aventura</p>
+    </div>
+    <div class="adventure-stage">
+      <div class="adventure-levels" id="adventure-levels"></div>
+      <div class="adventure-card" id="adventure-card">
+        <button class="lobby-play choose-go" id="lobby-adventure-play">Comenzar Nivel</button>
+      </div>
     </div>
   </div>
 </div>
@@ -396,40 +421,29 @@
 
 <dialog class="modal" id="rules-modal">
   <h2>Cómo se juega</h2>
-  <p>Es un combate. Elegís uno de los <b>seis Axies</b> —uno por clase— y peleás con su
-     <b>mazo personal</b> contra la CPU, que usa otro. Los dos arrancan con <b>100 de vida</b>.</p>
-  <p>En <b>2 jugadores</b> es la misma partida con dos personas en el mismo teclado: cada una
-     elige su Axie, los turnos van uno detrás del otro y los mismos dos botones sirven para
-     los dos —el cartel de abajo dice de quién es el turno—. No hace falta esconder nada:
-     las cartas salen boca arriba y el centro está a la vista de los dos.
+  <p>Es un combate de cartas táctico <i>push-your-luck</i>. Elegís uno de los <b>seis Axies</b> —uno por clase— y peleás con su
+     <b>mazo personal</b> contra el rival. Los dos arrancan con <b>100 de vida</b>.</p>
+  <p>En <b>Vs CPU</b> jugás contra la máquina, que compite con un Axie sorteado.
+     En <b>Multijugador</b> jugás en red con otra persona en salas privadas con código.
      <b>Quién abre se sortea</b> al empezar la partida: cerrar el intercambio —ver el
-     golpe del otro antes de decidir el tuyo— es una ventaja, y entre dos personas no
-     hay ningún lado que la merezca. Contra la CPU abrís siempre vos.</p>
-  <p><b>Jugar en red</b> es lo mismo desde dos aparatos de la misma red: uno crea una
-     sala, el otro entra desde la lista, y la partida empieza cuando los dos aprietan
-     <b>Listo</b>. Cada uno se ve a sí mismo a la izquierda y solo puede apretar en su
-     turno; el turno del otro se ve igual, carta por carta, en la misma mesa. Se puede
-     <b>abandonar</b> desde el menú: en las primeras 5 rondas la partida se anula y no
-     gana nadie; después, gana el que se queda.</p>
+     golpe del otro antes de decidir el tuyo— es una ventaja táctica. Se puede
+     <b>abandonar</b> desde el menú: en las primeras 5 rondas la partida se anula sin ganador; después, gana quien se queda.</p>
+  <p><b>La Última Chance:</b> Si te quedás sin vida antes de haber atacado en el intercambio, no morís en el acto:
+     jugás tu turno normal. Si tu golpe deja sin vida al otro también, la partida termina en <b>empate</b>.</p>
   <p>Se turnan. En tu turno te reparten una carta y vas <b>cargando el ataque</b>: cada carta que
      robás lo hace más fuerte, pero si la cadena se corta el golpe falla. Cuando te plantás,
-     <b>atacás</b>: los puntos de tu cadena son el <b>daño</b> que le sacás al rival. Ahí mismo
-     te llevás cartas del centro para tu mazo, y recién entonces ataca la CPU, que hace lo
-     mismo. Cuando los dos atacaron, el intercambio cierra.
-     Gana el que deja al otro <b>sin vida</b>; el rival alcanza a devolver el golpe.</p>
+     <b>soltás el ataque</b>: los puntos de tu cadena son el <b>daño</b> que le hacés al rival. Ahí mismo
+     te llevás cartas del centro para tu mazo, y luego ataca el otro. Al cerrar la ronda, se resuelve el veneno y se comprueba la vida.</p>
 
   <h3>La cadena</h3>
-  <p>Las cadenas arrancan en la <b>primera carta</b> de tu ronda —la carta más importante
-     que vas a jugar, y la única que el <img class="power power--sm" src="Icons/power-octopus.png" alt="">
-     pulpo te deja elegir—: cada símbolo que tiene abre una cadena. Cada carta que robás tiene que compartir al menos un símbolo con las cadenas que
-     siguen <b>vivas</b>. Las cadenas que la carta nueva no contiene se cierran ahí, pero conservan
-     su largo.</p>
+  <p>Las cadenas arrancan en la <b>primera carta</b> de tu turno: cada símbolo distinto que tiene abre una cadena.
+     Cada carta que robás debe compartir al menos un símbolo con las cadenas que siguen <b>vivas</b>. Las cadenas cuyos símbolos
+     no aparecen quedan congeladas conservando su largo.</p>
   <p class="warn">Si la carta nueva no comparte <b>ningún</b> símbolo vivo, se corta todo:
      el ataque se desarma y hace <b>0</b> de daño.</p>
 
   <h3>El daño</h3>
-  <p>Cada cadena golpea por su largo <b>al cuadrado</b>. Solo cuentan los símbolos de la
-     primera carta.</p>
+  <p>Cada cadena golpea por su largo <b>al cuadrado</b>. Solo puntúan los símbolos que estaban en la primera carta.</p>
   <div class="example">
     <div><span class="tag">1ª</span> <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""></div>
     <div><span class="tag">2ª</span> <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""></div>
@@ -437,110 +451,494 @@
     <hr>
     <div><img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> en 3 cartas → 3² = <b>9</b></div>
     <div><img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> en 2 cartas → 2² = <b>4</b></div>
-    <div class="muted"><img class="crest crest--sm" src="Icons/beast-crest.png" alt=""> y <img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> no estaban en la primera carta: no puntúan.</div>
+    <div class="muted"><img class="crest crest--sm" src="Icons/beast-crest.png" alt=""> y <img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> no estaban en la 1ª carta: no puntúan.</div>
     <div class="total">Daño del ataque: <b>13</b></div>
   </div>
 
-  <h3>Tu mazo</h3>
-  <p class="muted"><b>Tocá un Axie</b> —el tuyo o el del rival— para ver su mazo entero: las
-     diez de fábrica y todo lo que fue juntando del centro. El <b>historial</b> de la partida
-     está en el menú de las tres rayitas, arriba a la derecha.</p>
-  <p>Cada jugador roba de su <b>propio mazo de 10 cartas</b>, armado alrededor de su símbolo.
-     Si jugás <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> Pez:</p>
-  <div class="example">
-    <div><b>5</b> pares de <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> con cada otro símbolo</div>
-    <div><b>1</b> carta con <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> solo</div>
-    <div><b>4</b> cartas ajenas, sin <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt="">: <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""><img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> · <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""><img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> ·
-      <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""><img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> · <img class="crest crest--sm" src="Icons/bug-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""></div>
-    <hr>
-    <div class="muted">Las ajenas salen de seis pares fijos —
-      <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""><img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""><img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""><img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> y
-      <img class="crest crest--sm" src="Icons/bug-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> <img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""><img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""><img class="crest crest--sm" src="Icons/bug-crest.png" alt=""> —
-      de los que te tocan los cuatro que no llevan tu símbolo.</div>
-  </div>
-  <p class="muted">Los mazos iniciales <b>no traen poderes</b>: los seis salen del centro y hay
-     que ganárselos.</p>
-  <p><b>Las mejoras.</b> En la pantalla de tu Axie cada carta del mazo tiene un
-     <b>(+)</b> debajo: le sumás <b>un símbolo</b> y queda puesto. Las seis cartas que
-     llevan tu símbolo admiten <b>el tuyo</b>; las cuatro ajenas, <b>uno de los dos</b>
-     que ya tienen —vos elegís cuál—.</p>
-  <div class="example">
-    <div><span class="tag">+</span> <img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> sobre <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> → <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""><img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""></div>
-    <hr>
-    <div>El símbolo repetido <b>cuenta las dos veces</b>: esa carta abre la cadena del
-      reptil en <b>2</b> y la adelanta de a dos. Y la cadena golpea por su largo al
-      cuadrado, así que un símbolo de más vale más de lo que parece.</div>
-  </div>
-  <p><b>No hay descarte:</b> al empezar cada intercambio se rebaraja el mazo entero, como una
-     tragamonedas. Dentro del turno las cartas que ya salieron no vuelven, así que
-     acordarte de lo que salió sirve mientras dura la tirada — el medidor del arena
-     te dice qué porcentaje de tu mazo restante continúa la cadena. De una ronda a la otra
-     no se arrastra nada.</p>
+  <h3>Tu mazo y mejoras</h3>
+  <p class="muted"><b>Tocá un Axie</b> —el tuyo o el del rival— para ver su mazo entero: las diez de fábrica y todo lo que fue sumando del centro.</p>
+  <p>Cada jugador roba de su <b>mazo inicial de 10 cartas</b>, construido alrededor de su clase: 5 pares con su símbolo, 1 carta solitaria de su símbolo y 4 cartas ajenas. Los mazos iniciales no traen poderes.</p>
+  <p><b>Mejoras (+):</b> En la pantalla de elección de tu Axie podés añadir un símbolo extra a cada carta:
+     las de tu clase admiten el tuyo; las ajenas, uno de sus dos símbolos. El símbolo repetido <b>cuenta cada aparición</b>, acelerando la racha al cuadrado.</p>
+  <p><b>Sin descarte:</b> Al inicio de cada intercambio se rebaraja el mazo completo (lo jugado y lo sumado). Las cartas que salieron no se repiten dentro de la misma ronda.</p>
 
-  <h3>El centro</h3>
-  <p>En el centro hay siempre <b>5 cartas boca arriba</b>, sacadas de una reserva de 71: las
-     <b>35 sin poder</b> —las 15 combinaciones de 2 símbolos y las 20 de 3, una por
-     combinación— y las <b>36 con poder</b>. Cuando alguien se lleva una, se repone en el
-     acto. Apenas terminás tu ataque —antes de que juegue el rival— te llevás cartas del
-     centro según cómo te fue:</p>
+  <h3>El centro (mercado de 6 cartas)</h3>
+  <p>En el centro hay siempre <b>6 cartas boca arriba</b>, sacadas de una reserva de 86 cartas: 35 sin poder, 36 con poder (6 por cada poder activo) y 15 cartas comodín Free Game. Al llevarse una carta, se repone al instante. Al terminar tu turno te llevás:</p>
   <div class="example">
-    <div><b>Soltaste el ataque</b> → 1 carta <b>con poder</b> <b>o</b> 2 cartas <b>sin poder</b></div>
-    <div><b>Se te desarmó</b> → 1 carta sin poder</div>
+    <div><b>Te plantaste</b> → 1 carta <b>con poder</b> <b>o</b> 2 cartas <b>sin poder</b></div>
+    <div><b>Se te cortó</b> → 1 carta <b>sin poder</b></div>
     <hr>
-    <div>No se pregunta nada antes: <b>la carta que tocás decide</b>. Tocás una con poder y
-      ahí termina tu reparto; tocás una sin poder y te queda una segunda.</div>
-    <div><b>No agarrar</b> cierra tu reparto sin sumar nada —o con lo que ya llevabas.</div>
-    <hr>
-    <div><b>Ninguna de las que podés agarrar lleva tu símbolo</b> → renovás el centro, una vez</div>
-    <hr>
-    <div class="muted">Las cartas nuevas entran al mazo y ya pueden salir en la ronda
-      siguiente. Cuando la reserva se agota, se sigue jugando con el mazo que armaste.</div>
+    <div><b>La carta que tocás decide el camino:</b> tocar una con poder la toma y concluye el draft; tocar una sin poder abre la opción a una segunda.</div>
+    <div><b>Renovación:</b> Si ninguna de las 6 cartas a la vista contiene el símbolo de tu clase, podés renovar el centro entero una vez por draft.</div>
   </div>
-  <p>Cuando entre las cartas que te podés llevar <b>no hay ninguna con tu símbolo</b>, el centro
-     no te ofrece nada que enlace con tu mazo: podés <b>renovarlo entero</b>. Las 5 se van al
-     fondo de la reserva, salen 5 nuevas y elegís de esas. Una sola renovación por reparto,
-     y la CPU tiene la suya.</p>
-  <p class="warn">Un poder cuesta <b>una carta</b>: llevártelo es resignar la segunda. Y cada
-     carta extra diluye tu mazo, así que a veces lo mejor es <b>no agarrar nada</b>.</p>
 
-  <h3>Los poderes</h3>
-  <p>36 cartas del centro traen, además de sus 3 símbolos, un <b>séptimo símbolo</b> colgado
-     abajo detrás de una línea. Ese símbolo <b>no juega la cadena</b>: no la abre, no la
-     continúa, no la corta y no puntúa. Solo dispara su efecto <b>cuando soltás el ataque</b>,
-     con el daño del turno ya contado.</p>
+  <h3>Los poderes de combate</h3>
+  <p>Al inicio de cada partida se sortea <b>un poder activo por clase</b> (de entre los dos posibles para esa clase). Cada poder viaja siempre con su símbolo entre los tres de su carta:</p>
   <div class="example">
-    <div><img class="power power--sm" src="Icons/power-strength.png" alt=""> <b>Fuerza</b> —
-      +2 de daño en este ataque y en todos los que siguen. Se acumula.</div>
-    <div><img class="power power--sm" src="Icons/power-poison.png" alt=""> <b>Veneno</b> —
-      envenenás al rival por la mitad de tu daño. Al cerrar cada intercambio le saca esa
-      vida y después baja 2. Se acumula.</div>
-    <div><img class="power power--sm" src="Icons/power-egg.png" alt=""> <b>Huevo</b> —
-      un escudo con la mitad de tu daño. Aguanta golpes hasta gastarse: lo que le
-      sobra queda puesto para el siguiente.</div>
-    <div><img class="power power--sm" src="Icons/power-pot.png" alt=""> <b>Maceta</b> —
-      te curás exactamente lo que pegaste, sin pasarte de 100.</div>
-    <div><img class="power power--sm" src="Icons/power-snail.png" alt=""> <b>Caracol</b> —
-      los próximos 2 ataques del rival pegan <b>la mitad de tu daño</b> menos. Se acumula
-      en cantidad de ataques, y se queda con el mordisco más grande.</div>
-    <div><img class="power power--sm" src="Icons/power-octopus.png" alt=""> <b>Pulpo</b> —
-      la carta que agarres del centro <b>no se baraja</b>: queda reservada y
-      <b>abre tu próxima ronda</b>. Se acumula: con dos pulpos armás las dos primeras
-      cartas, en el orden en que las tocaste.</div>
+    <div><img class="power power--sm" src="Icons/power-strength.png" alt=""> <b>Fuerza</b> (Bestia) — +1 de daño permanente en todos tus ataques.</div>
+    <div><img class="power power--sm" src="Icons/power-brutal.png" alt=""> <b>Garra Brutal</b> (Bestia) — +2 de daño por cada símbolo de tu cadena más larga.</div>
+    <div><img class="power power--sm" src="Icons/power-octopus.png" alt=""> <b>Pulpo</b> (Pez) — +1 carta extra del mercado para tu mazo al plantarte.</div>
+    <div><img class="power power--sm" src="Icons/power-bubble.png" alt=""> <b>Burbuja de Retorno</b> (Pez) — La carta que elijas del mercado abrirá tu próxima ronda.</div>
+    <div><img class="power power--sm" src="Icons/power-egg.png" alt=""> <b>Huevo</b> (Pájaro) — Escudo por la mitad de tu golpe; al romperse devuelve 8 de daño directo al atacante.</div>
+    <div><img class="power power--sm" src="Icons/power-feather.png" alt=""> <b>Pluma Sagrada</b> (Pájaro) — 5 de daño directo inmediato al salir (¡incluso si te cortás!).</div>
+    <div><img class="power power--sm" src="Icons/power-pot.png" alt=""> <b>Maceta</b> (Planta) — Te curás todo el daño que pegaste.</div>
+    <div><img class="power power--sm" src="Icons/power-leaf.png" alt=""> <b>Hoja (Leaf)</b> (Planta) — +2 hojas (hasta 5). Cada hoja te cura 4 de vida al final del turno y se consume una.</div>
+    <div><img class="power power--sm" src="Icons/power-snail.png" alt=""> <b>Caracol</b> (Bicho) — El próximo ataque del rival hace la mitad de daño.</div>
+    <div><img class="power power--sm" src="Icons/power-leech.png" alt=""> <b>Greedy Leech</b> (Bicho) — Robás 6 de vida al rival (se duplica a 12 con 4 columnas en mesa).</div>
+    <div><img class="power power--sm" src="Icons/power-poison.png" alt=""> <b>Veneno</b> (Reptil) — Envenena por la mitad de tu golpe; daña cada turno y se reduce a la mitad.</div>
+    <div><img class="power power--sm" src="Icons/power-steelskin.png" alt=""> <b>Piel de Escamas</b> (Reptil) — Tope defensivo: el próximo ataque rival no superará los 12 de daño.</div>
     <hr>
-    <div class="muted">Cada poder viaja siempre con su propia clase entre los 3 símbolos:
-      <img class="crest crest--sm" src="Icons/bird-crest.png" alt=""> el huevo,
-      <img class="crest crest--sm" src="Icons/aquatic-crest.png" alt=""> el pulpo,
-      <img class="crest crest--sm" src="Icons/plant-crest.png" alt=""> la maceta,
-      <img class="crest crest--sm" src="Icons/reptile-crest.png" alt=""> el veneno,
-      <img class="crest crest--sm" src="Icons/bug-crest.png" alt=""> el caracol y
-      <img class="crest crest--sm" src="Icons/beast-crest.png" alt=""> la fuerza. El efecto de
-      tu color encadena con tu mazo mejor que ningún otro.</div>
-    <div class="muted">Si <b>se te corta la cadena</b> el ataque hace 0, y con él se pierde
-      todo lo que se mide contra el daño: el huevo, la maceta, el veneno y el caracol.
-      La fuerza y el pulpo salen igual, porque no salen del golpe.</div>
+    <div><img class="power power--sm" src="Icons/power-freegame.png" alt=""> <b>Free Game</b> (Especial Neutral) — Carta comodín: al entrar en mesa alarga una carta existente sumando sus símbolos.</div>
+    <hr>
+    <div class="muted"><b>Regla general:</b> Salvo la Pluma (que pega de inmediato al robar) y el Pulpo/Burbuja (que exigen plantarse), todos los poderes requieren que el ataque conecte con daño (&gt; 0) para activarse. Si te cortás, el golpe hace 0 y no se activa ningún efecto de ataque.</div>
   </div>
+
+  <h3>Modo Aventura</h3>
+  <p>Campaña de 6 niveles progresivos donde se desbloquean 2 nuevos poderes de clase por nivel. En el <b>Nivel 1: Primeros Pasos</b> ya están activos <b>Fuerza</b> (Bestia), <b>Maceta</b> (Planta) y las 15 cartas comodín neutrales <b>Free Game</b>.</p>
 
   <form method="dialog"><button class="btn btn-primary">Entendido</button></form>
+</dialog>
+
+<dialog class="modal modal--sheet modal--symbols" id="symbols-modal">
+  <div class="symbols-header">
+    <div>
+      <h2>Símbolos y Poderes Especiales</h2>
+      <p class="symbols-subtitle">
+        Las cartas del mercado pueden incluir <b>poderes especiales</b>. No forman cadenas por sí mismos, pero activan <b>habilidades tácticas</b> durante el combate.
+      </p>
+    </div>
+    <form method="dialog"><button class="modal-close-icon" aria-label="Cerrar modal">✕</button></form>
+  </div>
+
+  <!-- Barra de Filtros interactiva -->
+  <div class="symbols-filter-bar">
+    <button type="button" class="sym-filter-btn active" data-sym-filter="all">Todos</button>
+    <button type="button" class="sym-filter-btn" data-sym-filter="beast" style="--c:#f5b53d">
+      <img src="Icons/beast-crest.png" alt="" class="crest crest--sm"> Bestia
+    </button>
+    <button type="button" class="sym-filter-btn" data-sym-filter="aquatic" style="--c:#4bb8f0">
+      <img src="Icons/aquatic-crest.png" alt="" class="crest crest--sm"> Pez
+    </button>
+    <button type="button" class="sym-filter-btn" data-sym-filter="bird" style="--c:#ff7bac">
+      <img src="Icons/bird-crest.png" alt="" class="crest crest--sm"> Pájaro
+    </button>
+    <button type="button" class="sym-filter-btn" data-sym-filter="plant" style="--c:#54cf8b">
+      <img src="Icons/plant-crest.png" alt="" class="crest crest--sm"> Planta
+    </button>
+    <button type="button" class="sym-filter-btn" data-sym-filter="bug" style="--c:#ff6a5c">
+      <img src="Icons/bug-crest.png" alt="" class="crest crest--sm"> Bicho
+    </button>
+    <button type="button" class="sym-filter-btn" data-sym-filter="reptile" style="--c:#a97cff">
+      <img src="Icons/reptile-crest.png" alt="" class="crest crest--sm"> Reptil
+    </button>
+    <button type="button" class="sym-filter-btn" data-sym-filter="special" style="--c:#ffd15c">
+      ✨ Especiales
+    </button>
+  </div>
+
+  <!-- Contenedor de cartas de símbolos -->
+  <div class="symbols-grid">
+    <!-- FUERZA -->
+    <article class="symbol-card" data-sym-class="beast" style="--sym-color: #f5b53d; --sym-glow: rgba(245, 181, 61, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-strength.png" alt="Fuerza" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/beast-crest.png" alt="Bestia" class="crest crest--sm"> Bestia
+          </div>
+          <h3 class="symbol-name">Fuerza</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">+1 de daño permanente en todos tus ataques</div>
+      <p class="symbol-desc">
+        Aumenta tu estadística de <b>Fuerza</b> de forma permanente. Cada carta de Fuerza jugada añade <b>+1 de daño</b> a este ataque y a todos los que hagas en el resto de la partida.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Activación:</b> Al conectar tu ataque con éxito (daño &gt; 0).</li>
+        <li><b>Permanente:</b> Se conserva para toda la partida (no se pierde si te cortás después).</li>
+        <li><b>Acumulable:</b> Cada carta de Fuerza suma otro +1 permanente.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip sym-chip--perm">Permanente</span>
+        <span class="sym-chip sym-chip--stack">Acumulable</span>
+      </div>
+    </article>
+
+    <!-- GARRA BRUTAL -->
+    <article class="symbol-card" data-sym-class="beast" style="--sym-color: #f5b53d; --sym-glow: rgba(245, 181, 61, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-brutal.png" alt="Garra Brutal" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/beast-crest.png" alt="Bestia" class="crest crest--sm"> Bestia
+          </div>
+          <h3 class="symbol-name">Garra Brutal</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">+2 de daño por cada símbolo de tu cadena más larga</div>
+      <p class="symbol-desc">
+        Potencia tu golpe según el tamaño de tu mejor racha. Al atacar, suma <b>+2 de daño adicional</b> por cada símbolo que tenga tu cadena más larga.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Activación:</b> Se activa siempre que conectes el ataque (daño &gt; 0).</li>
+        <li><b>Cadena más larga:</b> Cuenta los símbolos de tu racha más extendida (de cualquier clase).</li>
+        <li><b>Acumulable:</b> Con más de una carta de Garra Brutal, el bonus se multiplica.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Rematador</span>
+        <span class="sym-chip sym-chip--stack">Acumulable</span>
+      </div>
+    </article>
+
+    <!-- PULPO -->
+    <article class="symbol-card" data-sym-class="aquatic" style="--sym-color: #4bb8f0; --sym-glow: rgba(75, 184, 240, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-octopus.png" alt="Pulpo" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/aquatic-crest.png" alt="Pez" class="crest crest--sm"> Pez
+          </div>
+          <h3 class="symbol-name">Pulpo</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">+1 carta extra del mercado para tu mazo</div>
+      <p class="symbol-desc">
+        Te permite llevarte una <b>carta adicional de regalo</b> del mercado central para sumar a tu mazo.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Activación:</b> Al plantarte (incluso si tu ataque hizo 0 de daño).</li>
+        <li><b>Elección libre:</b> Podés elegir cualquier carta disponible, con o sin poder.</li>
+        <li><b>Acumulable:</b> Cada pulpo en tu cadena te otorga un pick adicional.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Draft extra</span>
+        <span class="sym-chip sym-chip--stack">Acumulable</span>
+      </div>
+    </article>
+
+    <!-- BURBUJA DE RETORNO -->
+    <article class="symbol-card" data-sym-class="aquatic" style="--sym-color: #4bb8f0; --sym-glow: rgba(75, 184, 240, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-bubble.png" alt="Burbuja de Retorno" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/aquatic-crest.png" alt="Pez" class="crest crest--sm"> Pez
+          </div>
+          <h3 class="symbol-name">Burbuja de Retorno</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">La carta que elijas del mercado abrirá tu próxima ronda</div>
+      <p class="symbol-desc">
+        La carta que tomes del centro no va al mazo barajado: queda <b>atrapada en una burbuja</b> y saldrá asegurada como tu <b>primera carta</b> de la próxima ronda.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Apertura asegurada:</b> Arrancás la próxima ronda con los símbolos que elijas.</li>
+        <li><b>Carta Gigante:</b> Con varias burbujas, fusiona cartas de tu mazo en una supercarta.</li>
+        <li><b>Si te cortás:</b> La burbuja no se activa.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Control de mazo</span>
+        <span class="sym-chip">Carta Gigante</span>
+      </div>
+    </article>
+
+    <!-- HUEVO -->
+    <article class="symbol-card" data-sym-class="bird" style="--sym-color: #ff7bac; --sym-glow: rgba(255, 123, 172, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-egg.png" alt="Huevo" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/bird-crest.png" alt="Pájaro" class="crest crest--sm"> Pájaro
+          </div>
+          <h3 class="symbol-name">Huevo</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">Escudo de medio golpe; al romperse devuelve 8 de daño</div>
+      <p class="symbol-desc">
+        Genera un <b>escudo protector</b> equivalente a la mitad del golpe infligido. Dura hasta que se rompa absorbiendo daño rival y, al romperse, contraataca.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Protección no acumulable:</b> Absorbe daño entrante; si ganás otro huevo, reemplaza al actual.</li>
+        <li><b>Contraataque acumulable:</b> Cada huevo obtenido acumula +8 de daño fijo para cuando se rompa el escudo.</li>
+        <li><b>Activación:</b> Requiere conectar daño al atacar (daño &gt; 0).</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Escudo</span>
+        <span class="sym-chip">Contraataque</span>
+      </div>
+    </article>
+
+    <!-- PLUMA SAGRADA -->
+    <article class="symbol-card" data-sym-class="bird" style="--sym-color: #ff7bac; --sym-glow: rgba(255, 123, 172, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-feather.png" alt="Pluma Sagrada" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/bird-crest.png" alt="Pájaro" class="crest crest--sm"> Pájaro
+          </div>
+          <h3 class="symbol-name">Pluma Sagrada</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">5 de daño directo al salir (¡incluso si te cortás!)</div>
+      <p class="symbol-desc">
+        Inflige <b>5 de daño directo instantáneo</b> al oponente en el mismo momento en que la carta es robada, sin necesidad de esperar a plantarte.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Inmune al corte:</b> Es el único poder que funciona aunque la cadena se corte luego.</li>
+        <li><b>Daño puro:</b> Ignora escudos de huevo y efectos defensivos.</li>
+        <li><b>Instantáneo:</b> Puede derrotar al rival en medio de tu turno.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip sym-chip--perm">Instantáneo</span>
+        <span class="sym-chip sym-chip--safe">No se pierde</span>
+      </div>
+    </article>
+
+    <!-- MACETA -->
+    <article class="symbol-card" data-sym-class="plant" style="--sym-color: #54cf8b; --sym-glow: rgba(84, 207, 139, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-pot.png" alt="Maceta" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/plant-crest.png" alt="Planta" class="crest crest--sm"> Planta
+          </div>
+          <h3 class="symbol-name">Maceta</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">Te curás todo el daño que pegaste</div>
+      <p class="symbol-desc">
+        Al soltar el golpe, tu Axie <b>recupera en vida el 100% del daño infligido</b> en ese turno (hasta el tope de 100 HP).
+      </p>
+      <ul class="symbol-points">
+        <li><b>Curación directa:</b> Si pegás 25 de daño, te curás 25 de vida al instante.</li>
+        <li><b>Requisito:</b> Requiere conectar el ataque (daño &gt; 0).</li>
+        <li><b>Si te cortás:</b> Al hacer 0 de daño, no hay curación.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Curación</span>
+        <span class="sym-chip">Supervivencia</span>
+      </div>
+    </article>
+
+    <!-- HOJA (LEAF) -->
+    <article class="symbol-card" data-sym-class="plant" style="--sym-color: #54cf8b; --sym-glow: rgba(84, 207, 139, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-leaf.png" alt="Hoja" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/plant-crest.png" alt="Planta" class="crest crest--sm"> Planta
+          </div>
+          <h3 class="symbol-name">Hoja (Leaf)</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">+2 hojas (hasta 5). Cada hoja te cura 4 de vida al final del turno</div>
+      <p class="symbol-desc">
+        Al atacar con éxito ganás <b>2 hojas</b> (acumulables hasta 5). Al final de cada uno de tus turnos, <b>cada hoja te cura 4 de vida y luego se consume una hoja</b>.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Acumulable:</b> Podés acumular hasta un máximo de 5 hojas.</li>
+        <li><b>Regeneración segura:</b> Curan al final del turno incluso si ese turno luego se corta.</li>
+        <li><b>Activación:</b> Requiere conectar daño (daño &gt; 0) para ganar hojas nuevas.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Regeneración</span>
+        <span class="sym-chip">Máx. 5 hojas</span>
+        <span class="sym-chip sym-chip--stack">Acumulable</span>
+      </div>
+    </article>
+
+    <!-- CARACOL -->
+    <article class="symbol-card" data-sym-class="bug" style="--sym-color: #ff6a5c; --sym-glow: rgba(255, 106, 92, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-snail.png" alt="Caracol" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/bug-crest.png" alt="Bicho" class="crest crest--sm"> Bicho
+          </div>
+          <h3 class="symbol-name">Caracol</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">El próximo ataque del rival hace la mitad de daño</div>
+      <p class="symbol-desc">
+        Aplica <b>debilidad</b> al rival: su próximo ataque con daño se divide por 2 (redondeando hacia arriba).
+      </p>
+      <ul class="symbol-points">
+        <li><b>Acumulable por ataques:</b> Dos caracoles debilitan los dos próximos ataques con daño del rival.</li>
+        <li><b>Consumo inteligente:</b> Solo se gasta una carga cuando el rival conecta un ataque con daño.</li>
+        <li><b>Activación:</b> Requiere conectar daño al plantarte (daño &gt; 0).</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Debilidad</span>
+        <span class="sym-chip sym-chip--stack">Acumulable</span>
+      </div>
+    </article>
+
+    <!-- GREEDY LEECH -->
+    <article class="symbol-card" data-sym-class="bug" style="--sym-color: #ff6a5c; --sym-glow: rgba(255, 106, 92, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-leech.png" alt="Greedy Leech" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/bug-crest.png" alt="Bicho" class="crest crest--sm"> Bicho
+          </div>
+          <h3 class="symbol-name">Greedy Leech</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">Robás 6 de vida al rival (se duplica a 12 con 4 columnas en mesa)</div>
+      <p class="symbol-desc">
+        Al conectar tu ataque, <b>le roba 6 de vida al rival y te los cura a vos</b>. Si tenés <b>4 o más columnas en mesa</b>, ¡el drenaje se duplica a <b>12 de vida</b>!
+      </p>
+      <ul class="symbol-points">
+        <li><b>Drenaje doble:</b> Le resta vida al oponente y cura a tu Axie en la misma cantidad.</li>
+        <li><b>Bonus de 4 columnas:</b> Se duplica a 12 con 4 o más cartas en mesa (los Free Games apilados no cuentan como columna nueva).</li>
+        <li><b>Activación:</b> Requiere conectar daño al plantarte (daño &gt; 0).</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Drenaje de vida</span>
+        <span class="sym-chip sym-chip--cond">Bonus 4 columnas</span>
+      </div>
+    </article>
+
+    <!-- VENENO -->
+    <article class="symbol-card" data-sym-class="reptile" style="--sym-color: #a97cff; --sym-glow: rgba(169, 124, 255, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-poison.png" alt="Veneno" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/reptile-crest.png" alt="Reptil" class="crest crest--sm"> Reptil
+          </div>
+          <h3 class="symbol-name">Veneno</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">Envenena por la mitad de tu golpe; daña cada turno y se reduce a la mitad</div>
+      <p class="symbol-desc">
+        Infecta al oponente con veneno igual a la <b>mitad de tu daño</b>. Al final del turno del rival, el veneno le resta vida y luego se parte a la mitad.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Daño al final de su turno:</b> Muerde restando vida, se divide a la mitad y se disipa si queda en 2 o menos.</li>
+        <li><b>Acumulable:</b> Nuevos venenos se suman al veneno que ya tenga encima el rival.</li>
+        <li><b>Activación:</b> Requiere conectar daño al plantarte (daño &gt; 0).</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Daño continuo</span>
+        <span class="sym-chip sym-chip--stack">Acumulable</span>
+      </div>
+    </article>
+
+    <!-- PIEL DE ESCAMAS -->
+    <article class="symbol-card" data-sym-class="reptile" style="--sym-color: #a97cff; --sym-glow: rgba(169, 124, 255, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-steelskin.png" alt="Piel de Escamas" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge">
+            <img src="Icons/reptile-crest.png" alt="Reptil" class="crest crest--sm"> Reptil
+          </div>
+          <h3 class="symbol-name">Piel de Escamas</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">Tope defensivo: el próximo ataque rival no superará los 12 de daño</div>
+      <p class="symbol-desc">
+        Cubre a tu Axie con un blindaje que absorbe cualquier exceso de daño, limitando el próximo ataque rival que conecte a un <b>máximo estricto de 12 de daño</b>.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Blindaje anti-remates:</b> Aunque el rival conecte un golpe de 40 puntos, solo recibirás 12.</li>
+        <li><b>Acumulable:</b> Cada piel extra reduce el tope en -2 puntos (hasta un piso mínimo de 6).</li>
+        <li><b>Consumo:</b> Se gasta únicamente cuando el rival conecta un ataque con daño.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip">Tope de daño</span>
+        <span class="sym-chip sym-chip--stack">Acumulable (piso 6)</span>
+      </div>
+    </article>
+
+    <!-- FREE GAME -->
+    <article class="symbol-card symbol-card--special" data-sym-class="special" style="--sym-color: #ffd15c; --sym-glow: rgba(255, 209, 92, 0.25);">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">
+          <img src="Icons/power-freegame.png" alt="Free Game" class="power">
+        </div>
+        <div class="symbol-title-box">
+          <div class="symbol-class-badge" style="background: rgba(255, 209, 92, 0.15); color: #ffd15c; border-color: rgba(255, 209, 92, 0.3);">
+            ✨ Especial Neutral
+          </div>
+          <h3 class="symbol-name">Free Game (Apilable)</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">Al entrar en mesa, alarga una carta existente</div>
+      <p class="symbol-desc">
+        Carta comodín neutral con 2 símbolos. Si al salir de tu mazo no coincide con tus cadenas vivas, <b>te cortás como con cualquier carta</b>. Al entrar en mesa con éxito, tu próximo robo alarga una carta existente sumando sus símbolos.
+      </p>
+      <ul class="symbol-points">
+        <li><b>Al salir del mazo:</b> Debe compartir al menos un símbolo vivo para no cortarte.</li>
+        <li><b>Efecto comodín:</b> Tu siguiente robo se monta sobre una columna que elijas de la mesa.</li>
+        <li><b>Salva cadenas:</b> Suma sus símbolos a esa carta para continuar o abrir rachas.</li>
+      </ul>
+      <div class="symbol-chips">
+        <span class="sym-chip sym-chip--safe">Comodín neutral</span>
+        <span class="sym-chip">Alarga carta</span>
+      </div>
+    </article>
+  </div>
+
+  <!-- Resumen de Estados de Combate y Símbolos Base -->
+  <div class="symbols-footer-section">
+    <h3>Indicadores de Estado en el Axie</h3>
+    <p class="modal-subtext">Aparecen en la chapa de vida de cada Axie cuando los efectos están activos:</p>
+    <div class="symbols-status-row">
+      <div class="status-badge-item">
+        <img src="Icons/status-strength.png" alt="Fuerza" class="pip-img">
+        <div><b>Fuerza:</b> Daño fijo extra permanente</div>
+      </div>
+      <div class="status-badge-item">
+        <img src="Icons/status-egg.png" alt="Escudo" class="pip-img">
+        <div><b>Huevo:</b> Puntos de escudo activos</div>
+      </div>
+      <div class="status-badge-item">
+        <img src="Icons/status-weak.png" alt="Debilidad" class="pip-img">
+        <div><b>Caracol:</b> Ataques rivales que pegarán la mitad</div>
+      </div>
+      <div class="status-badge-item">
+        <img src="Icons/status-poison.png" alt="Veneno" class="pip-img">
+        <div><b>Veneno:</b> Daño que morderá al final de su turno</div>
+      </div>
+      <div class="status-badge-item">
+        <img src="Icons/status-leaf.png" alt="Regeneración" class="pip-img">
+        <div><b>Hoja:</b> Hojas activas (curan 4 al fin del turno)</div>
+      </div>
+      <div class="status-badge-item">
+        <img src="Icons/power-steelskin.png" alt="Blindaje" class="pip-img">
+        <div><b>Piel:</b> Tope de daño máximo activo</div>
+      </div>
+    </div>
+  </div>
+
+  <form method="dialog" class="symbols-modal-footer">
+    <button class="btn btn-primary">Entendido</button>
+  </form>
 </dialog>
 
 <script type="module" src="src/main.js"></script>
