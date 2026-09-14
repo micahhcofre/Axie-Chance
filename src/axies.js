@@ -14,7 +14,7 @@
 // enojados y contentos, pero en varias el dibujo cerrado es casi el mismo que el
 // abierto —`aquatic-02` cambia el 4% de los píxeles y `bug-08` el 2%—, así que el
 // Axie parpadea y no se le nota. Los seis de acá están elegidos por eso.
-import { SYMBOLS, buildPersonalDeck, buildAxieDeck, toAxieNFTState, crest } from './data.js';
+import { SYMBOLS, buildPersonalDeck, toAxieNFTState, crest } from './data.js';
 import { AVATAR_BASE, AVATARS } from './axie-avatars.js';
 import { VARIANTS } from './axie-poses.js';
 
@@ -87,13 +87,6 @@ export const AXIE_IDS = Object.keys(AXIES);
 /** El Axie de un id, o el primero del roster si el id no existe. */
 export function axie(id) {
   return AXIES[id] ?? AXIES[AXIE_IDS[0]];
-}
-
-/**
- * Obtiene el estado AxieNFTState formal correspondiente a un Axie del roster.
- */
-export function getAxieNFTState(id) {
-  return toAxieNFTState(axie(id));
 }
 
 /**

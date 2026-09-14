@@ -1683,81 +1683,73 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     }
   }
 
+  /**
+   * La caída de una carta de Free Game sobre su columna: un haz de luz, la carta que se
+   * estira al caer y se aplasta al llegar, y la salpicadura. `clone` ya viene armado y
+   * parado en `top`; se cuelga del `body` recién después del haz, para quedar encima.
+   * `first` es su primer cuadro y `lead` cuánto baja en el primer quinto del recorrido.
+   */
+  async function fallOnto(targetEl, clone, tRect, top, dx, first, lead) {
+    const beam = document.createElement('div');
+    beam.className = 'tetris-drop-beam';
+    beam.style.left = `${tRect.left - 6}px`;
+    beam.style.top = `${top}px`;
+    beam.style.width = `${tRect.width + 12}px`;
+    beam.style.height = `${Math.max(10, tRect.bottom - top)}px`;
+    document.body.appendChild(beam);
+    try {
+      document.body.appendChild(clone);
+      // Sonido de deslizamiento fluido de la gota
+      audio?.sfx?.('renew', { rate: 1.6, gain: 0.55, cut: 0.35 });
+      const dy = tRect.top - top;
+      if (typeof clone.animate === 'function') {
+        // Deformación líquida ("Squash & Stretch" con caída aerodinámica)
+        const anim = clone.animate([
+          first,
+          { transform: `translate(${dx * 0.2}px, ${dy * lead}px) scale(0.92, 1.12)`, opacity: 1, offset: 0.2 },
+          { transform: `translate(${dx * 0.7}px, ${dy * 0.65}px) scale(0.86, 1.20)`, opacity: 1, offset: 0.65 },
+          { transform: `translate(${dx}px, ${dy}px) scale(1.26, 0.74)`, opacity: 1 },
+        ], { duration: 340, easing: 'cubic-bezier(0.25, 0.1, 0.4, 1)', fill: 'forwards' });
+        await anim.finished.catch(() => {});
+      } else {
+        await new Promise((r) => setTimeout(r, 260));
+      }
+    } finally {
+      beam.remove();
+      clone.remove();
+    }
+    // Fusión de sonido al impactar: burbuja + impacto táctil + plop líquido
+    audio?.sfx?.('freegame');
+    spawnLiquidImpactVfx(tRect);
+    targetEl.classList?.add?.('card--stack-impact');
+    setTimeout(() => targetEl.classList?.remove?.('card--stack-impact'), 560);
+  }
+
+  /** El jugador eligió columna: la carta del dock cae sobre ella y recién ahí se monta. */
   async function dropTetrisCard(colIndex, targetEl) {
     if (isDroppingStack) return;
-    const floating = typeof document !== 'undefined' ? document.getElementById('tetris-floating-card') : null;
+    const floating = document.getElementById('tetris-floating-card');
     if (!floating || !targetEl?.getBoundingClientRect) {
       game.chooseStackTarget(colIndex);
       return;
     }
     isDroppingStack = true;
-    let clone = null;
-    let beam = null;
     try {
       const fRect = floating.getBoundingClientRect();
       const tRect = targetEl.getBoundingClientRect();
-
       floating.style.opacity = '0';
-
-      if (typeof document !== 'undefined') {
-        beam = document.createElement('div');
-        beam.className = 'tetris-drop-beam';
-        beam.style.left = `${tRect.left - 6}px`;
-        beam.style.top = `${fRect.top}px`;
-        beam.style.width = `${tRect.width + 12}px`;
-        beam.style.height = `${Math.max(10, tRect.bottom - fRect.top)}px`;
-        document.body.appendChild(beam);
-
-        clone = floating.cloneNode(true);
-        clone.id = '';
-        clone.className = 'card card--tetris-falling';
-        clone.style.left = `${fRect.left}px`;
-        clone.style.top = `${fRect.top}px`;
-        clone.style.width = `${fRect.width}px`;
-        clone.style.height = `${fRect.height}px`;
-        clone.style.margin = '0';
-        clone.style.transform = 'none';
-        clone.style.transition = 'none';
-        clone.style.opacity = '1';
-        document.body.appendChild(clone);
-      }
-
-      // Sonido de deslizamiento fluido de la gota
-      audio?.sfx?.('renew', { rate: 1.6, gain: 0.55, cut: 0.35 });
-
-      const deltaX = (tRect.left + (tRect.width - fRect.width) / 2) - fRect.left;
-      const deltaY = tRect.top - fRect.top;
-
-      if (clone && typeof clone.animate === 'function') {
-        // Deformación líquida ("Squash & Stretch" con caída aerodinámica)
-        const anim = clone.animate([
-          { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 },
-          { transform: `translate(${deltaX * 0.2}px, ${deltaY * 0.16}px) scale(0.92, 1.12)`, opacity: 1, offset: 0.2 },
-          { transform: `translate(${deltaX * 0.7}px, ${deltaY * 0.65}px) scale(0.86, 1.20)`, opacity: 1, offset: 0.65 },
-          { transform: `translate(${deltaX}px, ${deltaY}px) scale(1.26, 0.74)`, opacity: 1 }
-        ], {
-          duration: 340,
-          easing: 'cubic-bezier(0.25, 0.1, 0.4, 1)',
-          fill: 'forwards'
-        });
-        await anim.finished.catch(() => {});
-      } else {
-        await new Promise((r) => setTimeout(r, 260));
-      }
-
-      beam?.remove?.();
-      clone?.remove?.();
-
-      // Fusión de sonido al impactar: burbuja + impacto táctil + plop líquido
-      audio?.sfx?.('freegame');
-      spawnLiquidImpactVfx(tRect);
-
-      targetEl.classList?.add?.('card--stack-impact');
-      setTimeout(() => targetEl.classList?.remove?.('card--stack-impact'), 560);
+      const clone = floating.cloneNode(true);
+      clone.id = '';
+      clone.className = 'card card--tetris-falling';
+      Object.assign(clone.style, {
+        left: `${fRect.left}px`, top: `${fRect.top}px`, width: `${fRect.width}px`, height: `${fRect.height}px`,
+        margin: '0', transform: 'none', transition: 'none', opacity: '1',
+      });
+      const dx = (tRect.left + (tRect.width - fRect.width) / 2) - fRect.left;
+      await fallOnto(targetEl, clone, tRect, fRect.top, dx,
+        { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 }, 0.16);
       await new Promise((r) => setTimeout(r, 50));
     } finally {
-      beam?.remove?.();
-      clone?.remove?.();
       try {
         game.chooseStackTarget(colIndex);
       } finally {
@@ -1766,70 +1758,24 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     }
   }
 
-  async function playAutoStackAnimation(stackInfo) {
-    if (typeof document === 'undefined') return;
-    const targetEl = field.querySelector?.(`[data-col="${stackInfo.colIndex}"]`);
+  /** La CPU (o el robo automático) montó una carta: se la ve caer desde arriba. */
+  async function playAutoStackAnimation({ colIndex, card }) {
+    const targetEl = field.querySelector?.(`[data-col="${colIndex}"]`);
     if (!targetEl?.getBoundingClientRect) return;
     const tRect = targetEl.getBoundingClientRect();
     if (!tRect || tRect.width === 0) return;
-
-    let clone = null;
-    let beam = null;
+    const top = Math.max(16, tRect.top - 140);
+    const clone = document.createElement('div');
+    clone.className = 'card card--tetris-falling';
+    clone.innerHTML = `<span class="card-no">✨</span>${card.symbols.map((s) => symChip(s, true)).join('')}${powerChip(card)}`;
+    Object.assign(clone.style, {
+      left: `${tRect.left}px`, top: `${top}px`, width: `${tRect.width}px`, height: `${tRect.height}px`,
+      margin: '0', transform: 'none', transition: 'none',
+    });
     try {
-      const startY = Math.max(16, tRect.top - 140);
-      const startX = tRect.left;
-
-      beam = document.createElement('div');
-      beam.className = 'tetris-drop-beam';
-      beam.style.left = `${tRect.left - 6}px`;
-      beam.style.top = `${startY}px`;
-      beam.style.width = `${tRect.width + 12}px`;
-      beam.style.height = `${Math.max(10, tRect.bottom - startY)}px`;
-      document.body.appendChild(beam);
-
-      clone = document.createElement('div');
-      clone.className = 'card card--tetris-falling';
-      const syms = stackInfo.card.symbols.map((s) => symChip(s, true)).join('');
-      clone.innerHTML = `<span class="card-no">✨</span>${syms}${powerChip(stackInfo.card)}`;
-      clone.style.left = `${startX}px`;
-      clone.style.top = `${startY}px`;
-      clone.style.width = `${tRect.width}px`;
-      clone.style.height = `${tRect.height}px`;
-      clone.style.margin = '0';
-      clone.style.transform = 'none';
-      clone.style.transition = 'none';
-      document.body.appendChild(clone);
-
-      audio?.sfx?.('renew', { rate: 1.6, gain: 0.55, cut: 0.35 });
-
-      const deltaY = tRect.top - startY;
-      if (typeof clone.animate === 'function') {
-        const anim = clone.animate([
-          { transform: 'translate(0, 0) scale(0.96, 1)', opacity: 0.95 },
-          { transform: `translate(0, ${deltaY * 0.2}px) scale(0.92, 1.12)`, opacity: 1, offset: 0.2 },
-          { transform: `translate(0, ${deltaY * 0.65}px) scale(0.86, 1.20)`, opacity: 1, offset: 0.65 },
-          { transform: `translate(0, ${deltaY}px) scale(1.26, 0.74)`, opacity: 1 }
-        ], {
-          duration: 340,
-          easing: 'cubic-bezier(0.25, 0.1, 0.4, 1)',
-          fill: 'forwards'
-        });
-        await anim.finished.catch(() => {});
-      } else {
-        await new Promise((r) => setTimeout(r, 260));
-      }
-
-      beam?.remove?.();
-      clone?.remove?.();
-
-      audio?.sfx?.('freegame');
-      spawnLiquidImpactVfx(tRect);
-
-      targetEl.classList.add('card--stack-impact');
-      setTimeout(() => targetEl.classList.remove('card--stack-impact'), 560);
+      await fallOnto(targetEl, clone, tRect, top, 0, { transform: 'translate(0, 0) scale(0.96, 1)', opacity: 0.95 }, 0.2);
     } catch {
-      beam?.remove?.();
-      clone?.remove?.();
+      // Es decorado: si algo falla, la carta ya está montada igual.
     }
   }
 
