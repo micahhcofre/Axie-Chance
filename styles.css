@@ -2114,8 +2114,6 @@ body {
 
 /* En el selector no respira nadie —son seis pilas de PNG y no está pasando nada—,
    pero el que estás por elegir se asoma. */
-.crest-btn:hover .axie { transform: translateY(-3px) scale(1.04); }
-.crest-btn .axie { transition: transform .18s ease; }
 
 /* El número cae encima del dibujo del Axie, que abajo puede ser cualquier cosa:
    un fondo claro, una plantita amarilla, el brillo de un efecto. Así que el número va
@@ -2316,11 +2314,6 @@ body {
 }
 
 .overlay-head { text-align: center; }
-/* El poder que abrió el panel, en grande: dice de un vistazo por qué estás eligiendo. */
-.overlay-mark {
-  width: 36px; height: 36px; display: block; margin: 0 auto 4px;
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .7));
-}
 .overlay-title {
   display: block;
   font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--accent-2);
@@ -2930,7 +2923,6 @@ body {
   .topbar { gap: 8px; padding: 8px 10px 10px; }
   .topbar .btn-ghost { padding: 6px 9px; font-size: 12px; }
   .btn-sound { padding: 6px 8px; font-size: 14px; }
-  .crest-btn { width: 44px; }
 
   /* Sin las cartas, el frente de un teléfono mide menos: menos letra, menos botón. */
   :root { --resto: 240px; }

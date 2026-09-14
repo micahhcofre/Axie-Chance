@@ -318,36 +318,24 @@ export function createAudio() {
       if (!ctx || !prefs.sfx || typeof ctx.createOscillator !== 'function') return;
       try {
         const at = ctx.currentTime + delay / 1000;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(380, at);
-        osc.frequency.exponentialRampToValueAtTime(780, at + 0.09);
-
-        gain.gain.setValueAtTime(0.001, at);
-        gain.gain.linearRampToValueAtTime(0.42, at + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
-
-        osc.connect(gain);
-        gain.connect(sfxBus);
-
-        osc.start(at);
-        osc.stop(at + 0.18);
-
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        osc2.type = 'triangle';
-        osc2.frequency.setValueAtTime(1180, at + 0.02);
-        osc2.frequency.exponentialRampToValueAtTime(1420, at + 0.1);
-        gain2.gain.setValueAtTime(0.001, at);
-        gain2.gain.linearRampToValueAtTime(0.18, at + 0.025);
-        gain2.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
-
-        osc2.connect(gain2);
-        gain2.connect(sfxBus);
-
-        osc2.start(at + 0.01);
-        osc2.stop(at + 0.16);
+        // Una voz: el tono sube de `f0` a `f1`, el volumen pega en `peak` y se apaga.
+        const voice = (type, [f0, t0, f1, t1], [peak, rise, fall], [start, stop]) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(f0, at + t0);
+          osc.frequency.exponentialRampToValueAtTime(f1, at + t1);
+          gain.gain.setValueAtTime(0.001, at);
+          gain.gain.linearRampToValueAtTime(peak, at + rise);
+          gain.gain.exponentialRampToValueAtTime(0.0001, at + fall);
+          osc.connect(gain);
+          gain.connect(sfxBus);
+          osc.start(at + start);
+          osc.stop(at + stop);
+        };
+        // El cuerpo de la gota, y un armónico brillante encima.
+        voice('sine', [380, 0, 780, 0.09], [0.42, 0.015, 0.16], [0, 0.18]);
+        voice('triangle', [1180, 0.02, 1420, 0.1], [0.18, 0.025, 0.14], [0.01, 0.16]);
       } catch {
         // En navegadores sin osciladores o mocks, ignora en silencio
       }

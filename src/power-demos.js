@@ -2,6 +2,7 @@
 // del Modo Aventura (cubriendo los 7 símbolos de los niveles 1 a 3 y extensible a los demás).
 
 import { SYMBOLS, POWERS, crest, powerIcon } from './data.js';
+import { store } from './loadout.js';
 
 export const DEMO_PREF_KEY = 'axie-chance:demo-pref:lvl-';
 export const DEMO_SEEN_KEY = 'axie-chance:demo-seen:lvl-';
@@ -11,11 +12,7 @@ export const DEMO_SEEN_KEY = 'axie-chance:demo-seen:lvl-';
  */
 export const POWER_DEMOS = {
   strength: {
-    id: 'strength',
-    powerId: 'strength',
-    symbol: 'beast',
     name: 'Fuerza',
-    className: 'Bestia',
     badge: '🦁 Ofensivo Permanente',
     tagline: '+1 de daño permanente en este ataque y en todos los futuros',
     description: 'Cada carta de Fuerza jugada en un ataque que conecte (daño > 0) suma +1 a ese golpe y agrega una carga permanente de Fuerza para el resto de la partida. ¡Se acumula con cada carta de Fuerza jugada!',
@@ -61,11 +58,7 @@ export const POWER_DEMOS = {
   },
 
   pot: {
-    id: 'pot',
-    powerId: 'pot',
-    symbol: 'plant',
     name: 'Maceta',
-    className: 'Planta',
     badge: '🌿 Curación Instantánea',
     tagline: 'Te curás el 100% del daño que conectás este turno',
     description: 'Cuando jugás una carta de Maceta y te plantás con éxito (daño > 0), tu Axie recupera tanta vida como daño le infligiste al rival (hasta el tope de 100 HP).',
@@ -110,11 +103,7 @@ export const POWER_DEMOS = {
   },
 
   freegame: {
-    id: 'freegame',
-    powerId: 'freegame',
-    symbol: null,
     name: 'Free Game',
-    className: 'Neutral',
     badge: '🃏 Comodín Apilable',
     tagline: 'Al entrar en mesa, alarga una carta existente',
     description: 'Free Game es una carta comodín con 2 símbolos: al salir de tu mazo debe coincidir con tus cadenas vivas o te cortás como siempre. Al entrar en mesa con éxito, tu próximo robo alarga una carta que elijas sumando sus símbolos.',
@@ -153,11 +142,7 @@ export const POWER_DEMOS = {
   },
 
   egg: {
-    id: 'egg',
-    powerId: 'egg',
-    symbol: 'bird',
     name: 'Huevo',
-    className: 'Pájaro',
     badge: '🐦 Escudo y Contraataque',
     tagline: 'Escudo por medio golpe y 8 de contraataque al romperse',
     description: 'Al atacar con Huevo (daño > 0), ganás un escudo equivalente a la mitad del golpe infligido. Este escudo aguanta daño rival y, al romperse completamente por un ataque enemigo, ¡castiga al rival con 8 de daño fijo acumulable!',
@@ -194,11 +179,7 @@ export const POWER_DEMOS = {
   },
 
   snail: {
-    id: 'snail',
-    powerId: 'snail',
-    symbol: 'bug',
     name: 'Caracol',
-    className: 'Bicho',
     badge: '🐛 Debilidad Defensiva',
     tagline: 'El próximo ataque del rival inflige la mitad del daño',
     description: 'Al atacar con éxito con un Caracol (daño > 0), aplicás 1 carga de debilidad al rival. El próximo ataque que el rival ejecute verá su daño reducido a la mitad (redondeado hacia arriba). Si jugás varios caracoles, debilita múltiples ataques.',
@@ -233,11 +214,7 @@ export const POWER_DEMOS = {
   },
 
   octopus: {
-    id: 'octopus',
-    powerId: 'octopus',
-    symbol: 'aquatic',
     name: 'Pulpo',
-    className: 'Pez',
     badge: '🐟 Ventaja de Mercado',
     tagline: '+1 elección adicional del Centro de draft al plantarte',
     description: 'Si lográs plantarte sin cortarte la cadena, cada carta de Pulpo en tu mesa te otorga 1 carta extra del centro del mercado directamente a tu mazo, sin importar si conectaste daño o no.',
@@ -271,11 +248,7 @@ export const POWER_DEMOS = {
   },
 
   poison: {
-    id: 'poison',
-    powerId: 'poison',
-    symbol: 'reptile',
     name: 'Veneno',
-    className: 'Reptil',
     badge: '🦎 Daño Residual Inevitable',
     tagline: 'Inocula veneno por la mitad del golpe; muerde y se reduce',
     description: 'Al atacar con Veneno (daño > 0), inoculás veneno al rival equivalente a la mitad del daño infligido. Al finalizar el turno del rival, el veneno muerde restando vida y luego se divide a la mitad hasta disiparse al llegar a 2 o menos.',
@@ -312,11 +285,7 @@ export const POWER_DEMOS = {
   },
 
   brutal: {
-    id: 'brutal',
-    powerId: 'brutal',
-    symbol: 'beast',
     name: 'Garra Brutal',
-    className: 'Bestia',
     badge: '🦁 Multiplicador Feroz',
     tagline: '+2 de daño por cada símbolo de tu cadena más larga',
     description: 'Al atacar, suma +2 de daño adicional por cada símbolo que tenga tu cadena más larga.',
@@ -338,11 +307,7 @@ export const POWER_DEMOS = {
   },
 
   leaf: {
-    id: 'leaf',
-    powerId: 'leaf',
-    symbol: 'plant',
     name: 'Hoja (Leaf)',
-    className: 'Planta',
     badge: '🌿 Regeneración Turno a Turno',
     tagline: '+2 hojas: cura 4 HP por hoja al final de tu turno',
     description: 'Al plantarte con daño, ganás +2 hojas (hasta 5). Al final de cada uno de tus turnos, cura 4 de vida por cada hoja activa y consume 1 hoja.',
@@ -368,11 +333,7 @@ export const POWER_DEMOS = {
   },
 
   feather: {
-    id: 'feather',
-    powerId: 'feather',
-    symbol: 'bird',
     name: 'Pluma Sagrada',
-    className: 'Pájaro',
     badge: '🐦 Daño Directo Instantáneo',
     tagline: '5 de daño inmediato al rival apenas robás la carta',
     description: 'Inflige 5 de daño directo al rival apenas se roba la carta, sin esperar a que termine el turno e incluso si la cadena se corta.',
@@ -391,11 +352,7 @@ export const POWER_DEMOS = {
   },
 
   leech: {
-    id: 'leech',
-    powerId: 'leech',
-    symbol: 'bug',
     name: 'Greedy Leech',
-    className: 'Bicho',
     badge: '🐛 Drenaje Vampírico',
     tagline: 'Robás 6 de vida al rival (se duplica a 12 con 4 columnas en mesa)',
     description: 'Al conectar tu ataque, le quitás 6 de vida al rival y te los curás vos. Si tenés 4 o más columnas en mesa, ¡el drenaje se duplica a 12 de vida!',
@@ -414,11 +371,7 @@ export const POWER_DEMOS = {
   },
 
   bubble: {
-    id: 'bubble',
-    powerId: 'bubble',
-    symbol: 'aquatic',
     name: 'Burbuja de Retorno',
-    className: 'Pez',
     badge: '🐟 Apertura Estratégica',
     tagline: 'Tu pick del mercado abre tu próxima ronda garantizada',
     description: 'La carta que elijas del centro queda atrapada en una burbuja y abrirá obligatoriamente tu próxima ronda. Con varias burbujas, fusiona cartas en una carta gigante multisímbolo.',
@@ -437,11 +390,7 @@ export const POWER_DEMOS = {
   },
 
   steelskin: {
-    id: 'steelskin',
-    powerId: 'steelskin',
-    symbol: 'reptile',
     name: 'Piel de Escamas',
-    className: 'Reptil',
     badge: '🦎 Blindaje Antigolpe',
     tagline: 'Limita el próximo ataque rival a un máximo de 12 de daño',
     description: 'Establece un blindaje que topa el próximo golpe del rival a 12 de daño máximo. Cada carga adicional reduce el tope en -2 (12 ➔ 10 ➔ 8 con piso de 6).',
@@ -460,6 +409,12 @@ export const POWER_DEMOS = {
   },
 };
 
+// La clave, la clase y su nombre salen del poder mismo (ver `POWERS` en `data.js`).
+for (const [id, demo] of Object.entries(POWER_DEMOS)) {
+  const { symbol } = POWERS[id];
+  Object.assign(demo, { id, powerId: id, symbol, className: symbol ? SYMBOLS[symbol].name : 'Neutral' });
+}
+
 /**
  * Mapeo de poderes a demostrar según el nivel de aventura.
  * Los primeros 3 niveles enseñan los 7 primeros símbolos/poderes:
@@ -477,53 +432,31 @@ export const LEVEL_DEMO_POWERS = {
   6: ['bubble', 'steelskin'],
 };
 
-function getStorage() {
+/** Lee una preferencia de la demo; sin almacenamiento, no hay nada guardado. */
+function readPref(key) {
+  try { return store()?.getItem(key) ?? null; } catch { return null; }
+}
+
+/** Escribe (o borra, con `null`) una preferencia de la demo. */
+function writePref(key, value) {
   try {
-    return globalThis.localStorage ?? null;
-  } catch {
-    return null;
-  }
+    if (value === null) store()?.removeItem(key);
+    else store()?.setItem(key, value);
+  } catch { /* que no se pueda guardar no rompe la demo */ }
 }
 
 /** Comprueba si el usuario ya vio la demo de este nivel */
-export function hasSeenPowerDemo(levelId) {
-  try {
-    return getStorage()?.getItem(`${DEMO_SEEN_KEY}${levelId}`) === 'true';
-  } catch {
-    return false;
-  }
-}
+export const hasSeenPowerDemo = (levelId) => readPref(`${DEMO_SEEN_KEY}${levelId}`) === 'true';
 
 /** Guarda que el usuario ya vio la demo de este nivel */
-export function setPowerDemoSeen(levelId, seen = true) {
-  try {
-    getStorage()?.setItem(`${DEMO_SEEN_KEY}${levelId}`, String(seen));
-  } catch {
-    // Silencioso
-  }
-}
+export const setPowerDemoSeen = (levelId, seen = true) => writePref(`${DEMO_SEEN_KEY}${levelId}`, String(seen));
 
 /** Comprueba si el usuario configuró "no volver a mostrar" */
-export function isDemoAutoShowDisabled(levelId) {
-  try {
-    return getStorage()?.getItem(`${DEMO_PREF_KEY}${levelId}`) === 'dismissed';
-  } catch {
-    return false;
-  }
-}
+export const isDemoAutoShowDisabled = (levelId) => readPref(`${DEMO_PREF_KEY}${levelId}`) === 'dismissed';
 
 /** Configura la preferencia de "no volver a mostrar" */
-export function setDemoAutoShowDisabled(levelId, disabled = true) {
-  try {
-    if (disabled) {
-      getStorage()?.setItem(`${DEMO_PREF_KEY}${levelId}`, 'dismissed');
-    } else {
-      getStorage()?.removeItem(`${DEMO_PREF_KEY}${levelId}`);
-    }
-  } catch {
-    // Silencioso
-  }
-}
+export const setDemoAutoShowDisabled = (levelId, disabled = true) =>
+  writePref(`${DEMO_PREF_KEY}${levelId}`, disabled ? 'dismissed' : null);
 
 /**
  * Determina si la demostración debe mostrarse automáticamente al arrancar el nivel.
