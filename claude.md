@@ -17,7 +17,7 @@ Encadenás símbolos mientras te animes: cuanto más larga la racha de símbolos
   - `src/axie-avatars.js` (catálogo de partes y composición de capas de avatares).
   - `src/axie-poses.js` (variantes de poses y animaciones precalculadas).
   - `src/audio-clips.js` (mediciones y buffers de clips de audio).
-  - `src/vfx-atlas.js` (metadatos de sprites de efectos visuales).
+  - `src/vfx-clips.js` (metadatos de sprites de efectos visuales).
 - **Tests**: Corren en Node.js puro usando un DOM shim ultraligero (`test/dom.mjs`), sin frameworks pesados ni dependencias externas (usa `node:assert/strict`).
 - **Convención de idiomas**: Código fuente (variables, funciones, clases, identificadores) en **inglés**; UI, comentarios explicativos, textos y documentación en **español**.
 - **Infraestructura AWS**: Código de infraestructura como código (IaC) en TypeScript con **AWS CDK v2** bajo la carpeta `infra/`.
@@ -28,12 +28,12 @@ Encadenás símbolos mientras te animes: cuanto más larga la racha de símbolos
 
 ```sh
 npm start              # Servidor dev con live reload + servidor de salas en red (http://localhost:8000)
-npm test               # Ejecuta las 13 suites de test unitarios e integración en Node
+npm test               # Ejecuta las 14 suites de test unitarios e integración en Node
 npm run build          # Empaqueta el juego en dist/axie-chance.html (archivo único con assets inlined)
 npm run balance        # Banco de balance: simula partidas sembradas y mide efectividad de poderes
 npm run axies          # Regenera src/axie-avatars.js desde el mixer de Axies (offline)
 npm run poses          # Regenera src/axie-poses.js (animaciones y poses horneadas)
-npm run vfx            # Procesa y regenera el atlas de efectos visuales (src/vfx-atlas.js)
+npm run vfx            # Procesa y regenera el atlas de efectos visuales (src/vfx-clips.js)
 npm run sfx            # Regenera src/audio-clips.js (mediciones y duraciones de SFX)
 npm run deploy         # Construye y despliega automáticamente a AWS S3 y CloudFront vía CDK
 npm run cdk:diff       # Inspecciona diferencias pendientes de infraestructura AWS en perfil dev
@@ -67,7 +67,7 @@ data.js ← rules.js ← ai.js
 | Archivo / Carpeta | Propósito y Responsabilidades |
 |---|---|
 | **`src/data.js`** | Taxonomía canónica, clases, partes anatómicas, saltos, tríadas canónicas, fórmula de supresión de counters, Axie Core (Part Evolution), 12 poderes de clase (`POWERS`), Free Game, `TUNING`, `buildPool()`, `baseDeck()`, `buildPersonalDeck()`, `makeRng(seed)`. |
-| **`src/rules.js`** | Funciones matemáticas puras: `scoreChain()`, `survivalOdds()`, `timesIn()`, `emptyChain()`, `playCard()`, `cardExtends()`, `isScoringCell()`, `stackOnCard()` (apilado de Free Game). Sin efectos secundarios. |
+| **`src/rules.js`** | Funciones matemáticas puras: `scoreChain()`, `survivalOdds()`, `timesIn()`, `emptyChain()`, `playCard()`, `isScoringCell()`, `stackOnCard()` (apilado de Free Game). Sin efectos secundarios. |
 | **`src/game.js`** | Máquina de estados: `createGame()`, turnos, robo (`hit`), plantarse (`stand`), draft del mercado (`takeCard`, `skipDraft`), renovación del mercado (`renewMarket`), apilado (`chooseStackTarget`), reloj de turno y draft, abandono (`forfeit`), cálculo de daño (`swingOf`), vida (`hpOf`), última chance (`lastChance`). |
 | **`src/ai.js`** | Toma de decisiones de la CPU: `decideDraw()` (expectimax con lookahead 1-3 según dificultad), conectividad de cartas (`connectivity()`), valoración de poderes (`POWER_WORTH`), selección de draft (`planDraft()`, `pickBest()`, `pickBonus()`). |
 | **`src/ui.js`** | Renderizado reactivo de la mesa en `#arena`: render de cartas, rachas, HUD, barras de vida, escudos, status badges (veneno, hojas, caracol, etc.), dial de probabilidades (*odds*), controles de acción, selección interactiva de columnas para Free Game. |
@@ -86,7 +86,7 @@ data.js ← rules.js ← ai.js
 | **`scripts/build.mjs`** | Empaquetador a un único archivo `dist/axie-chance.html` con todos los recursos e iconos incrustados como data URIs. |
 | **`scripts/balance.mjs`**| Banco de pruebas automatizado: simula miles de partidas con semillas controladas para medir el balance de los poderes. |
 | **`infra/`** | Proyecto AWS CDK en TypeScript para desplegar el sitio estático sobre S3 privado con CloudFront (OAC). |
-| **`test/`** | Banco completo de 13 suites de pruebas automatizadas ejecutadas directamente con Node.js puro. |
+| **`test/`** | Banco completo de 14 suites de pruebas automatizadas ejecutadas directamente con Node.js puro. |
 
 ---
 
@@ -236,6 +236,7 @@ Se ejecutan con `npm test` en Node.js puro usando `test/dom.mjs` como shim míni
 11. `test/audio.test.js`: Motor de audio Web Audio API, niveles de volumen y muting.
 12. `test/tutorial.test.js`: Gating estricto, flujo de 5 rondas del tutorial, overlays y victoria.
 13. `test/adventure.test.js`: Configuración de 6 niveles, pools escalonados, progresión y persistencia.
+14. `test/power-demos.test.js`: Demostraciones de poderes por nivel, preferencias guardadas y controlador en DOM.
 
 ---
 
@@ -256,11 +257,12 @@ Se ejecutan con `npm test` en Node.js puro usando `test/dom.mjs` como shim míni
 
 ## Reglas Críticas para Desarrolladores y Agentes
 
-1. **No editar archivos generados**: `src/axie-avatars.js`, `src/axie-poses.js`, `src/audio-clips.js`, `src/vfx-atlas.js`. Si se alteran avatares o sonidos, usar sus scripts de `npm run`.
+1. **No editar archivos generados**: `src/axie-avatars.js`, `src/axie-poses.js`, `src/audio-clips.js`, `src/vfx-clips.js`. Si se alteran avatares o sonidos, usar sus scripts de `npm run`.
 2. **`game.js` debe permanecer libre de efectos**: No importar `document`, `window`, AudioContext ni librerías de red en `game.js` ni en `rules.js`.
 3. **Perspectiva de Asientos**: El motor habla de asientos `p1` y `p2`, nunca de "humano y máquina". Quién controla cada asiento lo define el modo de juego (`isBotSeat`).
 4. **Semillas y Determinismo**: Usar siempre `makeRng(seed)` cuando se requiera reproducibilidad en tests o simulaciones.
 5. **Cero dependencias externas en runtime**: Mantener la pureza del stack web sin frameworks.
+6. **Build de un solo archivo**: `scripts/build.mjs` concatena los módulos sin envolverlos. Todo módulo nuevo de `src/` va en `MODULES` (en orden de dependencias) y ningún nombre de nivel superior puede repetirse entre archivos: si no, `dist/` sale roto aunque `npm test` pase.
 
 <!-- BEGIN AWS Agent Toolkit rules -->
 # AWS Guidance
