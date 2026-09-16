@@ -12,12 +12,11 @@ export const IDS = [
   'log-btn', 'log-modal', 'log',
   'rules-btn', 'rules-modal',
   'symbols-btn', 'symbols-modal',
-  'powers-demo-btn', 'hud-powers-btn',
-  'market', 'vfx',
+  'market', 'vfx', 'chainfx',
   // El menú de las tres rayitas: el sonido con sus dos perillas, y lo que abre otra
   // pantalla. `menu-btn` lo prende la portada, o la sala en una partida en red, que
   // antes de abandonar pregunta en `quit-modal`.
-  'hud-btn', 'hud-menu', 'sfx-btn', 'music-btn',
+  'hud-btn', 'hud-menu', 'hud-close', 'lobby-settings-btn', 'lang-btn', 'sfx-btn', 'music-btn',
   'sfx-vol', 'music-vol', 'sfx-pct', 'music-pct', 'menu-btn', 'quit-modal', 'quit-note',
   // Las salas de la red (ver `net.js`). No las toca `ui.js`, pero el DOM es uno solo.
   'net', 'net-title', 'net-note', 'net-urls', 'net-list',
@@ -25,6 +24,8 @@ export const IDS = [
   // Con qué Axie entrás a la sala. El botón abre la pantalla de elección de la
   // portada, que es la única del juego donde se elige (ver `main.js`).
   'net-axie', 'net-axie-now',
+  // La invitación: el QR y el link de la sala, mientras falte alguien.
+  'net-invite', 'net-qr', 'net-link',
 ];
 
 /** Monta el DOM falso en los globales y devuelve los nodos por id. */

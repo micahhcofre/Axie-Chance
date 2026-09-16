@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { loadStarter, restLayers } from './starters.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(root, '.cache');
@@ -157,7 +158,7 @@ async function checkUrls(layers) {
 if (!existsSync(AVATARS_FILE)) {
   writeFileSync(AVATARS_FILE, 'export const AVATAR_BASE = "";\nexport const AVATARS = {};\n');
 }
-const { AXIES } = await import(pathToFileURL(join(root, 'src', 'axies.js')).href);
+const { AXIES, STARTERS } = await import(pathToFileURL(join(root, 'src', 'axies.js')).href);
 
 const mixer = await loadMixer();
 const avatars = {};
@@ -170,6 +171,14 @@ for (const axie of Object.values(AXIES)) {
   };
   all.push(...layers);
   console.log(`  ${axie.id.padEnd(8)} ${axie.name.padEnd(10)} ${layers.length} capas`);
+}
+
+// Los starters no pasan por el mixer: las capas salen del esqueleto del kit y los PNG
+// quedan en `Axies/`, no en el CDN (ver `starters.mjs`).
+for (const axie of Object.values(STARTERS)) {
+  const layers = restLayers(await loadStarter(axie));
+  avatars[axie.id] = { from: { kit: axie.kit }, ...normalize(layers) };
+  console.log(`  ${axie.id.padEnd(8)} ${axie.name.padEnd(10)} ${layers.length} capas (starter ${axie.kit} del kit)`);
 }
 
 const missing = await checkUrls(all);
@@ -209,6 +218,8 @@ writeFileSync(
 // marco recortado al dibujo; \`x/y/w/h\` son fracciones de ese marco, así el avatar
 // escala a cualquier tamaño sin tocar estos números. \`from\` es la definición del roster
 // con la que se generó: si no coincide con \`axies.js\`, falta correr \`npm run axies\`.
+// Las capas que empiezan con \`Axies/\` son de los starters del kit y viajan con el
+// juego en vez de venir del CDN (ver \`scripts/starters.mjs\`).
 export const AVATAR_BASE = '${IMAGES}';
 
 export const AVATARS = {

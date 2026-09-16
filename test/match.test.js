@@ -1,7 +1,7 @@
 // Smoke test del flujo completo: rondas, reparto de la reserva y final a 100 puntos.
 import assert from 'node:assert/strict';
 import {
-  createGame, TARGET, PLAYERS, MARKET_SIZE, hpOf, lastChance, matchResult, ownedBy,
+  aimMs, createGame, TARGET, PLAYERS, MARKET_SIZE, hpOf, lastChance, matchResult, ownedBy,
 } from '../src/game.js';
 import { scoreChain } from '../src/rules.js';
 
@@ -453,6 +453,70 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   // pendiente que devolver.
   if (r === 'p2') assert.ok(s.roundScores.p1 !== null, 'ya había atacado cuando cayó');
   console.log(`  última chance: el que abre no la cobra (${r})`);
+}
+
+// El recorrido de la cadena: el compás que hay entre soltar el ataque y el golpe, para
+// que la pantalla pueda recorrer las rachas antes de que caiga el daño (ver `traceChain`
+// en `ui.js`). Se mide sobre una partida entera porque lo que importa es el orden: el
+// recorrido primero, el golpe después, y solo cuando hay cadena que recorrer.
+{
+  assert.equal(aimMs(0), 0, 'sin cartas no hay nada que recorrer');
+  assert.equal(aimMs(1), 380, 'la cadena de una sola igual tiene su chispazo');
+  assert.equal(aimMs(4), 1010, 'un tramo por carta');
+  assert.equal(aimMs(40), 1500, 'y un techo: una cadena larga no se hace eterna');
+
+  const game = createGame({ pace: 0, seed: 23 });
+  const beats = [];
+  let aim = 0;
+  let hit = 0;
+  game.subscribe((s) => {
+    if (s.aiming && s.aiming.id !== aim) {
+      aim = s.aiming.id;
+      const chain = s.chains[s.aiming.player];
+      assert.ok(!chain.busted, 'una cadena cortada no se recorre: ya se vio romperse');
+      assert.ok(chain.cards.length > 0, 'y una vacía tampoco');
+      assert.equal(s.aiming.ms, aimMs(chain.cards.length), 'dura un tramo por carta');
+      assert.equal(s.roundScores[s.aiming.player], null, 'el recorrido va antes del daño');
+      assert.equal(s.clock, null, 'con el ataque soltado el reloj ya no corre');
+      beats.push(`aim:${s.aiming.player}`);
+    }
+    if (s.lastHit && s.lastHit.id !== hit) {
+      hit = s.lastHit.id;
+      assert.equal(s.aiming, null, 'cuando el golpe cae el recorrido ya terminó');
+      beats.push(`hit:${s.lastHit.by}:${s.lastHit.kind ?? 'swing'}`);
+    }
+  });
+  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+
+  let guard = 0;
+  while (game.state.phase !== 'matchEnd') {
+    assert.ok(guard++ < 4000, 'la partida no termina');
+    const s = game.state;
+    if (s.phase === 'draft') {
+      if (game.drafting() !== 'p1') { await idle(); continue; }
+      const options = game.pickable();
+      if (!options.length) await game.skipDraft();
+      else await game.takeCard(options[0].uid);
+      continue;
+    }
+    if (s.phase === 'turn' && s.turn === 'p1' && !s.busy) await game.stand();
+    else await idle();
+  }
+
+  const aims = beats.filter((b) => b.startsWith('aim:'));
+  const swings = beats.filter((b) => /^hit:\w+:swing$/.test(b));
+  const busts = beats.filter((b) => b.endsWith(':bust'));
+  assert.ok(aims.length > 0, 'hubo recorridos');
+  assert.ok(busts.length > 0, 'y también cadenas cortadas, que no se recorren');
+  for (let i = 0; i < beats.length; i++) {
+    const swing = /^hit:(\w+):swing$/.exec(beats[i]);
+    if (swing) assert.equal(beats[i - 1], `aim:${swing[1]}`, 'cada golpe llega detrás de su recorrido');
+    if (beats[i].endsWith(':bust')) {
+      assert.notEqual(beats[i - 1], undefined);
+      assert.ok(!beats[i - 1].startsWith('aim:'), 'el ataque cortado no recorre nada');
+    }
+  }
+  console.log(`  recorrido de la cadena: ${aims.length} antes del golpe, ${busts.length} cortadas sin recorrer`);
 }
 
 console.log('✓ flujo de partida ok');

@@ -231,4 +231,24 @@ assert.match(card, /--zoom/, 'la carta soporta zoom out dinámico con --zoom');
 assert.match(regla('.card.card--giant'), /card--giant/, 'existe la regla .card.card--giant');
 assert.match(regla('.field'), /max-height:/, '.field debe tener límite de alto para no tapar los controles');
 
-console.log(`✓ estilos ok (\`hidden\` oculta, ${remotas.length} texturas del kit con piso propio)`);
+// ---- la capa del tutorial ---------------------------------------------------
+// Sin capas que apaguen o difuminen la mesa: hubo un scrim (primero con
+// `backdrop-filter`, después un SVG con recortes) que tapaba lo que había que leer y
+// costaba un repintado de pantalla entera por cuadro. La barra y el menú de
+// configuración siguen por encima del centro y de la flecha.
+const sinComentarios = (txt) => txt.replace(/\/\*[\s\S]*?\*\//g, '');
+const tutoCss = sinComentarios(css.slice(css.indexOf('.tuto-overlay'), css.indexOf('Modo Aventura')));
+assert.doesNotMatch(tutoCss, /backdrop-filter|\.tuto-backdrop/, 'el tutorial no apaga la mesa');
+const tutorialJs = read('src', 'tutorial.js');
+assert.doesNotMatch(tutorialJs, /tuto-backdrop|<mask/, 'el tutorial no apaga la mesa');
+assert.match(tutoCss, /\.hud-menu[\s\S]{0,60}z-index:\s*10020/, 'la configuración va por encima del tutorial');
+assert.match(regla('.tuto-quit'), /pointer-events:\s*auto/, 'se tiene que poder salir del tutorial');
+
+// La fila del centro se desplaza y recorta lo que se salga de su caja: el brillo de las
+// cartas señaladas tiene que entrar en el colchón, o se ve cortado a los costados.
+const colchon = Math.min(...[...css.matchAll(/\.market-row\s*\{[^}]*?padding:\s*(\d+)px/g)].map((m) => Number(m[1])));
+const brillo = Math.max(...[...tutoCss.matchAll(/(?:\.market-card\.tuto-hl\s*\{|@keyframes tuto-pulse-tight)[^@]*?(?=\n\}|\n@|$)/g)]
+  .flatMap((m) => [...m[0].matchAll(/0 0 (\d+)px/g)].map((n) => Number(n[1]))));
+assert.ok(Number.isFinite(brillo) && brillo <= colchon, `el brillo del centro (${brillo}px) se corta contra .market-row (${colchon}px)`);
+
+console.log(`✓ estilos ok (\`hidden\` oculta, ${remotas.length} texturas del kit con piso propio, tutorial sin scrim)`);

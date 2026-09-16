@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Axie Chance</title>
 <link rel="icon" href="Icons/bird-crest.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=Lilita+One&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -27,57 +27,71 @@
       <div class="clock" id="clock" role="timer" aria-label="Tiempo que queda" data-on="false"></div>
     </div>
     <div class="topbar-actions">
-      <button class="btn btn-ghost btn-powers-demo" id="powers-demo-btn"
-        title="Demostración de poderes" aria-label="Demostración de poderes" hidden>⚡ Poderes</button>
       <!-- Las tres rayitas. Todo lo que no es jugar vive detrás de este botón: el
            sonido, las reglas y la puerta de salida. -->
       <button class="btn btn-burger" id="hud-btn" aria-expanded="false"
         aria-controls="hud-menu" aria-label="Menú" title="Menú"
         ><i></i><i></i><i></i></button>
     </div>
-
-    <!-- El menú de la mesa. Cuelga de la barra y no de la ventana para que se abra
-         debajo de su botón, que es donde el que lo apretó lo está esperando. -->
-    <div class="hud-menu" id="hud-menu" hidden>
-      <p class="hud-label">Sonido</p>
-      <!-- Cada renglón es un interruptor y su perilla. Van juntos porque son la misma
-           pregunta contestada con dos precisiones distintas: "¿quiero esto?" y
-           "¿cuánto?". Apagar no borra el volumen elegido: al volver a prender, vuelve
-           donde estaba.
-
-           Los efectos vienen prendidos; la música no, que son dos minutos de wav que
-           el navegador tiene que bajar y no todo el mundo la quiere. -->
-      <div class="hud-row">
-        <button class="btn btn-ghost btn-sound" id="music-btn" data-on="false"
-          aria-pressed="false" title="Música" aria-label="Música">🎵</button>
-        <span class="hud-name">Música</span>
-        <input class="hud-vol" id="music-vol" type="range" min="0" max="100" step="5"
-          value="100" aria-label="Volumen de la música">
-        <span class="hud-pct" id="music-pct">100%</span>
-      </div>
-      <div class="hud-row">
-        <button class="btn btn-ghost btn-sound" id="sfx-btn" data-on="true"
-          aria-pressed="true" title="Efectos de sonido" aria-label="Efectos de sonido">🔊</button>
-        <span class="hud-name">Efectos</span>
-        <input class="hud-vol" id="sfx-vol" type="range" min="0" max="100" step="5"
-          value="100" aria-label="Volumen de los efectos">
-        <span class="hud-pct" id="sfx-pct">100%</span>
-      </div>
-      <hr class="hud-sep">
-      <!-- El historial vivía en una columna al costado de la mesa, y en un teléfono esa
-           columna caía una pantalla más abajo: para leerlo había que scrollear el
-           juego. Acá adentro es lo que es —algo que se consulta entre rondas— y no le
-           saca un píxel a la pelea. -->
-      <button class="btn btn-ghost hud-item" id="log-btn">Historial</button>
-      <button class="btn btn-ghost hud-item" id="rules-btn">Cómo se juega</button>
-      <button class="btn btn-ghost hud-item" id="symbols-btn">Símbolos especiales</button>
-      <button class="btn btn-ghost hud-item" id="hud-powers-btn" hidden>Demostración de poderes</button>
-      <!-- La puerta de vuelta a la portada, donde se elige contra quién y con qué
-           Axie. La pone `lobby.js`: con la partida en red no hay portada a la que
-           volver, y el botón se queda guardado. -->
-      <button class="btn btn-ghost hud-item hud-quit" id="menu-btn" hidden>Abandonar partida</button>
-    </div>
   </header>
+
+  <!-- El menú de opciones y sonido. Flota sobre la pantalla para estar accesible
+       tanto en el combate como en la portada y selector de modos. -->
+  <div class="hud-menu o-panel" id="hud-menu" hidden>
+    <div class="hud-header">
+      <p class="hud-label">Configuración</p>
+      <button class="o-x o-x--sm hud-close" id="hud-close" aria-label="Cerrar modal" title="Cerrar"></button>
+    </div>
+
+    <!-- Idioma -->
+    <div class="hud-row hud-row--lang">
+      <span class="hud-name">Idioma</span>
+      <button type="button" class="hud-lang-btn" id="lang-btn" aria-label="Cambiar idioma" title="Cambiar idioma">
+        <span class="hud-lang-label">Español</span>
+        <svg class="hud-lang-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
+        </svg>
+      </button>
+    </div>
+    <hr class="hud-sep">
+
+    <p class="hud-label">Sonido</p>
+    <!-- Cada renglón es un interruptor y su perilla. Van juntos porque son la misma
+         pregunta contestada con dos precisiones distintas: "¿quiero esto?" y
+         "¿cuánto?". Apagar no borra el volumen elegido: al volver a prender, vuelve
+         donde estaba.
+
+         Los efectos vienen prendidos; la música no, que son dos minutos de wav que
+         el navegador tiene que bajar y no todo el mundo la quiere. -->
+    <div class="hud-row">
+      <button class="btn btn-ghost btn-sound" id="music-btn" data-on="false"
+        aria-pressed="false" title="Música" aria-label="Música"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></button>
+      <span class="hud-name">Música</span>
+      <input class="hud-vol" id="music-vol" type="range" min="0" max="100" step="5"
+        value="100" aria-label="Volumen de la música">
+      <span class="hud-pct" id="music-pct">100%</span>
+    </div>
+    <div class="hud-row">
+      <button class="btn btn-ghost btn-sound" id="sfx-btn" data-on="true"
+        aria-pressed="true" title="Efectos de sonido" aria-label="Efectos de sonido"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>
+      <span class="hud-name">Efectos</span>
+      <input class="hud-vol" id="sfx-vol" type="range" min="0" max="100" step="5"
+        value="100" aria-label="Volumen de los efectos">
+      <span class="hud-pct" id="sfx-pct">100%</span>
+    </div>
+    <hr class="hud-sep">
+    <!-- El historial vivía en una columna al costado de la mesa, y en un teléfono esa
+         columna caía una pantalla más abajo: para leerlo había que scrollear el
+         juego. Acá adentro es lo que es —algo que se consulta entre rondas— y no le
+         saca un píxel a la pelea. -->
+    <button class="btn btn-ghost hud-item" id="log-btn">Historial</button>
+    <button class="btn btn-ghost hud-item" id="rules-btn">Cómo se juega</button>
+    <button class="btn btn-ghost hud-item" id="symbols-btn">Símbolos especiales</button>
+    <!-- La puerta de vuelta a la portada, donde se elige contra quién y con qué
+         Axie. La pone `lobby.js`: con la partida en red no hay portada a la que
+         volver, y el botón se queda guardado. -->
+    <button class="btn btn-ghost hud-item hud-quit" id="menu-btn" hidden>Abandonar partida</button>
+  </div>
 
   <!-- El combate ocupa la pantalla: los dos Axies enfrentados sobre el terreno de tu
        clase, con su barrita de vida encima, y una sola mesa abajo —la usa el que está
@@ -120,6 +134,11 @@
            de los que hay abajo. Vacío y escondido el resto del tiempo. -->
       <div class="finale" id="finale" role="status" hidden></div>
       <div class="controls" id="controls"></div>
+      <!-- El recorrido de la cadena, que se dibuja al soltar el ataque y antes del
+           golpe: una línea por símbolo uniendo sus eslabones carta por carta. Va en su
+           propia capa, encima de la mesa, porque la mesa se repinta a cada estado y
+           unas líneas escritas adentro se borrarían en medio del recorrido. -->
+      <svg class="chainfx" id="chainfx" aria-hidden="true"></svg>
       <canvas class="vfx" id="vfx" aria-hidden="true"></canvas>
     </section>
   </main>
@@ -164,6 +183,7 @@
      elección de Axie, abierta encima de la sala (ver `main.js`). Con qué jugás se
      pregunta en un solo lugar del juego, y este es el lugar. -->
 <div class="lobby" id="lobby" data-view="front">
+  <button id="lobby-settings-btn" class="lobby-cfg-btn" aria-label="Configuración" title="Configuración" aria-controls="hud-menu" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></button>
   <div class="lobby-art" aria-hidden="true"><i></i></div>
   <!-- Por donde se pasean. `aria-hidden` porque es decorado puro: un lector de
        pantalla no tiene nada que hacer con unos bichos que caminan. -->
@@ -189,36 +209,93 @@
 
     <!-- El menú: contra quién. La dificultad cuelga de la opción a la que le
          corresponde, que es la única con máquina adentro. -->
-    <div class="lobby-menu" id="lobby-menu" hidden>
-      <p class="lobby-menu-label">Modo de juego</p>
+    <div class="lobby-menu o-panel" id="lobby-menu" hidden>
+      <button class="o-x lobby-menu-x" id="lobby-menu-close" aria-label="Volver" title="Volver"></button>
+      <p class="lobby-menu-label o-banner">Modo de juego</p>
       <div class="lobby-modes">
         <div class="lobby-mode">
-          <button class="lobby-pick" data-play="adventure">
-            <b>Modo Aventura</b><span>Avanzá nivel a nivel desbloqueando los 12 poderes</span>
+          <button class="lobby-pick lobby-pick--adventure" data-play="adventure">
+            <span class="mode-icon-frame" aria-hidden="true">
+              <svg class="mode-icon" viewBox="0 0 24 24" fill="none">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="#ffd15c" stroke="#8c581a" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <div class="mode-content">
+              <div class="mode-header">
+                <b>Modo Aventura</b>
+                <span class="mode-tag mode-tag--adv">Campaña</span>
+              </div>
+              <span class="mode-desc">Avanzá nivel a nivel desbloqueando los 12 poderes</span>
+            </div>
+            <span class="mode-arrow" aria-hidden="true">›</span>
           </button>
         </div>
-        <div class="lobby-mode">
-          <button class="lobby-pick" data-play="cpu">
-            <b>Vs CPU</b><span>Vos contra la máquina, partida libre</span>
+
+        <div class="lobby-mode lobby-mode--cpu">
+          <button class="lobby-pick lobby-pick--cpu" data-play="cpu">
+            <span class="mode-icon-frame" aria-hidden="true">
+              <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 17.5L3 6V3h3l11.5 11.5" stroke="#ffd1a4" stroke-width="2"/>
+                <path d="M13 19l6 2 2-6-4.5-4.5" stroke="#ff9b4e" stroke-width="1.8"/>
+                <path d="M9.5 17.5L21 6V3h-3L6.5 14.5" stroke="#ffd1a4" stroke-width="2"/>
+                <path d="M11 19l-6 2-2-6 4.5-4.5" stroke="#ff9b4e" stroke-width="1.8"/>
+              </svg>
+            </span>
+            <div class="mode-content">
+              <div class="mode-header">
+                <b>Vs CPU</b>
+                <span class="mode-tag mode-tag--cpu">Duelo</span>
+              </div>
+              <span class="mode-desc">Vos contra la máquina, partida libre</span>
+            </div>
+            <span class="mode-arrow" aria-hidden="true">›</span>
           </button>
-          <label class="select" id="difficulty-box">
-            <span>Dificultad</span>
-            <select id="difficulty">
-              <option value="facil">Fácil</option>
-              <option value="normal" selected>Normal</option>
-              <option value="duro">Duro</option>
-            </select>
-          </label>
+
+          <div class="difficulty-shelf" id="difficulty-shelf">
+            <label class="select" id="difficulty-box">
+              <span class="difficulty-title">Dificultad</span>
+              <select id="difficulty">
+                <option value="facil">Fácil</option>
+                <option value="normal" selected>Normal</option>
+                <option value="duro">Duro</option>
+              </select>
+            </label>
+            <div class="diff-pills" role="group" aria-label="Dificultad">
+              <button type="button" class="diff-pill" data-diff="facil">Fácil</button>
+              <button type="button" class="diff-pill is-active" data-diff="normal">Normal</button>
+              <button type="button" class="diff-pill" data-diff="duro">Duro</button>
+            </div>
+          </div>
         </div>
+
         <!-- Se prende sola si la página la sirvió el servidor del juego: abierta como
              archivo suelto no hay sala a la que entrar. Ver `net.js`. -->
         <div class="lobby-mode">
-          <button class="lobby-pick" id="lobby-net" data-play="net" disabled>
-            <b>Multijugador</b><span id="lobby-net-note">Contra otra persona, en una sala</span>
+          <button class="lobby-pick lobby-pick--net" id="lobby-net" data-play="net" disabled>
+            <span class="mode-icon-frame" aria-hidden="true">
+              <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="7" cy="8" r="3.5" fill="#75d3ff" stroke="#00527c" stroke-width="1.5"/>
+                <path d="M2.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="#75d3ff" stroke-width="2"/>
+                <circle cx="17" cy="8" r="3.5" fill="#ffd15c" stroke="#8c581a" stroke-width="1.5"/>
+                <path d="M12.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="#ffd15c" stroke-width="2"/>
+              </svg>
+            </span>
+            <div class="mode-content">
+              <div class="mode-header">
+                <b>Multijugador</b>
+                <span class="mode-tag mode-tag--net">En Red</span>
+              </div>
+              <span class="mode-desc" id="lobby-net-note">Contra otra persona, en una sala</span>
+            </div>
+            <span class="mode-arrow" aria-hidden="true">›</span>
           </button>
         </div>
       </div>
-      <button class="btn btn-ghost" id="lobby-back">Volver</button>
+      <div class="lobby-menu-foot">
+        <button class="btn btn-ghost lobby-back-btn" id="lobby-back">
+          <span aria-hidden="true">←</span> Volver
+        </button>
+      </div>
     </div>
 
   </div>
@@ -274,7 +351,7 @@
   <div class="lobby-choose" id="lobby-choose" hidden>
     <div class="choose-bar">
       <button class="btn btn-ghost" id="lobby-choose-back">← Volver</button>
-      <p class="choose-step" id="lobby-choose-title">Elegí tu Axie</p>
+      <p class="choose-step o-title" id="lobby-choose-title">Elegí tu Axie</p>
     </div>
 
     <!-- El Axie, con una flecha de cada lado. Las flechas son la navegación entera:
@@ -290,7 +367,7 @@
 
     <!-- El mazo con el que arranca, en el mismo formato en que se van a ver en la
          mesa: son las mismas cartas. -->
-    <div class="choose-sheet">
+    <div class="choose-sheet o-panel">
       <p class="choose-label" id="lobby-choose-deck-label">Mazo inicial · 10 cartas</p>
       <div class="choose-deck" id="lobby-choose-deck"></div>
       <p class="choose-label">Símbolos en el mazo</p>
@@ -307,11 +384,11 @@
   <div class="lobby-adventure" id="lobby-adventure" hidden>
     <div class="choose-bar">
       <button class="btn btn-ghost" id="lobby-adventure-back">← Volver</button>
-      <p class="choose-step" id="lobby-adventure-title">Modo Aventura</p>
+      <p class="choose-step o-title" id="lobby-adventure-title">Modo Aventura</p>
     </div>
     <div class="adventure-stage">
-      <div class="adventure-levels" id="adventure-levels"></div>
-      <div class="adventure-card" id="adventure-card">
+      <div class="adventure-levels o-well" id="adventure-levels"></div>
+      <div class="adventure-card o-panel" id="adventure-card">
         <button class="lobby-play choose-go" id="lobby-adventure-play">Comenzar Nivel</button>
       </div>
     </div>
@@ -364,6 +441,16 @@
 
       <div class="netbox-view" id="net-room" hidden>
         <ul class="netbox-seats" id="net-seats"></ul>
+        <!-- La invitación: un QR con el link de esta sala, para que el otro aparato
+             entre apuntándole con la cámara, y el link escrito por si no tiene. Solo
+             mientras falte alguien; lo arma `invitePaint` en `net.js`. -->
+        <div class="netbox-invite" id="net-invite" hidden>
+          <div class="netbox-qr" id="net-qr"></div>
+          <div class="netbox-invite-text">
+            <span class="netbox-label">Escaneá para entrar</span>
+            <span class="netbox-link" id="net-link"></span>
+          </div>
+        </div>
         <!-- Con qué Axie entrás. No es un roster: abre la misma pantalla de elección de
              la portada, encima de la sala (ver `net.js`). Está acá porque a una sala se
              llega también por el link del otro, sin pasar por la portada, y porque el
@@ -394,24 +481,26 @@
      Va de los dos: el mazo del rival es público —su mazo inicial sale de su clase y
      cada carta que se lleva del centro se ve— y saber con qué está jugando el otro es
      parte de decidir el propio turno. -->
-<dialog class="modal modal--sheet" id="deck-modal">
-  <h2 id="deck-label">Tu mazo</h2>
+<dialog class="modal modal--sheet o-panel" id="deck-modal">
+  <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
+  <h2 class="o-banner" id="deck-label">Tu mazo</h2>
   <div class="deck" id="deck"></div>
   <div id="deck-sheet"></div>
   <form method="dialog"><button class="btn btn-primary">Cerrar</button></form>
 </dialog>
 
 <!-- El historial, que se abre desde el menú de las tres rayitas. -->
-<dialog class="modal modal--sheet" id="log-modal">
-  <h2>Historial</h2>
+<dialog class="modal modal--sheet o-panel" id="log-modal">
+  <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
+  <h2 class="o-banner">Historial</h2>
   <ol class="log" id="log"></ol>
   <form method="dialog"><button class="btn btn-primary">Cerrar</button></form>
 </dialog>
 
 <!-- Abandonar una partida en red. Pregunta antes, y la nota la escribe `net.js` con lo
      que va a pasar —se anula, o gana el otro— según las rondas que ya se jugaron. -->
-<dialog class="modal" id="quit-modal">
-  <h2>¿Abandonar la partida?</h2>
+<dialog class="modal o-panel" id="quit-modal">
+  <h2 class="o-banner">¿Abandonar la partida?</h2>
   <p id="quit-note"></p>
   <form method="dialog">
     <button class="btn" value="stay">Seguir jugando</button>
@@ -419,8 +508,9 @@
   </form>
 </dialog>
 
-<dialog class="modal" id="rules-modal">
-  <h2>Cómo se juega</h2>
+<dialog class="modal o-panel" id="rules-modal">
+  <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
+  <h2 class="o-banner">Cómo se juega</h2>
   <p>Es un combate de cartas táctico <i>push-your-luck</i>. Elegís uno de los <b>seis Axies</b> —uno por clase— y peleás con su
      <b>mazo personal</b> contra el rival. Los dos arrancan con <b>100 de vida</b>.</p>
   <p>En <b>Vs CPU</b> jugás contra la máquina, que compite con un Axie sorteado.
@@ -475,39 +565,37 @@
   <h3>Los poderes de combate</h3>
   <p>Al inicio de cada partida se sortea <b>un poder activo por clase</b> (de entre los dos posibles para esa clase). Cada poder viaja siempre con su símbolo entre los tres de su carta:</p>
   <div class="example">
-    <div><img class="power power--sm" src="Icons/power-strength.png" alt=""> <b>Fuerza</b> (Bestia) — +1 de daño permanente en todos tus ataques.</div>
-    <div><img class="power power--sm" src="Icons/power-brutal.png" alt=""> <b>Garra Brutal</b> (Bestia) — +2 de daño por cada símbolo de tu cadena más larga.</div>
-    <div><img class="power power--sm" src="Icons/power-octopus.png" alt=""> <b>Pulpo</b> (Pez) — +1 carta extra del mercado para tu mazo al plantarte.</div>
-    <div><img class="power power--sm" src="Icons/power-bubble.png" alt=""> <b>Burbuja de Retorno</b> (Pez) — La carta que elijas del mercado abrirá tu próxima ronda.</div>
-    <div><img class="power power--sm" src="Icons/power-egg.png" alt=""> <b>Huevo</b> (Pájaro) — Escudo por la mitad de tu golpe; al romperse devuelve 8 de daño directo al atacante.</div>
-    <div><img class="power power--sm" src="Icons/power-feather.png" alt=""> <b>Pluma Sagrada</b> (Pájaro) — 5 de daño directo inmediato al salir (¡incluso si te cortás!).</div>
-    <div><img class="power power--sm" src="Icons/power-pot.png" alt=""> <b>Maceta</b> (Planta) — Te curás todo el daño que pegaste.</div>
-    <div><img class="power power--sm" src="Icons/power-leaf.png" alt=""> <b>Hoja (Leaf)</b> (Planta) — +2 hojas (hasta 5). Cada hoja te cura 4 de vida al final del turno y se consume una.</div>
-    <div><img class="power power--sm" src="Icons/power-snail.png" alt=""> <b>Caracol</b> (Bicho) — El próximo ataque del rival hace la mitad de daño.</div>
-    <div><img class="power power--sm" src="Icons/power-leech.png" alt=""> <b>Greedy Leech</b> (Bicho) — Robás 6 de vida al rival (se duplica a 12 con 4 columnas en mesa).</div>
-    <div><img class="power power--sm" src="Icons/power-poison.png" alt=""> <b>Veneno</b> (Reptil) — Envenena por la mitad de tu golpe; daña cada turno y se reduce a la mitad.</div>
-    <div><img class="power power--sm" src="Icons/power-steelskin.png" alt=""> <b>Piel de Escamas</b> (Reptil) — Tope defensivo: el próximo ataque rival no superará los 12 de daño.</div>
+    <div class="muted"><b>«Al pegar»</b> es plantarte con un ataque que haga daño. Si te cortás, esos poderes no salen.</div>
     <hr>
-    <div><img class="power power--sm" src="Icons/power-freegame.png" alt=""> <b>Free Game</b> (Especial Neutral) — Carta comodín: al entrar en mesa alarga una carta existente sumando sus símbolos.</div>
+    <div><img class="power power--sm" src="Icons/power-strength.png" alt=""> <b>Charm of Power</b> (Bestia) — Al pegar, +1 de daño en ese ataque y en todos los que siguen.</div>
+    <div><img class="power power--sm" src="Icons/power-brutal.png" alt=""> <b>Energy Drink M</b> (Bestia) — Al pegar, +2 de daño por cada símbolo de tu racha más larga.</div>
+    <div><img class="power power--sm" src="Icons/power-octopus.png" alt=""> <b>Sticky Octopus</b> (Pez) — Al plantarte (aunque pegues 0), elegís 1 carta extra del mercado para tu mazo.</div>
+    <div><img class="power power--sm" src="Icons/power-bubble.png" alt=""> <b>Bubble Paste</b> (Pez) — Al plantarte, la carta que elijas del mercado abre tu próxima ronda.</div>
+    <div><img class="power power--sm" src="Icons/power-egg.png" alt=""> <b>Secret Egg</b> (Pájaro) — Al pegar, ganás un escudo de la mitad del golpe; si el rival lo rompe, recibe 8 de daño.</div>
+    <div><img class="power power--sm" src="Icons/power-feather.png" alt=""> <b>Feather Earring</b> (Pájaro) — Apenas la robás, 5 de daño directo al rival, aunque después te cortes.</div>
+    <div><img class="power power--sm" src="Icons/power-pot.png" alt=""> <b>Leafy Pot</b> (Planta) — Al pegar, te curás lo mismo que pegaste.</div>
+    <div><img class="power power--sm" src="Icons/power-leaf.png" alt=""> <b>Spring Leaf</b> (Planta) — Al pegar, +2 hojas (hasta 5); al final de cada turno tuyo, cada hoja te cura 4 y se gasta 1.</div>
+    <div><img class="power power--sm" src="Icons/power-snail.png" alt=""> <b>Lazy Snail</b> (Bicho) — Al pegar, el próximo ataque del rival hace la mitad de daño.</div>
+    <div><img class="power power--sm" src="Icons/power-leech.png" alt=""> <b>Mantis Dagger</b> (Bicho) — Al pegar, le sacás 6 de vida al rival y te los curás (12 con 4 o más columnas en mesa).</div>
+    <div><img class="power power--sm" src="Icons/power-poison.png" alt=""> <b>Poison Vial</b> (Reptil) — Al pegar, envenenás al rival con la mitad del golpe; al final de cada turno suyo le saca eso y se reduce a la mitad.</div>
+    <div><img class="power power--sm" src="Icons/power-steelskin.png" alt=""> <b>Gecko Mask</b> (Reptil) — Al pegar, el próximo golpe del rival te hace 12 de daño como máximo.</div>
     <hr>
-    <div class="muted"><b>Regla general:</b> Salvo la Pluma (que pega de inmediato al robar) y el Pulpo/Burbuja (que exigen plantarse), todos los poderes requieren que el ataque conecte con daño (&gt; 0) para activarse. Si te cortás, el golpe hace 0 y no se activa ningún efecto de ataque.</div>
+    <div><img class="power power--sm" src="Icons/power-freegame.png" alt=""> <b>Rocket Stamp</b> (Comodín) — Si comparte un símbolo con tu cadena, tu próximo robo se monta sobre una carta de la mesa y le suma sus símbolos.</div>
   </div>
 
   <h3>Modo Aventura</h3>
-  <p>Campaña de 6 niveles progresivos donde se desbloquean 2 nuevos poderes de clase por nivel. En el <b>Nivel 1: Primeros Pasos</b> ya están activos <b>Fuerza</b> (Bestia), <b>Maceta</b> (Planta) y las 15 cartas comodín neutrales <b>Free Game</b>.</p>
+  <p>Campaña de 6 niveles progresivos donde se desbloquean 2 nuevos poderes de clase por nivel. En el <b>Nivel 1: Primeros Pasos</b> ya están activos <b>Charm of Power</b> (Bestia), <b>Leafy Pot</b> (Planta) y las 15 cartas comodín neutrales <b>Rocket Stamp</b>.</p>
 
   <form method="dialog"><button class="btn btn-primary">Entendido</button></form>
 </dialog>
 
-<dialog class="modal modal--sheet modal--symbols" id="symbols-modal">
+<dialog class="modal modal--sheet modal--symbols o-panel" id="symbols-modal">
+  <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
   <div class="symbols-header">
-    <div>
-      <h2>Símbolos y Poderes Especiales</h2>
-      <p class="symbols-subtitle">
-        Las cartas del mercado pueden incluir <b>poderes especiales</b>. No forman cadenas por sí mismos, pero activan <b>habilidades tácticas</b> durante el combate.
-      </p>
-    </div>
-    <form method="dialog"><button class="modal-close-icon" aria-label="Cerrar modal">✕</button></form>
+    <h2 class="o-banner">Símbolos especiales</h2>
+    <p class="symbols-subtitle">
+      Las cartas del mercado pueden incluir <b>poderes especiales</b>. No forman cadenas por sí mismos, pero activan <b>habilidades tácticas</b> durante el combate.
+    </p>
   </div>
 
   <!-- Barra de Filtros interactiva -->
@@ -532,7 +620,7 @@
       <img src="Icons/reptile-crest.png" alt="" class="crest crest--sm"> Reptil
     </button>
     <button type="button" class="sym-filter-btn" data-sym-filter="special" style="--c:#ffd15c">
-      ✨ Especiales
+      <img src="Icons/power-freegame.png" alt="" class="power power--sm"> Especiales
     </button>
   </div>
 
@@ -542,23 +630,23 @@
     <article class="symbol-card" data-sym-class="beast" style="--sym-color: #f5b53d; --sym-glow: rgba(245, 181, 61, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-strength.png" alt="Fuerza" class="power">
+          <img src="Icons/power-strength.png" alt="Charm of Power" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/beast-crest.png" alt="Bestia" class="crest crest--sm"> Bestia
           </div>
-          <h3 class="symbol-name">Fuerza</h3>
+          <h3 class="symbol-name">Charm of Power</h3>
         </div>
       </div>
       <div class="symbol-highlight">+1 de daño permanente en todos tus ataques</div>
       <p class="symbol-desc">
-        Aumenta tu estadística de <b>Fuerza</b> de forma permanente. Cada carta de Fuerza jugada añade <b>+1 de daño</b> a este ataque y a todos los que hagas en el resto de la partida.
+        Aumenta tu estadística de daño de forma permanente. Cada carta jugada añade <b>+1 de daño</b> a este ataque y a todos los que hagas en el resto de la partida.
       </p>
       <ul class="symbol-points">
         <li><b>Activación:</b> Al conectar tu ataque con éxito (daño &gt; 0).</li>
         <li><b>Permanente:</b> Se conserva para toda la partida (no se pierde si te cortás después).</li>
-        <li><b>Acumulable:</b> Cada carta de Fuerza suma otro +1 permanente.</li>
+        <li><b>Acumulable:</b> Cada carta suma otro +1 permanente.</li>
       </ul>
       <div class="symbol-chips">
         <span class="sym-chip sym-chip--perm">Permanente</span>
@@ -566,17 +654,17 @@
       </div>
     </article>
 
-    <!-- GARRA BRUTAL -->
+    <!-- ENERGY DRINK M -->
     <article class="symbol-card" data-sym-class="beast" style="--sym-color: #f5b53d; --sym-glow: rgba(245, 181, 61, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-brutal.png" alt="Garra Brutal" class="power">
+          <img src="Icons/power-brutal.png" alt="Energy Drink M" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/beast-crest.png" alt="Bestia" class="crest crest--sm"> Bestia
           </div>
-          <h3 class="symbol-name">Garra Brutal</h3>
+          <h3 class="symbol-name">Energy Drink M</h3>
         </div>
       </div>
       <div class="symbol-highlight">+2 de daño por cada símbolo de tu cadena más larga</div>
@@ -586,7 +674,7 @@
       <ul class="symbol-points">
         <li><b>Activación:</b> Se activa siempre que conectes el ataque (daño &gt; 0).</li>
         <li><b>Cadena más larga:</b> Cuenta los símbolos de tu racha más extendida (de cualquier clase).</li>
-        <li><b>Acumulable:</b> Con más de una carta de Garra Brutal, el bonus se multiplica.</li>
+        <li><b>Acumulable:</b> Con más de una carta, el bonus se multiplica.</li>
       </ul>
       <div class="symbol-chips">
         <span class="sym-chip">Rematador</span>
@@ -594,17 +682,17 @@
       </div>
     </article>
 
-    <!-- PULPO -->
+    <!-- STICKY OCTOPUS -->
     <article class="symbol-card" data-sym-class="aquatic" style="--sym-color: #4bb8f0; --sym-glow: rgba(75, 184, 240, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-octopus.png" alt="Pulpo" class="power">
+          <img src="Icons/power-octopus.png" alt="Sticky Octopus" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/aquatic-crest.png" alt="Pez" class="crest crest--sm"> Pez
           </div>
-          <h3 class="symbol-name">Pulpo</h3>
+          <h3 class="symbol-name">Sticky Octopus</h3>
         </div>
       </div>
       <div class="symbol-highlight">+1 carta extra del mercado para tu mazo</div>
@@ -622,17 +710,17 @@
       </div>
     </article>
 
-    <!-- BURBUJA DE RETORNO -->
+    <!-- BUBBLE PASTE -->
     <article class="symbol-card" data-sym-class="aquatic" style="--sym-color: #4bb8f0; --sym-glow: rgba(75, 184, 240, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-bubble.png" alt="Burbuja de Retorno" class="power">
+          <img src="Icons/power-bubble.png" alt="Bubble Paste" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/aquatic-crest.png" alt="Pez" class="crest crest--sm"> Pez
           </div>
-          <h3 class="symbol-name">Burbuja de Retorno</h3>
+          <h3 class="symbol-name">Bubble Paste</h3>
         </div>
       </div>
       <div class="symbol-highlight">La carta que elijas del mercado abrirá tu próxima ronda</div>
@@ -650,17 +738,17 @@
       </div>
     </article>
 
-    <!-- HUEVO -->
+    <!-- SECRET EGG -->
     <article class="symbol-card" data-sym-class="bird" style="--sym-color: #ff7bac; --sym-glow: rgba(255, 123, 172, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-egg.png" alt="Huevo" class="power">
+          <img src="Icons/power-egg.png" alt="Secret Egg" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/bird-crest.png" alt="Pájaro" class="crest crest--sm"> Pájaro
           </div>
-          <h3 class="symbol-name">Huevo</h3>
+          <h3 class="symbol-name">Secret Egg</h3>
         </div>
       </div>
       <div class="symbol-highlight">Escudo de medio golpe; al romperse devuelve 8 de daño</div>
@@ -678,17 +766,17 @@
       </div>
     </article>
 
-    <!-- PLUMA SAGRADA -->
+    <!-- FEATHER EARRING -->
     <article class="symbol-card" data-sym-class="bird" style="--sym-color: #ff7bac; --sym-glow: rgba(255, 123, 172, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-feather.png" alt="Pluma Sagrada" class="power">
+          <img src="Icons/power-feather.png" alt="Feather Earring" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/bird-crest.png" alt="Pájaro" class="crest crest--sm"> Pájaro
           </div>
-          <h3 class="symbol-name">Pluma Sagrada</h3>
+          <h3 class="symbol-name">Feather Earring</h3>
         </div>
       </div>
       <div class="symbol-highlight">5 de daño directo al salir (¡incluso si te cortás!)</div>
@@ -706,17 +794,17 @@
       </div>
     </article>
 
-    <!-- MACETA -->
+    <!-- LEAFY POT -->
     <article class="symbol-card" data-sym-class="plant" style="--sym-color: #54cf8b; --sym-glow: rgba(84, 207, 139, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-pot.png" alt="Maceta" class="power">
+          <img src="Icons/power-pot.png" alt="Leafy Pot" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/plant-crest.png" alt="Planta" class="crest crest--sm"> Planta
           </div>
-          <h3 class="symbol-name">Maceta</h3>
+          <h3 class="symbol-name">Leafy Pot</h3>
         </div>
       </div>
       <div class="symbol-highlight">Te curás todo el daño que pegaste</div>
@@ -744,7 +832,7 @@
           <div class="symbol-class-badge">
             <img src="Icons/plant-crest.png" alt="Planta" class="crest crest--sm"> Planta
           </div>
-          <h3 class="symbol-name">Hoja (Leaf)</h3>
+          <h3 class="symbol-name">Spring Leaf</h3>
         </div>
       </div>
       <div class="symbol-highlight">+2 hojas (hasta 5). Cada hoja te cura 4 de vida al final del turno</div>
@@ -763,17 +851,17 @@
       </div>
     </article>
 
-    <!-- CARACOL -->
+    <!-- LAZY SNAIL -->
     <article class="symbol-card" data-sym-class="bug" style="--sym-color: #ff6a5c; --sym-glow: rgba(255, 106, 92, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-snail.png" alt="Caracol" class="power">
+          <img src="Icons/power-snail.png" alt="Lazy Snail" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/bug-crest.png" alt="Bicho" class="crest crest--sm"> Bicho
           </div>
-          <h3 class="symbol-name">Caracol</h3>
+          <h3 class="symbol-name">Lazy Snail</h3>
         </div>
       </div>
       <div class="symbol-highlight">El próximo ataque del rival hace la mitad de daño</div>
@@ -791,17 +879,17 @@
       </div>
     </article>
 
-    <!-- GREEDY LEECH -->
+    <!-- MANTIS DAGGER -->
     <article class="symbol-card" data-sym-class="bug" style="--sym-color: #ff6a5c; --sym-glow: rgba(255, 106, 92, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-leech.png" alt="Greedy Leech" class="power">
+          <img src="Icons/power-leech.png" alt="Mantis Dagger" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/bug-crest.png" alt="Bicho" class="crest crest--sm"> Bicho
           </div>
-          <h3 class="symbol-name">Greedy Leech</h3>
+          <h3 class="symbol-name">Mantis Dagger</h3>
         </div>
       </div>
       <div class="symbol-highlight">Robás 6 de vida al rival (se duplica a 12 con 4 columnas en mesa)</div>
@@ -819,17 +907,17 @@
       </div>
     </article>
 
-    <!-- VENENO -->
+    <!-- POISON VIAL -->
     <article class="symbol-card" data-sym-class="reptile" style="--sym-color: #a97cff; --sym-glow: rgba(169, 124, 255, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-poison.png" alt="Veneno" class="power">
+          <img src="Icons/power-poison.png" alt="Poison Vial" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/reptile-crest.png" alt="Reptil" class="crest crest--sm"> Reptil
           </div>
-          <h3 class="symbol-name">Veneno</h3>
+          <h3 class="symbol-name">Poison Vial</h3>
         </div>
       </div>
       <div class="symbol-highlight">Envenena por la mitad de tu golpe; daña cada turno y se reduce a la mitad</div>
@@ -847,17 +935,17 @@
       </div>
     </article>
 
-    <!-- PIEL DE ESCAMAS -->
+    <!-- GECKO MASK -->
     <article class="symbol-card" data-sym-class="reptile" style="--sym-color: #a97cff; --sym-glow: rgba(169, 124, 255, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-steelskin.png" alt="Piel de Escamas" class="power">
+          <img src="Icons/power-steelskin.png" alt="Gecko Mask" class="power">
         </div>
         <div class="symbol-title-box">
           <div class="symbol-class-badge">
             <img src="Icons/reptile-crest.png" alt="Reptil" class="crest crest--sm"> Reptil
           </div>
-          <h3 class="symbol-name">Piel de Escamas</h3>
+          <h3 class="symbol-name">Gecko Mask</h3>
         </div>
       </div>
       <div class="symbol-highlight">Tope defensivo: el próximo ataque rival no superará los 12 de daño</div>
@@ -875,17 +963,17 @@
       </div>
     </article>
 
-    <!-- FREE GAME -->
+    <!-- ROCKET STAMP (FREE GAME) -->
     <article class="symbol-card symbol-card--special" data-sym-class="special" style="--sym-color: #ffd15c; --sym-glow: rgba(255, 209, 92, 0.25);">
       <div class="symbol-card-head">
         <div class="symbol-avatar">
-          <img src="Icons/power-freegame.png" alt="Free Game" class="power">
+          <img src="Icons/power-freegame.png" alt="Rocket Stamp" class="power">
         </div>
         <div class="symbol-title-box">
-          <div class="symbol-class-badge" style="background: rgba(255, 209, 92, 0.15); color: #ffd15c; border-color: rgba(255, 209, 92, 0.3);">
-            ✨ Especial Neutral
+          <div class="symbol-class-badge">
+            <img src="Icons/power-freegame.png" alt="" class="power power--sm"> Especial Neutral
           </div>
-          <h3 class="symbol-name">Free Game (Apilable)</h3>
+          <h3 class="symbol-name">Rocket Stamp (Free Game)</h3>
         </div>
       </div>
       <div class="symbol-highlight">Al entrar en mesa, alarga una carta existente</div>

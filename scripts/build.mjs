@@ -8,13 +8,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 
 const MODULES = [
-  'data', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'rules', 'ai', 'adventure', 'game',
-  'vfx-clips', 'vfx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'power-demos', 'ui', 'net',
+  'i18n-en', 'i18n',
+  'data', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'rules', 'ai', 'adventure-levels', 'adventure', 'game',
+  'vfx-clips', 'vfx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'ui', 'rooms', 'link', 'qr', 'net',
   'tutorial', 'lobby', 'main',
 ];
 const FONTS =
   'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800' +
-  '&family=IBM+Plex+Mono:wght@500;600&display=swap';
+  '&family=IBM+Plex+Mono:wght@500;600&family=Lilita+One&display=swap';
 
 // Todos los PNG de Icons/ —crests, poderes, estados y las dos versiones del logo— en
 // un solo mapa por nombre de archivo. `data.js` los pide con `iconUrl()`, y el HTML
@@ -28,6 +29,22 @@ const icons = Object.fromEntries(
       f,
       `data:image/png;base64,${readFileSync(join(root, 'Icons', f)).toString('base64')}`,
     ]),
+);
+
+// Los starters de la Aventura (`Axies/<id>/*.png`, ver `scripts/starters.mjs`): `axies.js`
+// los pide por ruta, y en el archivo suelto la ruta se resuelve con este mapa. Viaja la
+// ruta y no el data URI en el manifiesto porque de la ruta sale de qué parte es cada capa.
+const axieUrls = Object.fromEntries(
+  readdirSync(join(root, 'Axies'), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .flatMap((d) =>
+      readdirSync(join(root, 'Axies', d.name))
+        .filter((f) => f.endsWith('.png'))
+        .map((f) => [
+          `Axies/${d.name}/${f}`,
+          `data:image/png;base64,${readFileSync(join(root, 'Axies', d.name, f)).toString('base64')}`,
+        ]),
+    ),
 );
 
 // Los fondos del arena se piden desde el CSS por ruta relativa, que en un archivo
@@ -81,6 +98,7 @@ ${inlined}
 
 <script>
 globalThis.ICON_URLS = ${JSON.stringify(icons)};
+globalThis.AXIE_URLS = ${JSON.stringify(axieUrls)};
 
 ${script}
 <\/script>

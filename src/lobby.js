@@ -49,9 +49,10 @@ import { netAvailable } from './net.js';
 import { createTutorial } from './tutorial.js';
 import {
   ADVENTURE_LEVELS, getAdventureProgress, getAdventureLevel, isLevelUnlocked,
+  DIFFICULTY_LABELS,
 } from './adventure.js';
-import { createPowerDemoController } from './power-demos.js';
-import { openSymbols } from './ui.js';
+import { openSymbols, openHud } from './ui.js';
+import { tr, currentLang, setLang } from './i18n.js';
 
 // `el` y no `$` como en `ui.js` ni `byId` como en `net.js`: el build de un solo
 // archivo concatena los módulos sin envolverlos, así que dos nombres iguales en
@@ -78,6 +79,12 @@ const SPEED = 0.085;
 const REST = [2200, 9000];
 /** Cuánto puede cambiar de carril —de profundidad— en un viaje. */
 const DRIFT = 0.5;
+
+/**
+ * Cada cuánto hace un gesto el rival del cuadro de la Aventura, en ms. Está ahí para
+ * presentarse, así que se aburre mucho más seguido que en la mesa.
+ */
+const RIVAL_FIDGET = [1400, 3200];
 
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
 
@@ -216,7 +223,7 @@ function slotTitle(card) {
       const n = card.symbols.filter((x) => x === s).length;
       return n > 1 ? `${SYMBOLS[s].name} ×${n}` : SYMBOLS[s].name;
     })
-    .join(' y ');
+    .join(tr(' y '));
 }
 
 /**
@@ -240,26 +247,26 @@ function slotTitle(card) {
 function boostHtml(base, own, added, open) {
   const options = boostOptions(base, own);
   const btn = (attrs, cls, inner, title) =>
-    `<button class="boost-btn${cls}" ${attrs} title="${title}">${inner}</button>`;
+    `<button class="boost-btn${cls}" ${attrs} disabled title="${title}">${inner}</button>`;
 
   if (added) {
     return btn(`data-boost="clear" data-key="${base.key}"`, ' is-on',
       `${crest(added)}<b class="boost-sign">×</b>`,
-      `Sacarle el ${SYMBOLS[added].name} de más`);
+      tr('Sacarle el {symbol} de más', { symbol: SYMBOLS[added].name }));
   }
   if (options.length === 1) {
     return btn(`data-boost="add" data-key="${base.key}" data-sym="${options[0]}"`, '',
       `<b class="boost-sign">+</b>${crest(options[0])}`,
-      `Sumarle otro ${SYMBOLS[options[0]].name}`);
+      tr('Sumarle otro {symbol}', { symbol: SYMBOLS[options[0]].name }));
   }
   if (open) {
     return options
       .map((s) => btn(`data-boost="add" data-key="${base.key}" data-sym="${s}"`, '',
-        crest(s), `Sumarle otro ${SYMBOLS[s].name}`))
+        crest(s), tr('Sumarle otro {symbol}', { symbol: SYMBOLS[s].name })))
       .join('');
   }
   return btn(`data-boost="open" data-key="${base.key}"`, '',
-    '<b class="boost-sign">+</b>', 'Sumarle uno de sus dos símbolos');
+    '<b class="boost-sign">+</b>', tr('Sumarle uno de sus dos símbolos'));
 }
 
 /**
@@ -311,6 +318,8 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   const board = el('lobby-cast');
   let strollers = null;
   let selectedAdvLevel = 1;
+  /** El rival del nivel en su cuadro. Se vuelve a crear con cada ficha que se pinta. */
+  let rivalMotion = null;
   /** Lo que elegiste la última vez, si esta máquina se acuerda (ver `loadout.js`). */
   const saved = readLoadout();
   /**
@@ -375,6 +384,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     // El Axie grande deja de respirar al salir de su pantalla: un clip en bucle sobre
     // un nodo que nadie está viendo es trabajo que el navegador hace para nadie.
     if (which !== 'choose') heroMotion.stop();
+    if (which !== 'adventure') rivalMotion?.stop();
   }
 
   /**
@@ -396,7 +406,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     const base = deckFor(id);
     const deck = deckFor(id, bag);
 
-    el('lobby-choose-title').textContent = 'Elegí tu Axie';
+    el('lobby-choose-title').textContent = tr('Elegí tu Axie');
 
     // El bicho grande. Se redibuja entero al cambiar de Axie —son otras capas— y el
     // reproductor tiene que volver a tomarlas: sin esto queda quieto, con las capas
@@ -406,22 +416,24 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
 
     el('lobby-choose-id').innerHTML = `<b class="choose-name">${a.name}</b>
       <span class="choose-class" style="--c:${sym.color}">${crest(a.class)}${sym.name}</span>
-      <span class="choose-of">${ring.indexOf(id) + 1} de ${ring.length}</span>`;
+      <span class="choose-of">${tr('{current} de {total}', { current: ring.indexOf(id) + 1, total: ring.length })}</span>`;
 
     const boosted = base.filter((c) => bag[c.key]).length;
     el('lobby-choose-deck-label').textContent = boosted
-      ? `Mazo inicial · 10 cartas · ${boosted} mejorada${boosted > 1 ? 's' : ''}`
-      : 'Mazo inicial · 10 cartas · sumale un símbolo con el +';
+      ? (boosted > 1
+          ? tr('Mazo inicial · 10 cartas · {boosted} mejoradas', { boosted })
+          : tr('Mazo inicial · 10 cartas · {boosted} mejorada', { boosted }))
+      : tr('Mazo inicial · 10 cartas · sumale un símbolo con el +');
     el('lobby-choose-deck').innerHTML = base
       .map((c, i) => deckSlotHtml(c, deck[i], a.class, bag[c.key], boostOpen === c.key))
       .join('');
     el('lobby-choose-tally').innerHTML = symbolTally(deck)
       .map(({ symbol, n }) => `<span class="tally" style="--c:${SYMBOLS[symbol].color}"
-        title="${SYMBOLS[symbol].name}: ${n} en el mazo">${crest(symbol)}<b>${n}</b></span>`)
+        title="${tr('{name}: {n} en el mazo', { name: SYMBOLS[symbol].name, n })}">${crest(symbol)}<b>${n}</b></span>`)
       .join('');
 
     // Qué pasa cuando apretás el botón. Es lo único que no se ve mirando la pantalla.
-    el('lobby-choose-note').textContent = 'Con este vas a jugar hasta que lo cambies.';
+    el('lobby-choose-note').textContent = tr('Con este vas a jugar hasta que lo cambies.');
   }
 
   /**
@@ -499,14 +511,14 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     if (!advLevels || !advCard) return;
     const progress = getAdventureProgress();
     const current = getAdventureLevel(selectedAdvLevel);
-    const rivalAxie = AXIES[current.rival];
+    const rivalAxie = axie(current.rival);
     const rivalSym = SYMBOLS[rivalAxie.class];
 
     advLevels.innerHTML = ADVENTURE_LEVELS.map((lvl) => {
       const unlocked = isLevelUnlocked(lvl.id);
       const completed = progress.completedLevels.includes(lvl.id);
       const active = lvl.id === selectedAdvLevel;
-      const statusIcon = completed ? '★' : (unlocked ? `${lvl.id}` : '🔒');
+      const statusIcon = completed ? '★' : (unlocked ? `${lvl.id}` : '<span class="adv-lock" aria-hidden="true"></span>');
       const cls = [
         'adv-level-btn',
         active ? 'active' : '',
@@ -516,40 +528,46 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
 
       return `<button class="${cls}" data-adv-level="${lvl.id}" ${!unlocked ? 'disabled' : ''}>` +
         `<span class="adv-level-num">${statusIcon}</span>` +
-        `<span class="adv-level-name">Nivel ${lvl.id}</span>` +
+        `<span class="adv-level-name">${tr('Nivel {n}', { n: lvl.id })}</span>` +
       `</button>`;
     }).join('');
 
-    const isLevel1 = current.id === 1;
-    const powersToShow = isLevel1 ? [...current.newPowers, 'freegame'] : current.newPowers;
+    const showcase = current.showcase ?? [];
+    const powersToShow = [...(current.newPowers ?? []), ...showcase];
 
+    // La definición de cada poder es su `note`, la misma del `title` de los íconos en
+    // la mesa: una sola redacción para todo el juego.
     const powersHtml = powersToShow.map((pId) => {
       const p = POWERS[pId];
-      if (!p) return '';
-      const isNeutral = pId === 'freegame';
-      const label = isNeutral ? `${p.name} (Comodín Neutral)` : p.name;
-      const note = isNeutral
-        ? 'Carta comodín apilable: no corta la cadena jamás y se monta sobre cualquier carta en mesa para extenderla.'
-        : p.note;
-      return `<div class="adv-power-item" data-power-id="${pId}" role="button" tabindex="0" title="Ver demostración de ${label}">` +
+      const owner = p.symbol ? SYMBOLS[p.symbol].name : tr('Comodín');
+      return `<div class="adv-power-item">` +
         `<div class="adv-power-icon">${powerIcon(pId, 'lg')}</div>` +
         `<div class="adv-power-text">` +
-          `<b>${label} <span class="adv-power-demo-hint">🎬 Demo</span></b>` +
-          `<p>${note}</p>` +
+          `<b>${p.name} <span>· ${owner}</span></b>` +
+          `<p>${p.note[0].toUpperCase()}${p.note.slice(1)}.</p>` +
         `</div>` +
       `</div>`;
     }).join('');
 
     const completed = progress.completedLevels.includes(current.id);
-    const diffLabel = current.difficulty === 'facil' ? 'Fácil' : current.difficulty === 'duro' ? 'Dura' : 'Normal';
-    const sectionTitle = isLevel1
-      ? 'Nuevos poderes y especiales en este nivel (+2 poderes + Free Game)'
-      : 'Nuevos poderes en este nivel (+2)';
+    const diffLabel = DIFFICULTY_LABELS[current.difficulty] ?? current.difficulty;
+    const count = current.newPowers?.length ?? 0;
+    let sectionTitle;
+    if (showcase.length > 0) {
+      const extra = showcase
+        .map((pId) => (pId === 'freegame' ? 'Free Game' : (POWERS[pId]?.name ?? pId)))
+        .join(' + ');
+      sectionTitle = tr('Nuevos poderes y especiales en este nivel (+{count} poderes + {extra})', { count, extra });
+    } else if (count > 0) {
+      sectionTitle = tr('Nuevos poderes en este nivel (+{count})', { count });
+    } else {
+      sectionTitle = tr('Poderes en este nivel');
+    }
 
     advCard.innerHTML = `
       <div class="adv-card-header">
         <div class="adv-card-title-group">
-          <span class="adv-badge ${completed ? 'adv-badge--won' : ''}">${completed ? '★ Nivel Superado' : 'Combate Disponible'}</span>
+          <span class="adv-badge ${completed ? 'adv-badge--won' : ''}">${completed ? tr('★ Nivel Superado') : tr('Combate Disponible')}</span>
           <h2 class="adv-card-title">${current.name}</h2>
           <p class="adv-card-desc">${current.description}</p>
         </div>
@@ -558,28 +576,32 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
       <div class="adv-card-section">
         <h3 class="adv-section-title">${sectionTitle}</h3>
         <div class="adv-powers-grid">${powersHtml}</div>
+        <p class="adv-powers-foot">${tr('«Al pegar» es plantarte con un ataque que haga daño: si te cortás, esos poderes no salen.')}</p>
       </div>
 
       <div class="adv-card-section">
-        <h3 class="adv-section-title">Rival</h3>
+        <h3 class="adv-section-title">${tr('Rival')}</h3>
         <div class="adv-rival-box">
+          <div class="adv-rival-stage" data-arena="${rivalAxie.class}">${axieArt(rivalAxie.id)}</div>
           <div class="adv-rival-info">
-            <span class="adv-rival-crest" style="--c:${rivalSym.color}">${crest(rivalAxie.class, 'sm')}</span>
             <b>${rivalAxie.name}</b>
-            <span class="adv-rival-diff">Dificultad: ${diffLabel}</span>
+            <span class="adv-rival-class" style="--c:${rivalSym.color}">${crest(rivalAxie.class, 'sm')} ${rivalSym.name}</span>
+            <span class="adv-rival-diff">${tr('Dificultad: {diff}', { diff: tr(diffLabel) })}</span>
           </div>
         </div>
       </div>
 
       <div class="adv-card-actions">
-        <button class="btn btn-ghost adv-demo-btn" id="lobby-adventure-demo" type="button" title="Ver demostración de los poderes de este nivel">
-          🎬 Ver demostración de poderes
-        </button>
         <button class="lobby-play choose-go" id="lobby-adventure-play">
-          ${completed ? 'Volver a Jugar' : 'Comenzar Nivel'}
+          ${completed ? tr('Volver a Jugar') : tr('Comenzar Nivel')}
         </button>
       </div>
     `;
+    // El rival vivo: respira y cada tanto hace un gesto, con el mismo reproductor de la
+    // mesa. La ficha se acaba de pintar entera, así que el Axie es otro nodo.
+    rivalMotion?.stop();
+    rivalMotion = createMotion(advCard.querySelector('.adv-rival-stage'), 0, { fidget: RIVAL_FIDGET });
+    rivalMotion.mount(rivalAxie.id);
   }
 
   function playAdventure(lvlId) {
@@ -657,12 +679,14 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   function close() {
     lobby.hidden = true;
     heroMotion.stop();
+    rivalMotion?.stop();
     for (const s of strollers ?? []) s.sleep();
   }
 
   el('lobby-play').addEventListener('click', () => view('menu'));
   el('lobby-loadout').addEventListener('click', toChoose);
   el('lobby-back').addEventListener('click', () => view('front'));
+  el('lobby-menu-close')?.addEventListener('click', () => view('front'));
   el('lobby-choose-back').addEventListener('click', () => (net ? close() : view('front')));
   advBack.addEventListener('click', () => view('menu'));
   adv.addEventListener('click', (e) => {
@@ -670,12 +694,6 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     if (lvlBtn) {
       selectedAdvLevel = Number(lvlBtn.dataset.advLevel);
       paintAdventure();
-      return;
-    }
-    const demoBtn = e.target.closest('#lobby-adventure-demo') || e.target.closest('.adv-power-item');
-    if (demoBtn) {
-      const pId = demoBtn.dataset?.powerId || null;
-      createPowerDemoController({ levelId: selectedAdvLevel, initialPower: pId });
       return;
     }
     const playBtn = e.target.closest('#lobby-adventure-play');
@@ -699,22 +717,41 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     close();
   });
 
+  const diffSelect = el('difficulty');
+  const syncDiffPills = (val) => {
+    menu.querySelectorAll?.('.diff-pill')?.forEach((b) => {
+      b.classList?.toggle('is-active', b.dataset?.diff === val);
+    });
+  };
+  diffSelect?.addEventListener('change', () => syncDiffPills(diffSelect.value));
+
   menu.addEventListener('click', (e) => {
-    const mode = e.target.closest('[data-play]:not([disabled])')?.dataset.play;
-    if (!mode) return;
-    // La sala es otra pantalla: la sirve el mismo servidor y la maneja `net.js`, así
-    // que se entra por la URL igual que entra el que llega del celular.
-    if (mode === 'net') {
-      location.search = '?red';
+    const mode = e.target.closest?.('[data-play]:not([disabled])')?.dataset?.play;
+    if (mode) {
+      // La sala es otra pantalla: la sirve el mismo servidor y la maneja `net.js`, así
+      // que se entra por la URL igual que entra el que llega del celular.
+      if (mode === 'net') {
+        location.search = '?red';
+        return;
+      }
+      if (mode === 'adventure') {
+        toAdventure();
+        return;
+      }
+      // Contra la CPU no falta nada que preguntar: tu Axie ya está elegido y el de la
+      // máquina se sortea, así que el menú es el último botón antes de la partida.
+      play();
       return;
     }
-    if (mode === 'adventure') {
-      toAdventure();
+    const diffPill = e.target.closest?.('.diff-pill');
+    if (diffPill?.dataset?.diff) {
+      const val = diffPill.dataset.diff;
+      if (diffSelect) {
+        diffSelect.value = val;
+        syncDiffPills(val);
+      }
       return;
     }
-    // Contra la CPU no falta nada que preguntar: tu Axie ya está elegido y el de la
-    // máquina se sortea, así que el menú es el último botón antes de la partida.
-    play();
   });
 
   el('lobby-start').addEventListener('click', chooseGo);
@@ -723,7 +760,9 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   // redibujan en cada toque, y un `addEventListener` por botón sería volver a
   // engancharlos diez veces por clic.
   el('lobby-choose-deck').addEventListener('click', (e) => {
-    const data = e.target.closest('[data-boost]')?.dataset;
+    const btn = e.target.closest('[data-boost]');
+    if (btn?.disabled) return;
+    const data = btn?.dataset;
     if (data) boost(data.boost, data.key, data.sym);
   });
 
@@ -769,12 +808,23 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     if (e.target.closest('[data-action="adv-map"]')) open('adventure');
   });
 
+  // Botón de configuración en la portada (arriba a la derecha).
+  // Abre el mismo panel que hay en el juego (#hud-menu), donde vive el sonido y el idioma.
+  const cfgBtn = el('lobby-settings-btn');
+  if (cfgBtn) {
+    cfgBtn.addEventListener('click', (e) => {
+      e.stopPropagation?.();
+      openHud();
+    });
+  }
+
+
   // Jugar en red solo existe si la página la sirvió el servidor del juego: abierta
   // como archivo suelto, o con un servidor estático cualquiera, no hay sala a la que
   // entrar. La opción se prende sola cuando contesta.
   netAvailable().then((info) => {
     if (info) el('lobby-net').disabled = false;
-    else el('lobby-net-note').textContent = 'Hace falta abrir el juego con npm start';
+    else el('lobby-net-note').textContent = tr('Hace falta abrir el juego con npm start');
   });
 
   open();

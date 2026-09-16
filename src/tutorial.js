@@ -1,827 +1,796 @@
-// El tutorial: una partida controlada y guiada paso a paso donde cada carta,
-// acción y decisión está pautada para enseñar todas las mecánicas del juego.
+// El tutorial: una partida guionada que enseña jugando. La mesa muestra lo que pasa, un
+// brillo celeste marca lo que hay que mirar y una flecha, con una burbuja de pocas
+// palabras, marca qué tocar. Sin modales ni pantallas oscuras, y la ayuda llega sola si
+// el jugador se queda quieto. Lineamientos completos en docs/tutorial.md.
 //
-// Reglas del tutorial:
-//  - Las acciones están BLOQUEADAS ('hit', 'stand', 'draft') según lo que el
-//    paso actual requiera. El jugador no puede robar cuando debe atacar ni viceversa.
-//  - Los mazos están guionados por ronda, con cartas de respaldo para evitar desbordes.
-//  - La CPU juega de forma determinística en cada ronda.
-//  - En la ronda 5 la vida de la CPU se calibra para demostrar la Última Chance y la Victoria.
+// Cinco rondas, una idea por ronda: el objetivo, la cadena, el corte (y el centro), el
+// Rocket Stamp que sale del centro, y el Rocket salvando la cadena para el remate.
 
-import { SYMBOLS, crest, makeCard } from './data.js';
+import { makeCard } from './data.js';
+import { hpOf, swingOf } from './game.js';
+import { tr } from './i18n.js';
 
 // ---- Mazos guionados por ronda -----------------------------------------------
-// En game.js `draw(player)` saca con `.pop()` del final del array.
-// Por lo tanto, el último elemento del array es la primera carta en salir.
+// En game.js `draw(player)` saca con `.pop()` del final del array: el último elemento
+// es la primera carta en salir. La rueda de chances mira el mazo propio, así que estos
+// mazos también deciden qué marca la rueda en cada robo.
 
 function createDecks() {
   return {
-    // Ronda 1: Tu primer golpe (2 cartas: Pez + Bestia -> Pez + Pájaro = 5 pts)
+    // Ronda 1 — objetivo, cadena y centro: encadenar dos cartas Pez, atacar y draftear de tu color.
     1: {
       p1: [
-        makeCard(['aquatic', 'plant']),
-        makeCard(['aquatic', 'reptile']),
-        makeCard(['aquatic', 'bug']),
-        makeCard(['bird', 'plant']),
-        makeCard(['aquatic', 'bird']),   // 2ª carta (robar)
-        makeCard(['aquatic', 'beast']),  // 1ª carta (apertura)
+        makeCard(['aquatic', 'bug']),     // 1º robo
+        makeCard(['aquatic', 'beast']),   // apertura
       ],
       p2: [
-        makeCard(['plant', 'bug']),
-        makeCard(['plant', 'reptile']),
-        makeCard(['plant', 'beast']),    // 2ª carta
-        makeCard(['plant', 'bird']),     // 1ª carta (CPU hace 4 pts)
+        makeCard(['plant', 'bug']),       // 1º robo
+        makeCard(['plant', 'beast']),     // apertura
       ],
     },
 
-    // Ronda 2: El riesgo y el bust (Cadena de 3 Pez -> 9 pts -> 4ª carta corta)
+    // Ronda 2 — cadena larga y corte del rival: cuatro cartas que encajan; la CPU se corta.
     2: {
       p1: [
-        makeCard(['beast', 'bird']),
-        makeCard(['bug', 'reptile']),
-        makeCard(['bird', 'plant']),      // 4ª carta (corta la cadena -> BUST!)
-        makeCard(['aquatic', 'reptile']), // 3ª carta (Pez largo 3 = 9 pts)
-        makeCard(['aquatic', 'bug']),     // 2ª carta (Pez largo 2 = 4 pts)
-        makeCard(['aquatic', 'plant']),   // 1ª carta (apertura)
+        makeCard(['aquatic', 'bird']),            // 4ª
+        makeCard(['aquatic', 'bird', 'reptile']), // 3ª
+        makeCard(['aquatic', 'bird']),            // 2ª
+        makeCard(['aquatic', 'bird', 'bug']),     // apertura
       ],
       p2: [
-        makeCard(['plant', 'bug']),
-        makeCard(['plant', 'aquatic']),
-        makeCard(['plant', 'reptile']),   // 2ª carta
-        makeCard(['plant', 'beast']),     // 1ª carta
+        makeCard(['bird', 'bug']),        // 3ª: no encaja con Planta → se corta
+        makeCard(['plant', 'reptile']),   // 2ª
+        makeCard(['plant', 'beast']),     // apertura
       ],
     },
 
-    // Ronda 3: El draft de poderes (Cadena segura de 2 -> stand -> draft Maceta)
+    // Ronda 3 — corte propio: racha de 3 cartas, la 4ª no coincide y corta (you busted).
     3: {
       p1: [
-        makeCard(['aquatic', 'reptile']),
-        makeCard(['beast', 'bird']),
-        makeCard(['aquatic', 'bird']),    // 2ª carta
-        makeCard(['aquatic', 'plant']),   // 1ª carta
+        makeCard(['bug', 'reptile']),     // 4ª: corta, sin 'aquatic'
+        makeCard(['aquatic', 'beast']),   // 3ª
+        makeCard(['aquatic', 'bird']),    // 2ª
+        makeCard(['aquatic', 'plant']),   // apertura
       ],
       p2: [
-        makeCard(['plant', 'bug']),
-        makeCard(['plant', 'reptile']),
-        makeCard(['plant', 'bird']),      // 2ª carta
-        makeCard(['plant', 'beast']),     // 1ª carta
+        makeCard(['plant', 'bug']),       // 2ª
+        makeCard(['plant', 'reptile']),   // apertura
       ],
     },
 
-    // Ronda 4: Los poderes en acción (Sale la Maceta y cadena de 7 cartas = 75 pts)
+    // Ronda 4 — práctica y Rocket Stamp: pega fuerte y se lleva el Rocket Stamp del centro.
     4: {
       p1: [
-        makeCard(['aquatic', 'plant']),                   // Respaldo
-        makeCard(['beast', 'bird']),                      // Respaldo
-        makeCard(['aquatic', 'beast']),                   // 7ª carta (Pez largo 7 = 49 pts)
-        makeCard(['aquatic', 'bird']),                    // 6ª carta (Planta cierra en 5 = 25 pts)
-        makeCard(['aquatic', 'plant']),                   // 5ª carta (Pez y Planta largo 5)
-        makeCard(['aquatic', 'plant']),                   // 4ª carta (Pez y Planta largo 4)
-        makeCard(['aquatic', 'plant', 'reptile'], 'pot'), // 3ª carta (¡Maceta! Pez y Planta largo 3)
-        makeCard(['aquatic', 'plant']),                   // 2ª carta (Bicho cierra en 1 = 1 pt)
-        makeCard(['aquatic', 'plant', 'bug']),            // 1ª carta (apertura: Pez + Planta + Bicho)
+        makeCard(['aquatic', 'bird']),            // 5ª
+        makeCard(['aquatic', 'bird']),            // 4ª
+        makeCard(['aquatic', 'bird']),            // 3ª
+        makeCard(['aquatic', 'bird']),            // 2ª
+        makeCard(['aquatic', 'bird', 'plant']),   // apertura
       ],
       p2: [
-        makeCard(['plant', 'bug']),
-        makeCard(['plant', 'aquatic']),
-        makeCard(['plant', 'reptile']),   // 2ª carta
-        makeCard(['plant', 'bird']),      // 1ª carta
+        makeCard(['plant', 'bird']),      // 2ª
+        makeCard(['plant', 'reptile']),   // apertura
       ],
     },
 
-    // Ronda 5: Remate, Última Chance y Victoria (Cadena de 4 = 16 pts -> CPU a 0)
+    // Ronda 5 — Rocket en 3ª carta, revivir Planta y Last Chance:
+    // El Rocket sale 3º; la 4ª carta robada tiene Planta y se coloca en la 2ª carta para revivir
+    // la racha de Planta. El golpe deja al rival en 0 de vida (Last Chance); el rival se corta.
     5: {
       p1: [
-        makeCard(['aquatic', 'plant']),
-        makeCard(['aquatic', 'beast']),   // 4ª carta (Pez largo 4 = 16 pts)
-        makeCard(['aquatic', 'bug']),     // 3ª carta (Pez largo 3)
-        makeCard(['aquatic', 'bird']),    // 2ª carta (Pez largo 2)
-        makeCard(['aquatic', 'reptile']), // 1ª carta (apertura)
+        makeCard(['plant', 'beast']),                 // 4ª: se apila en la 2ª carta
+        makeCard(['aquatic', 'plant'], 'freegame'),   // 3ª: el Rocket Stamp
+        makeCard(['aquatic', 'bug']),                 // 2ª: mata la racha de planta al no tenerla
+        makeCard(['aquatic', 'plant']),               // apertura
       ],
       p2: [
-        makeCard(['plant', 'bug']),
-        makeCard(['bird', 'beast']),      // 3ª carta (CPU se corta en Última Chance!)
-        makeCard(['plant', 'reptile']),   // 2ª carta
-        makeCard(['plant', 'beast']),     // 1ª carta
+        makeCard(['bird', 'bug']),        // 3ª: se corta en su última chance
+        makeCard(['plant', 'reptile']),   // 2ª
+        makeCard(['plant', 'beast']),     // apertura
       ],
     },
   };
 }
 
-let potCardRef = null;
+/** Con cuántas cartas ataca la CPU en cada ronda. Sin tope, roba hasta cortarse. */
+const BOT_STAND_AT = { 1: 2, 2: Infinity, 3: 2, 4: 2, 5: Infinity };
+
+/** Las rondas en que se abre el centro: la del color (1) y la del Rocket (4). */
+const DRAFT_ROUNDS = new Set([1, 4]);
+
 function buildTutorialPool() {
-  potCardRef = makeCard(['aquatic', 'plant', 'reptile'], 'pot');
-  const marketCards = [
+  const plain = (list) => list.map((syms) => makeCard(syms));
+  // `refillMarket` saca del final: las seis últimas son el centro que se ve primero.
+  // Dos cartas de tu color, tres ajenas y el Rocket, que espera hasta la ronda 4.
+  const reserve = plain([
+    ['beast', 'plant'], ['aquatic', 'bug'], ['bird', 'bug'], ['aquatic', 'plant'],
+    ['beast', 'reptile'], ['bug', 'reptile'], ['aquatic', 'bird'], ['plant', 'bird'],
+  ]);
+  const market = [
     makeCard(['beast', 'bird']),
     makeCard(['aquatic', 'reptile']),
-    makeCard(['bird', 'plant']),
-    potCardRef, // Maceta en el market
-    makeCard(['bug', 'reptile']),
     makeCard(['plant', 'bug']),
+    makeCard(['aquatic', 'bird'], 'freegame'),
+    makeCard(['bird', 'reptile']),
+    makeCard(['aquatic', 'beast']),
   ];
-  const reserveCards = [
-    makeCard(['beast', 'aquatic', 'bird'], 'egg'),
-    makeCard(['aquatic', 'bug', 'reptile'], 'poison'),
-    makeCard(['beast', 'aquatic', 'plant'], 'strength'),
-    makeCard(['aquatic', 'bird', 'plant']),
-    makeCard(['beast', 'reptile']),
-    makeCard(['aquatic', 'plant']),
-    makeCard(['bird', 'bug']),
-    makeCard(['beast', 'plant']),
-  ];
-  // refillMarket() saca con .pop() del final, así que la reserva va al inicio
-  // y las 6 cartas del mercado inicial van al final para salir de inmediato.
-  return [...reserveCards, ...marketCards];
+  return [...reserve, ...market];
 }
 
-// ---- Pasos del tutorial ------------------------------------------------------
-// Cada paso define:
-//   id: identificador único
-//   allowedAction: 'hit' | 'stand' | 'draft' | 'none' | 'any'
-//   allowedCard: uid o 'pot' para restringir la elección del market
-//   highlight: selector CSS a resaltar
-//   message: texto HTML explicativo
-//   ctaText: texto del botón de avance si requiere clic (por defecto 'Dale →')
-//   isActionStep: true si el paso avanza al realizar la acción en el tablero
-//   advanceTrigger: función (state, prev) => boolean que avanza al siguiente paso
+// ---- Pasos -------------------------------------------------------------------
+// Cada paso:
+//   id, round
+//   allowed: la única acción habilitada ('hit' | 'stand' | 'any' | 'none')
+//   draft: reglas del centro mientras dura ({ plainOnly } o { power: 'freegame' })
+//   target(state): selector de lo que señala la flecha, o null para no señalar nada
+//   glow(state): selector de lo que brilla en celeste (lo que hay que mirar)
+//   bubble: texto de la burbuja (≤ 6 palabras; opcional)
+//   delay: ms sin actuar antes de que aparezca la flecha (por defecto HINT_DELAY)
+//   now: la burbuja sale junto con la flecha en vez de esperar BUBBLE_AFTER
+//   done(state): cuándo se pasa al siguiente paso
 
-// Lo que se resalta y se pide una y otra vez a lo largo de los pasos.
-const TUTO_HIT = '#controls [data-action="hit"]';
-const TUTO_CHAIN = '#swing, #field .sym[data-on="true"], #field .runs .run';
-const TUTO_DRAW = 'Apretá <b>"Robar carta"</b>.';
-/** Antes de atacar se resalta el botón y la cadena; ya atacado, el rival que recibe. */
-const tutoStand = (s) => (s.roundScores?.p1 !== null
-  ? '#axie-p2'
-  : `#controls [data-action="stand"], ${TUTO_CHAIN}`);
-/** Qué decir en un reparto: la indicación mientras se elige, y después esperar a la CPU. */
-const tutoWait = (text) => (s) => (s.phase !== 'draft' ? 'Esperá a que la CPU termine su turno.' : text);
+const HINT_DELAY = 3000;
+const BUBBLE_AFTER = 4000;
+
+const HIT = '#controls [data-action="hit"]';
+const STAND = '#controls [data-action="stand"]';
+// El centro no exige tu color: se recomienda. Brillan las que lo llevan (el Pez de Marea).
+const MARKET_COLOR = '#market .market-card[data-syms~="aquatic"]:not([disabled])';
+const MARKET_ROCKET = '#market [data-power="freegame"]';
+const cardsOf = (s) => s.chains?.p1?.cards.length ?? 0;
+const attacked = (s) => s.roundScores?.p1 != null;
+const busted = (s) => Boolean(s.chains?.p1?.busted);
+const myTurn = (s, round) => s.round === round && s.turn === 'p1' && s.phase === 'turn';
+const picking = (s) => s.phase === 'draft' && s.draft?.order?.[s.draft.index] === 'p1';
+const isRocket = (c) => (c.powers ?? [c.power]).includes('freegame');
+const rocketCol = (s) => s.chains?.p1?.cards.findIndex(isRocket) ?? -1;
+const lethal = (s) => swingOf(s, 'p1') >= hpOf(s, 'p2');
 
 function createSteps() {
   return [
-    // ── Ronda 1: Tu primer golpe ──────────────────────────────────────────
+    // ── Ronda 1: objetivo, cadena y centro ─────────────────────────────
     {
-      id: 'r1-intro',
+      id: 'r1-draw',
       round: 1,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #field .card, #field .sym[data-on="true"]',
-      title: 'Tu primera carta',
-      desc: 'Esta es tu carta inicial. Los símbolos que aparecen acá abren tus <b>cadenas de puntos</b>.',
-      action: 'Apretá <b>"Robar carta"</b> para sacar la siguiente del mazo.',
-      advanceTrigger: (s) => s.round === 1 && s.chains.p1.cards.length >= 2,
+      allowed: 'hit',
+      target: () => '#field .card[data-col="0"]',
+      side: 'left',
+      glow: () => '#field .card[data-col="0"]',
+      bubble: tr('Cadenas vivas'),
+      delay: 0,
+      now: true,
+      done: (s) => cardsOf(s) >= 2,
     },
     {
-      id: 'r1-card2',
+      id: 'r1-chain',
       round: 1,
-      type: 'coach',
-      allowedAction: 'stand',
-      highlight: tutoStand,
-      title: '¡La cadena continúa!',
-      desc: `Tu cadena de ${crest('aquatic', 'sm')} Pez sigue viva (largo <b>2</b> = 4 pts). ` +
-        `La de ${crest('beast', 'sm')} Bestia se cerró (1 pt). Daño total: <b>5</b>.`,
-      action: (s) => s.roundScores?.p1 !== null
-        ? '¡Atacando! Mirá el impacto...'
-        : 'Apretá <b>"Atacar"</b> para plantarte y golpear al rival.',
-      advanceTrigger: (s) => s.round === 1 && s.phase === 'draft',
+      allowed: 'stand',
+      target: () => '#swing',
+      side: 'left',
+      glow: () => '#swing',
+      bubble: tr('Cadenas largas hacen más daño'),
+      delay: 300,
+      now: true,
+      done: attacked,
     },
     {
-      id: 'r1-damage-expl',
+      id: 'r1-color',
       round: 1,
-      type: 'modal',
-      allowedAction: 'none',
-      highlight: '#swing, #field .sym[data-on="true"], #field .runs .run',
-      title: '¡Golpe conectado! 💥',
-      message: (s) => `<b>¡Golpe conectado! 💥</b><br><br>` +
-        `Hiciste <b>${s.roundScores.p1 ?? 5}</b> de daño a tu rival.<br><br>` +
-        `Los puntos se calculan como <b>largo al cuadrado (L²)</b>:<br>` +
-        `• Pez (largo 2): 2² = <b>4 puntos</b><br>` +
-        `• Bestia (largo 1): 1² = <b>1 punto</b><br>` +
-        `Total: <b>5 de daño</b>.<br><br>` +
-        `¡Cuanto más larga sea la cadena, mucho más daño hacés!`,
-      ctaText: 'Entendido →',
-      advanceTrigger: () => true,
-    },
-    {
-      id: 'r1-draft',
-      round: 1,
-      type: 'coach',
-      allowedAction: 'draft',
-      highlight: '#market .market-row',
-      title: 'El Centro (Draft)',
-      desc: (s) => s.phase !== 'draft'
-        ? 'Carta agregada a tu mazo. Ahora la CPU juega su turno...'
-        : 'Después de atacar, podés elegir cartas del Centro para sumar a tu mazo en las próximas rondas.',
-      action: tutoWait('Elegí cualquier carta <b>sin poder</b> para sumarla a tu mazo.'),
-      advanceTrigger: (s) => s.round === 2 && s.turn === 'p1' && s.phase === 'turn',
+      allowed: 'none',
+      draft: { plainOnly: true },
+      target: (s) => (picking(s) ? MARKET_COLOR : null),
+      side: 'top',
+      glow: (s) => (picking(s) ? MARKET_COLOR : null),
+      bubble: tr('Buscá tu color'),
+      delay: 500,
+      now: true,
+      done: (s) => myTurn(s, 2),
     },
 
-    // ── Ronda 2: El riesgo y el corte (Bust) ──────────────────────────────
+    // ── Ronda 2: racha larga y corte del rival ─────────────────────────
     {
-      id: 'r2-start',
+      id: 'r2-draw',
       round: 2,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"]',
-      title: 'Ronda 2 — La ambición y el riesgo',
-      desc: 'Tu mazo se rebarajó completo. Vamos a armar una cadena más larga para multiplicar los puntos.',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 2 && s.chains.p1.cards.length >= 2,
+      allowed: 'hit',
+      target: () => HIT,
+      done: (s) => cardsOf(s) >= 4,
     },
     {
-      id: 'r2-card2',
+      id: 'r2-attack',
       round: 2,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
-      title: 'Cadena viva',
-      desc: 'Pez sigue vivo con largo 2 (4 puntos). Sigamos arriesgando para sumar más.',
-      action: 'Apretá <b>"Robar carta"</b> otra vez.',
-      advanceTrigger: (s) => s.round === 2 && s.chains.p1.cards.length >= 3,
+      allowed: 'stand',
+      target: () => STAND,
+      done: attacked,
     },
     {
-      id: 'r2-card3',
+      id: 'r2-rival-bust',
       round: 2,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #odds, #swing, #field .sym[data-on="true"], #field .runs .run',
-      title: '¡Cadena de 3! 🎉',
-      desc: 'Pez ahora vale <b>3² = 9 puntos</b>. Pero mirá el <b>dial de odds</b>: las chances de sobrevivir bajaron mucho.',
-      action: (s) => s.chains?.p1?.busted
-        ? '¡Se cortó la cadena! Mirá lo que pasa...'
-        : 'Robá una carta más para ver qué pasa cuando se corta.',
-      advanceTrigger: (s) => s.round === 2 && s.chains.p1.busted && s.phase === 'draft',
-    },
-    {
-      id: 'r2-busted',
-      round: 2,
-      type: 'modal',
-      allowedAction: 'none',
-      highlight: null,
-      title: '¡Se cortó la cadena! 💥',
-      message: `<b>¡Se cortó la cadena! 💥</b><br><br>` +
-        `Ningún símbolo de esta carta coincidía con los que seguían vivos.<br><br>` +
-        `Tu ataque vale <b>0 de daño</b> y perdiste todo el puntaje de esta ronda.<br><br>` +
-        `Saber cuándo plantarte es la decisión más importante del juego.`,
-      ctaText: 'Continuar →',
-      advanceTrigger: () => true,
-    },
-    {
-      id: 'r2-draft',
-      round: 2,
-      type: 'coach',
-      allowedAction: 'draft',
-      highlight: '#market .market-row',
-      title: 'Penalización por corte',
-      desc: (s) => s.phase !== 'draft'
-        ? 'Carta agregada. La CPU juega su turno...'
-        : 'Al cortarse la cadena, el centro te penaliza: solo podés llevarte <b>1 carta sin poder</b>.',
-      action: tutoWait('Elegí una carta del centro.'),
-      advanceTrigger: (s) => s.round === 3 && s.turn === 'p1' && s.phase === 'turn',
+      allowed: 'none',
+      target: (s) => (s.chains?.p2?.busted ? '#field .card--bust' : null),
+      bubble: tr('¡Cadena rota! No comparte símbolos'),
+      delay: 0,
+      now: true,
+      done: (s) => myTurn(s, 3),
     },
 
-    // ── Ronda 3: El draft de poderes ──────────────────────────────────────
+    // ── Ronda 3: corte propio (3 cartas y la 4ª no coincide) ───────────
     {
-      id: 'r3-start',
+      id: 'r3-draw',
       round: 3,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"]',
-      title: 'Ronda 3 — Cartas con Poder',
-      desc: 'Armá una cadena segura de 2 cartas y asegurá el ataque.',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 3 && s.chains.p1.cards.length >= 2,
+      allowed: 'hit',
+      target: () => HIT,
+      done: (s) => cardsOf(s) >= 3,
     },
     {
-      id: 'r3-stand',
+      id: 'r3-odds',
       round: 3,
-      type: 'coach',
-      allowedAction: 'stand',
-      highlight: tutoStand,
-      title: 'Asegurar el ataque',
-      desc: 'Tenés 5 puntos seguros. Plantate con éxito para desbloquear el draft de poderes.',
-      action: (s) => s.roundScores?.p1 !== null
-        ? '¡Atacando! Mirá el impacto...'
-        : 'Apretá <b>"Atacar"</b>.',
-      advanceTrigger: (s) => s.round === 3 && s.phase === 'draft',
+      allowed: 'hit',
+      target: () => '#odds',
+      side: 'top',
+      glow: () => '#odds',
+      bubble: tr('Chances de seguir la cadena'),
+      delay: 300,
+      now: true,
+      done: busted,
     },
     {
-      id: 'r3-draft-pot',
+      id: 'r3-bust',
       round: 3,
-      type: 'coach',
-      allowedAction: 'draft',
-      allowedCard: 'pot',
-      highlight: '#market [data-power="pot"]',
-      title: '¡Cartas con Poder! 🔮',
-      desc: (s) => s.phase !== 'draft'
-        ? '¡Maceta conseguida! La CPU juega su turno...'
-        : 'Como te plantaste bien, podés elegir <b>1 carta con poder</b>. ' +
-          'Mirá la <b>Maceta 🌱</b>: te cura exactamente lo mismo que pegás.',
-      action: tutoWait('Hacé click en la carta de la <b>Maceta 🌱</b> en el centro.'),
-      advanceTrigger: (s) => s.round === 4 && s.turn === 'p1' && s.phase === 'turn',
+      allowed: 'none',
+      target: (s) => (s.chains?.p1?.busted ? '#field .card--bust' : null),
+      bubble: tr('¡Cadena rota! No comparte símbolos'),
+      delay: 0,
+      now: true,
+      done: (s) => myTurn(s, 4),
     },
 
-    // ── Ronda 4: Los poderes en acción ────────────────────────────────────
+    // ── Ronda 4: práctica y agarrar el Rocket Stamp ───────────────────
     {
-      id: 'r4-start',
+      id: 'r4-chain',
       round: 4,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"]',
-      title: 'Ronda 4 — Activando el poder',
-      desc: 'La Maceta ya está en tu mazo. Vamos a buscarla y a armar una súper cadena.',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 2,
+      allowed: 'hit',
+      target: () => HIT,
+      done: (s) => cardsOf(s) >= 5,
     },
     {
-      id: 'r4-card2',
+      id: 'r4-attack',
       round: 4,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"]',
-      title: 'Buscando la Maceta',
-      desc: 'Todavía no salió. Robá otra carta del mazo.',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.some((c) => c.power === 'pot'),
+      allowed: 'stand',
+      target: () => STAND,
+      done: attacked,
     },
     {
-      id: 'r4-pot-drawn',
+      id: 'r4-rocket',
       round: 4,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #field [data-power="pot"]',
-      title: '¡Salió la Maceta! 🌱',
-      desc: 'Mirá el icono de la maceta abajo de la carta. Al atacar con éxito, ' +
-        '<b>te vas a curar todo el daño que hagas</b>. ¡Sigamos robando para armar un golpe demoledor!',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 4,
-    },
-    {
-      id: 'r4-card4',
-      round: 4,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
-      title: 'Cadena doble en alza ⚡',
-      desc: `Tanto ${crest('aquatic', 'sm')} Pez como ${crest('plant', 'sm')} Planta siguen vivos (largo 4 cada uno). ` +
-        `¡El daño escala a toda velocidad!`,
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 5,
-    },
-    {
-      id: 'r4-card5',
-      round: 4,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
-      title: '¡5 cartas seguidas! 🔥',
-      desc: 'Largo 5 en Pez y Planta (25 + 25 = 50 puntos). ¡El combo ya es gigante, sigamos!',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 6,
-    },
-    {
-      id: 'r4-card6',
-      round: 4,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
-      title: '¡6 cartas! Pez imparable 🌊',
-      desc: `Planta cerró en 25 pts, pero ${crest('aquatic', 'sm')} Pez sigue con largo 6 (36 pts). ` +
-        `¡Robá una carta más para alcanzar el daño colosal!`,
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 4 && s.chains.p1.cards.length >= 7,
-    },
-    {
-      id: 'r4-strike',
-      round: 4,
-      type: 'coach',
-      allowedAction: 'stand',
-      highlight: (s) => s.roundScores?.p1 !== null
-        ? '#axie-p1'
-        : '#controls [data-action="stand"], #swing, #field [data-power="pot"], #field .sym[data-on="true"], #field .runs .run',
-      title: '¡Cadena colosal de 7 cartas! 💥',
-      desc: 'Pez (largo 7 = 49) + Planta (largo 5 = 25) + Bicho (1) = <b>¡75 de daño!</b> ' +
-        'Vas a dejar al rival con solo <b>15 HP</b> y la Maceta te restaurará toda la vida.',
-      action: (s) => s.roundScores?.p1 !== null
-        ? '¡Ataque colosal y curación! Mirá el impacto...'
-        : 'Apretá <b>"Atacar"</b> para conectar el golpe y curarte.',
-      advanceTrigger: (s) => s.round === 4 && s.phase === 'draft',
-    },
-    {
-      id: 'r4-healed',
-      round: 4,
-      type: 'modal',
-      allowedAction: 'none',
-      highlight: null,
-      title: '¡Poder activado y daño demoledor! ✨💥',
-      message: (s) => `<b>¡Poder activado y daño demoledor! ✨💥</b><br><br>` +
-        `Pegaste <b>${s.roundScores.p1 ?? 75} de daño</b> y la <b>Maceta 🌱</b> recuperó tu vida al máximo.<br><br>` +
-        `Tu rival quedó tambaleando con solo <b>15 HP</b>.<br><br>` +
-        `Las cadenas largas combinadas con poderes especiales pueden dar vuelta y definir cualquier partida.`,
-      ctaText: 'Continuar →',
-      advanceTrigger: () => true,
-    },
-    {
-      id: 'r4-draft',
-      round: 4,
-      type: 'coach',
-      allowedAction: 'draft',
-      highlight: '#market .market-row',
-      title: 'Draft del Centro',
-      desc: (s) => s.phase !== 'draft'
-        ? 'Carta agregada. La CPU juega su turno...'
-        : 'Elegí cualquier carta disponible del centro para sumar a tu mazo.',
-      action: tutoWait('Elegí una carta del centro.'),
-      advanceTrigger: (s) => s.round === 5 && s.turn === 'p1' && s.phase === 'turn',
+      allowed: 'none',
+      draft: { power: 'freegame' },
+      target: (s) => (picking(s) ? MARKET_ROCKET : null),
+      side: 'top',
+      glow: (s) => (picking(s) ? MARKET_ROCKET : null),
+      bubble: tr('Llevate el cohete'),
+      delay: 500,
+      now: true,
+      done: (s) => myTurn(s, 5),
     },
 
-    // ── Ronda 5: Remate, Última Chance y Victoria ─────────────────────────
+    // ── Ronda 5: Rocket Stamp en 3ª carta, revivir Planta y Last Chance ─
     {
-      id: 'r5-start',
+      id: 'r5-draw-2',
       round: 5,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: '#controls [data-action="hit"], #plate-p2 .plate-hp',
-      title: 'Ronda 5 — ¡El remate final!',
-      desc: 'A tu rival le quedan solo <b>15 HP</b>. Con una cadena de 4 cartas (4² = <b>16 de daño</b>), ¡lo dejamos en 0!',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 5 && s.chains.p1.cards.length >= 2,
+      allowed: 'hit',
+      target: () => HIT,
+      done: (s) => cardsOf(s) >= 2,
     },
     {
-      id: 'r5-card2',
+      id: 'r5-draw-rocket',
       round: 5,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
-      title: 'Cadena de 2',
-      desc: 'Pez largo 2 (4 puntos). Seguí robando para alcanzar 16.',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 5 && s.chains.p1.cards.length >= 3,
+      allowed: 'hit',
+      target: () => HIT,
+      done: (s) => rocketCol(s) >= 0,
     },
     {
-      id: 'r5-card3',
+      id: 'r5-rocket-auto',
       round: 5,
-      type: 'coach',
-      allowedAction: 'hit',
-      highlight: `${TUTO_HIT}, ${TUTO_CHAIN}`,
-      title: 'Cadena de 3',
-      desc: 'Pez largo 3 (9 puntos). ¡Una carta más para alcanzar 16!',
-      action: TUTO_DRAW,
-      advanceTrigger: (s) => s.round === 5 && s.chains.p1.cards.length >= 4,
+      allowed: 'hit',
+      target: (s) => (rocketCol(s) >= 0 ? `#field .card[data-col="${rocketCol(s)}"]` : null),
+      glow: (s) => (rocketCol(s) >= 0 ? `#field .card[data-col="${rocketCol(s)}"]` : null),
+      delay: 0,
+      done: (s) => s.pendingStack?.player === 'p1',
     },
     {
-      id: 'r5-card4',
+      id: 'r5-stack',
       round: 5,
-      type: 'coach',
-      allowedAction: 'stand',
-      highlight: tutoStand,
-      title: '¡Cadena de 4! 🎯',
-      desc: '4² = <b>16 de daño</b>. Es suficiente para dejar a la CPU en 0 de vida.',
-      action: (s) => s.roundScores?.p1 !== null
-        ? '¡Ataque final! Mirá el impacto...'
-        : 'Apretá <b>"Atacar"</b>.',
-      advanceTrigger: (s) => s.round === 5 && Boolean(s.tutorialLastChanceReady),
+      allowed: 'none',
+      col: 1, // solo sobre la 2ª carta (colIndex 1) para revivir la planta
+      target: () => '#field [data-stack-col="1"]',
+      side: 'bottom',
+      glow: () => '#field [data-stack-col="1"]',
+      bubble: tr('Montala en la 2ª carta'),
+      delay: 400,
+      now: true,
+      done: (s) => !s.pendingStack,
     },
     {
-      id: 'r5-last-chance-expl',
+      id: 'r5-finish',
       round: 5,
-      type: 'modal',
-      allowedAction: 'none',
-      highlight: null,
-      title: '¡Rival en 0 de vida! Pero atención... ⏳',
-      message: `<b>¡Rival en 0 de vida! Pero atención... ⏳</b><br><br>` +
-        `Como la CPU juega segunda en el intercambio, tiene su <b>Última Chance</b>.<br>` +
-        `Si en este turno te deja en 0 a vos también, empatan. Si falla, ¡ganás!<br><br>` +
-        `Mirá su último intento...`,
-      ctaText: 'Ver Última Chance →',
-      advanceTrigger: () => true,
+      allowed: 'stand',
+      target: () => STAND,
+      glow: () => '#swing',
+      bubble: tr('¡Rematalo!'),
+      delay: 800,
+      now: true,
+      done: attacked,
     },
     {
-      id: 'r5-victory',
+      id: 'r5-rival-last-chance',
       round: 5,
-      type: 'modal',
-      allowedAction: 'none',
-      highlight: null,
-      title: '¡Victoria! 🎉🏆',
-      message: `<b>¡Victoria! 🎉🏆</b><br><br>` +
-        `¡Completaste con éxito el tutorial de Axie Chance!<br><br>` +
-        `Ya dominás los pilares del juego:<br>` +
-        `✅ Cadenas de símbolos y fórmula L²<br>` +
-        `✅ El dial de odds y el riesgo de corte<br>` +
-        `✅ El draft del Centro y deck building<br>` +
-        `✅ Los poderes especiales<br>` +
-        `✅ La Última Chance<br><br>` +
-        `¡Todo listo para jugar de verdad!`,
-      ctaText: 'Ir al Menú Principal 🎮',
-      advanceTrigger: () => true,
+      allowed: 'none',
+      target: () => '#plate-p2 .plate-hp',
+      glow: () => '#plate-p2 .plate-hp',
+      delay: 0,
+      done: (s) => s.phase === 'matchEnd',
+    },
+    {
+      id: 'r5-end',
+      round: 5,
+      allowed: 'none',
+      target: () => null,
+      done: () => false,
     },
   ];
 }
 
-// ---- Overlay del tutorial ----------------------------------------------------
+// ---- La flecha, la burbuja y el brillo ----------------------------------------
 
-/** Un texto de un paso: fijo, o calculado del estado. */
-const stepText = (value, state) => (typeof value === 'function' ? value(state) : (value || ''));
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-export function createOverlay() {
-  let el = document.getElementById('tutorial-overlay');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'tutorial-overlay';
-    el.className = 'tuto-overlay';
-    document.body.appendChild(el);
+/**
+ * La barra con la configuración y la salida, el menú si está abierto, las dos vidas, los
+ * dos instrumentos (daño y rueda) y los carteles. Son lecturas, no cosas que se agarren:
+ * la flecha y la burbuja no las tapan. En una pantalla angosta
+ * siempre se pisa algo; que sea una carta del centro, no un cartel.
+ */
+const ALWAYS_CLEAR = '.topbar, #hud-menu:not([hidden]), #plate-p1, #plate-p2, .gauge, '
+  + '.overlay-head, .o-banner';
+
+/**
+ * Y lo que prefieren no tapar: la mesa que el jugador está leyendo. De las cartas cuentan
+ * los símbolos y el poder, no la madera de alrededor: una flecha sobre el borde vacío de
+ * una carta no esconde nada, sobre un símbolo sí.
+ */
+const KEEP_CLEAR = '#axie-p1, #axie-p2, #controls .btn, .overlay-actions .btn, '
+  + '#field .card .sym, #field .card .card-power, #market .sym, #market .card-power, '
+  + '.overlay-title, .overlay-note';
+
+/** La madera de las cartas: se puede pisar, pero antes se prefiere el fondo. */
+const CARD_BODIES = '#field .card, #market .market-card';
+
+/** Cuántas cosas señala un paso a la vez (una flecha por cada una). */
+const MAX_ARROWS = 6;
+
+/**
+ * La capa del tutorial: flecha del kit de Origins y burbuja que nunca se superpone al
+ * objetivo. La mesa no se apaga: lo que hay que mirar brilla (`glow`) y lo que se puede
+ * tocar late (`.tuto-allowed`).
+ */
+export function createOverlay({ onQuit = null } = {}) {
+  const root = document.createElement('div');
+  root.id = 'tutorial-overlay';
+  root.className = 'tuto-overlay';
+  root.innerHTML = `
+    <div class="tuto-bubble o-panel" role="status" hidden></div>`;
+  document.body.appendChild(root);
+
+  document.querySelector?.('.topbar')?.classList.add('tuto-topbar');
+
+  const bubble = root.querySelector?.('.tuto-bubble');
+
+  // La salida va en la barra de arriba, al lado del menú: siempre visible y cliqueable.
+  const quit = document.createElement('button');
+  quit.className = 'btn tuto-quit';
+  quit.type = 'button';
+  quit.title = tr('Salir del tutorial');
+  quit.textContent = tr('Salir ✕');
+  quit.onclick = (e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    onQuit?.();
+  };
+  quit.onpointerdown = (e) => {
+    e?.stopPropagation?.();
+  };
+  const bar = document.querySelector?.('.topbar-actions');
+  if (bar?.prepend) bar.prepend(quit);
+  else root.appendChild?.(quit);
+
+  const SIDES = { bottom: 0, top: 1, right: 2, left: 3 };
+  const arrows = []; // una por cosa señalada; se crean a medida que hacen falta
+  let target = null;
+  let label = '';
+  let fixedSide = null;
+  let showing = false; // ya pasó la espera y las flechas están afuera
+  let shine = null;
+  let timers = [];
+  let frame = 0;
+  let placedFor = ''; // lo que midió la última ubicación (ver `place`)
+
+  const stopTimers = () => { timers.forEach(clearTimeout); timers = []; };
+
+  const arrowAt = (i) => {
+    while (arrows.length <= i) {
+      const el = document.createElement('div');
+      el.className = 'tuto-arrow';
+      el.hidden = true;
+      el.innerHTML = '<i></i>';
+      root.insertBefore?.(el, bubble) ?? root.appendChild(el);
+      arrows.push(el);
+    }
+    return arrows[i];
+  };
+  const hideArrows = () => { for (const el of arrows) el.hidden = true; };
+
+  /** Cuánto pisa la caja `a` al rectángulo `b` (área). */
+  const overlap = (a, b) => Math.max(0, Math.min(a.x + a.w, b.right) - Math.max(a.x, b.left))
+    * Math.max(0, Math.min(a.y + a.h, b.bottom) - Math.max(a.y, b.top));
+
+  /**
+   * Dónde van las flechas (una por objetivo) y la burbuja. Cada lugar posible tiene un
+   * costo: tapar un objetivo lo descalifica, tapar un cartel pesa ocho veces lo que tapar
+   * un símbolo, y la madera de una carta casi no cuenta. Gana el más barato.
+   */
+  function layout(rects, size, bw, bh, vw, vh, preferredSide) {
+    const g = 6;
+    const same = (a, b) => Math.abs(a.left - b.left) < 4 && Math.abs(a.top - b.top) < 4
+      && Math.abs(a.width - b.width) < 4 && Math.abs(a.height - b.height) < 4;
+
+    const obstacles = [];
+    const collect = (selector, weight) => {
+      for (const ob of document.querySelectorAll?.(selector) ?? []) {
+        const rect = ob?.getBoundingClientRect?.();
+        if (!rect || (rect.width === 0 && rect.height === 0)) continue;
+        if (rects.some((r) => same(rect, r))) continue;
+        obstacles.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, weight });
+      }
+    };
+    collect(CARD_BODIES, 0.4);
+    collect(KEEP_CLEAR, 1);
+    collect(ALWAYS_CLEAR, 8);
+
+    const boxCost = (box) => {
+      let cost = 0;
+      for (const r of rects) {
+        // Rozar el borde por medio píxel de redondeo no es taparlo.
+        const o = overlap(box, r);
+        if (o > 60) cost += 1_000_000 + o * 100;
+      }
+      for (const ob of obstacles) {
+        const o = overlap(box, ob);
+        if (o > 0) cost += (1000 + o * 10) * ob.weight;
+      }
+      return cost;
+    };
+
+    // Las flechas: pegadas al objetivo, del lado que menos tape. Se salen de la pantalla
+    // solo corriéndose a lo largo del borde, nunca alejándose del objetivo.
+    const arrowFor = (r, side) => {
+      const cx = r.left + r.width / 2 - size / 2;
+      const cy = r.top + r.height / 2 - size / 2;
+      const [x, y, rot] = [
+        [cx, r.bottom + g, 90],
+        [cx, r.top - g - size, -90],
+        [r.right + g, cy, 0],
+        [r.left - g - size, cy, 180],
+      ][side];
+      const box = { x: clamp(x, 8, vw - size - 8), y: clamp(y, 8, vh - size - 8), w: size, h: size };
+      // Unos pocos píxeles de más contra el borde no la despegan del objetivo.
+      const off = Math.abs(side < 2 ? box.y - y : box.x - x) > 12;
+      return { ...box, rot, cost: boxCost(box) + (off ? 500_000 : 0) };
+    };
+    const options = rects.map((r) => [0, 1, 2, 3].map((side) => arrowFor(r, side)));
+    const total = (side) => options.reduce((sum, o) => sum + o[side].cost, 0);
+
+    // Todas del mismo lado, que se leen como un grupo; el lado lo fija el guión si ahí
+    // no tapa nada. La que ahí tape algo que las otras no, busca el suyo.
+    let side = [0, 1, 2, 3].reduce((a, b) => (total(b) < total(a) ? b : a));
+    if (preferredSide != null && total(preferredSide) < 5000 * rects.length) side = preferredSide;
+    const placed = options.map((o) => {
+      const best = o.reduce((a, b) => (b.cost < a.cost ? b : a));
+      return o[side].cost <= best.cost + 5000 ? o[side] : best;
+    });
+
+    if (!bw || !bh) return { arrows: placed };
+
+    // La burbuja: al lado de alguna flecha o de algún objetivo, lo más cerca posible.
+    const around = (b, gap) => [
+      { x: b.x + b.w / 2 - bw / 2, y: b.y - gap - bh },
+      { x: b.x + b.w / 2 - bw / 2, y: b.y + b.h + gap },
+      { x: b.x - gap - bw, y: b.y + b.h / 2 - bh / 2 },
+      { x: b.x + b.w + gap, y: b.y + b.h / 2 - bh / 2 },
+    ];
+    const spots = [
+      ...placed.flatMap((a) => around(a, 4)),
+      ...rects.flatMap((r) => around({ x: r.left, y: r.top, w: r.width, h: r.height }, 8)),
+    ];
+    let bubbleAt = null;
+    let cheapest = Infinity;
+    for (const spot of spots) {
+      const box = { x: clamp(spot.x, 8, vw - bw - 8), y: clamp(spot.y, 8, vh - bh - 8), w: bw, h: bh };
+      let cost = boxCost(box);
+      for (const a of placed) {
+        if (overlap(box, { left: a.x, top: a.y, right: a.x + a.w, bottom: a.y + a.h }) > 0) cost += 1_000_000;
+      }
+      const near = Math.min(...placed.map((a) => Math.hypot(
+        box.x + bw / 2 - (a.x + size / 2), box.y + bh / 2 - (a.y + size / 2))));
+      cost += near * 20;
+      if (cost < cheapest) {
+        cheapest = cost;
+        bubbleAt = box;
+      }
+    }
+    return { arrows: placed, bx: bubbleAt.x, by: bubbleAt.y };
   }
 
-  let onCtaClick = null;
-  let onQuitClick = null;
-  let activeHighlights = [];
+  function place() {
+    if (!showing || !target) return;
+    const rects = [];
+    for (const node of document.querySelectorAll?.(target) ?? []) {
+      const r = node.getBoundingClientRect?.();
+      if (r && (r.width || r.height)) rects.push(r);
+      if (rects.length === MAX_ARROWS) break;
+    }
+    if (!rects.length) {
+      for (const el of arrows) el.style.visibility = 'hidden';
+      if (bubble) bubble.style.visibility = 'hidden';
+      placedFor = '';
+      return;
+    }
 
-  function clearHighlights() {
-    activeHighlights.forEach((node) => {
-      try { node.classList.remove('tuto-hl'); } catch {}
-    });
-    activeHighlights = [];
-    document.querySelectorAll('.tuto-hl').forEach((node) => {
-      try { node.classList.remove('tuto-hl'); } catch {}
-    });
-  }
+    const vw = globalThis.innerWidth || 0;
+    const vh = globalThis.innerHeight || 0;
+    const first = arrowAt(0);
+    first.hidden = false;
+    const size = first.offsetWidth || 48;
+    const talking = bubble && !bubble.hidden;
+    const bw = talking ? (bubble.offsetWidth || 150) : 0;
+    const bh = talking ? (bubble.offsetHeight || 42) : 0;
 
-  function applyHighlights(selector) {
-    clearHighlights();
-    if (!selector) return;
-    try {
-      document.querySelectorAll(selector).forEach((target) => {
-        target.classList.add('tuto-hl');
-        activeHighlights.push(target);
-      });
-    } catch {
-      // Ignorar selectores que no existan en el DOM simulado
+    // Esto corre en cada cuadro. Medir los objetivos es barato; elegir el lugar mide cada
+    // símbolo, botón y cartel de la mesa, así que solo se rehace si algo cambió: un
+    // objetivo se movió, cambió la pantalla o la burbuja, o entraron o salieron cosas.
+    const count = document.querySelectorAll?.(`${KEEP_CLEAR}, ${ALWAYS_CLEAR}`)?.length ?? 0;
+    const key = rects.flatMap((r) => [r.left, r.top, r.width, r.height])
+      .concat(vw, vh, size, bw, bh).map(Math.round).concat(count, target, fixedSide).join();
+    if (key === placedFor) return;
+    placedFor = key;
+
+    const pos = layout(rects, size, bw, bh, vw, vh, fixedSide);
+    pos.arrows.forEach((a, i) => {
+      const el = arrowAt(i);
+      el.hidden = false;
+      el.style.visibility = '';
+      el.style.transform = `translate(${Math.round(a.x)}px, ${Math.round(a.y)}px) rotate(${a.rot}deg)`;
+    });
+    for (let i = pos.arrows.length; i < arrows.length; i++) arrows[i].hidden = true;
+    if (talking) {
+      bubble.style.visibility = '';
+      bubble.style.transform = `translate(${Math.round(pos.bx)}px, ${Math.round(pos.by)}px)`;
     }
   }
 
+  function applyGlow() {
+    for (const n of document.querySelectorAll?.('.tuto-hl') ?? []) {
+      if (!shine || !n.matches?.(shine)) n.classList.remove('tuto-hl');
+    }
+    if (!shine) return;
+    for (const n of document.querySelectorAll?.(shine) ?? []) n.classList.add('tuto-hl');
+  }
+
+  function follow() {
+    frame = 0;
+    if (!target && !shine) return;
+    place();
+    applyGlow();
+    frame = globalThis.requestAnimationFrame?.(follow) ?? 0;
+  }
+  const wake = () => { if (!frame) follow(); };
+
+  function showArrow() {
+    if (!target) return;
+    const node = document.querySelector?.(target);
+    const r = node?.getBoundingClientRect?.();
+    if (r && (r.top < 0 || r.bottom > (globalThis.innerHeight || Infinity))) {
+      const quiet = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      node.scrollIntoView?.({ block: 'nearest', behavior: quiet ? 'auto' : 'smooth' });
+    }
+    showing = true;
+    wake();
+  }
+
+  function showBubble() {
+    if (!bubble || !label || !target) return;
+    bubble.textContent = label;
+    bubble.hidden = false;
+    place();
+  }
+
+  function clear() {
+    stopTimers();
+    target = null;
+    label = '';
+    fixedSide = null;
+    placedFor = '';
+    showing = false;
+    hideArrows();
+    if (bubble) bubble.hidden = true;
+  }
+
   return {
-    show({ step, state, onDismiss = null, onQuit = null }) {
-      const isModal = step.allowedAction === 'none' || step.type === 'modal';
-      onCtaClick = onDismiss;
-      onQuitClick = onQuit;
-
-      el.hidden = false;
-      el.className = `tuto-overlay is-on ${isModal ? 'is-modal' : 'is-coach'}`;
-
-      const title = stepText(step.title, state);
-      const desc = stepText(step.desc, state);
-      const action = stepText(step.action, state);
-      const messageHtml = stepText(step.message, state);
-      const ctaText = step.ctaText ?? (isModal ? 'Continuar →' : 'Entendido');
-      const roundNum = step.round ?? state?.round ?? 1;
-
-      if (isModal) {
-        el.innerHTML = `
-          <div class="tuto-dialog" role="dialog" aria-modal="true">
-            <div class="tuto-msg">${messageHtml || (title ? `<b>${title}</b><br><br>${desc}` : desc)}</div>
-            <button class="tuto-cta" type="button">${ctaText}</button>
-          </div>`;
-        const ctaBtn = el.querySelector('.tuto-cta');
-        if (ctaBtn) {
-          ctaBtn.onclick = () => {
-            if (onCtaClick) onCtaClick();
-          };
-        }
-      } else {
-        // Coach mode: banner superior
-        const contentHtml = desc || messageHtml;
-        el.innerHTML = `
-          <div class="tuto-coach" role="region" aria-label="Guía del tutorial">
-            <div class="tuto-coach-header">
-              <span class="tuto-coach-tag"><i class="tuto-bulb" aria-hidden="true">💡</i> Tutorial</span>
-              <span class="tuto-coach-step">Ronda ${roundNum}</span>
-              <button class="tuto-coach-close" type="button" title="Salir del tutorial">Salir ✕</button>
-            </div>
-            <div class="tuto-coach-body">
-              ${title ? `<strong class="tuto-coach-title">${title}</strong>` : ''}
-              <div class="tuto-coach-desc">${contentHtml}</div>
-            </div>
-            ${action ? `<div class="tuto-coach-act"><span class="tuto-act-icon" aria-hidden="true">👉</span> <span>${action}</span></div>` : ''}
-          </div>`;
-
-        const closeBtn = el.querySelector('.tuto-coach-close');
-        if (closeBtn) {
-          closeBtn.onclick = () => {
-            if (onQuitClick) onQuitClick();
-          };
-        }
-      }
-
-      applyHighlights(typeof step.highlight === 'function' ? step.highlight(state) : step.highlight);
+    point(selector, text = '', { delay = HINT_DELAY, bubbleAfter = BUBBLE_AFTER, side: preferredSide = null } = {}) {
+      clear();
+      if (!selector) return;
+      target = selector;
+      label = text;
+      fixedSide = typeof preferredSide === 'number' ? preferredSide : (SIDES[preferredSide] ?? null);
+      timers.push(setTimeout(showArrow, delay));
+      if (label) timers.push(setTimeout(showBubble, delay + bubbleAfter));
     },
-    updateText({ step, state }) {
-      if (el.hidden || !step || step.type !== 'coach') return;
-      const descEl = el.querySelector('.tuto-coach-desc');
-      if (descEl) descEl.innerHTML = stepText(step.desc, state);
-      const actSpan = el.querySelector('.tuto-coach-act span:last-child');
-      if (actSpan) actSpan.innerHTML = stepText(step.action, state);
+    glow(selector) {
+      if (selector === shine) return;
+      shine = selector;
+      applyGlow();
+      wake();
     },
-    refreshHighlight(selector) {
-      applyHighlights(selector);
+    hurry() {
+      if (!target) return;
+      stopTimers();
+      showArrow();
+      showBubble();
     },
-    hide() {
-      el.classList.remove('is-on');
-      el.hidden = true;
-      clearHighlights();
-    },
+    clear,
     destroy() {
-      clearHighlights();
-      el.remove();
+      clear();
+      shine = null;
+      applyGlow();
+      if (frame) globalThis.cancelAnimationFrame?.(frame);
+      frame = 0;
+      quit.remove?.();
+      document.querySelector?.('.topbar')?.classList.remove('tuto-topbar');
+      root.remove?.();
     },
   };
 }
 
-// ---- Motor del Tutorial ------------------------------------------------------
+// ---- Motor del tutorial ------------------------------------------------------
 
 export function createTutorial(game, onDone = () => {}) {
-  const overlay = createOverlay();
-  const allDecks = createDecks();
-  const STEPS = createSteps();
-  let stepIndex = 0;
-  let currentStep = STEPS[0];
-  let unsub = null;
+  const decks = createDecks();
+  const steps = createSteps();
+  let index = 0;
+  let pointing; // lo que la flecha señala ahora (undefined: todavía nada decidido)
+  let gatedFor = null; // el paso cuyas reglas están puestas en la partida
   let finished = false;
-  let pendingLastChanceResolve = null;
+  let unsub = null;
 
-  function applyStepGating(step, state) {
-    if (!state) return;
-    state.tutorialAllowed = step.allowedAction ?? 'any';
-    // En los repartos de las rondas 1 y 2 solo hay cartas sin poder; en el de la 3, la
-    // Maceta y nada más, sin poder saltearla.
-    const pot = step.allowedCard === 'pot';
-    if (pot && !state.market.some((c) => c.power === 'pot')) {
-      potCardRef ??= makeCard(['aquatic', 'plant', 'reptile'], 'pot');
-      state.market[0] = potCardRef;
-    }
-    state.tutorialPlainOnly = step.id === 'r1-draft' || step.id === 'r2-draft';
-    state.tutorialAllowedCard = pot ? state.market.find((c) => c.power === 'pot').uid : null;
-    state.tutorialDisallowSkip = pot;
-    state.tutorialAllowRenew = false;
-    game.refresh();
-  }
-
-  function presentStep(step, state) {
-    currentStep = step;
-    applyStepGating(step, state);
-
-    const isInfoOnly = step.allowedAction === 'none';
-
-    overlay.show({
-      step,
-      state,
-      onQuit: () => {
-        cleanup();
-        onDone();
-      },
-      onDismiss: () => {
-        if (step.id === 'r5-victory') {
-          cleanup();
-          onDone();
-          return;
-        }
-
-        if (step.id === 'r5-last-chance-expl') {
-          overlay.hide();
-          if (pendingLastChanceResolve) {
-            const resolve = pendingLastChanceResolve;
-            pendingLastChanceResolve = null;
-            resolve();
-          }
-          return;
-        }
-
-        if (isInfoOnly) {
-          // Los pasos solo informativos avanzan con el botón CTA
-          advanceStep();
-        } else {
-          // En los pasos de acción, cerrar mantiene el gating activo en el tablero
-          overlay.hide();
-        }
-      },
-    });
-  }
-
-  function advanceStep() {
-    stepIndex++;
-    if (stepIndex >= STEPS.length) {
-      cleanup();
-      onDone();
-      return;
-    }
-    const next = STEPS[stepIndex];
-    presentStep(next, game.state);
-  }
-
-  function onRoundStart(round) {
-    const st = game.state;
-    if (!st) return;
-
-    // En ronda 5, ajustar vida de la CPU para que comience con 15 HP
-    if (round === 5) {
-      st.totals.p1 = 85; // 100 - 85 = 15 HP
-      st.status.p2.egg = 0; // sin escudo
-      st.tutorialLastChanceReady = false;
-    }
-
-    const roundDecks = allDecks[round];
-    if (roundDecks) {
-      st.decks.p1 = roundDecks.p1.map((c) => ({ ...c }));
-      st.decks.p2 = roundDecks.p2.map((c) => ({ ...c }));
-    }
-  }
+  const overlay = createOverlay({ onQuit: finish });
 
   function cleanup() {
     if (finished) return;
     finished = true;
-    if (unsub) unsub();
+    unsub?.();
+    document.removeEventListener?.('pointerdown', lost, true);
     overlay.destroy();
-    if (pendingLastChanceResolve) {
-      pendingLastChanceResolve();
-      pendingLastChanceResolve = null;
-    }
-    if (game.state) {
-      game.state.tutorial = false;
-      game.state.tutorialAllowed = null;
-      game.state.tutorialAllowedCard = null;
-      game.state.tutorialPlainOnly = false;
-      game.state.tutorialLastChanceReady = false;
-      game.state.onRoundStart = null;
-      game.state.onTutorialBeforeBot = null;
+    const st = game.state;
+    if (st) {
+      st.tutorial = false;
+      st.tutorialAllowed = null;
+      st.tutorialAllowedCol = null;
+      st.tutorialPlainOnly = false;
+      st.tutorialAllowedCard = null;
+      st.tutorialDisallowSkip = false;
+      st.tutorialSkipDraft = false;
+      st.tutorialBotStandAt = null;
+      st.onRoundStart = null;
     }
     localStorage.setItem('tutorialDone', 'true');
   }
 
-  // Configurar la partida en modo tutorial
-  const pool = buildTutorialPool();
+  function finish() {
+    if (finished) return;
+    cleanup();
+    onDone();
+  }
+
+  /** Un toque fuera de lo señalado es la señal de que no sabe qué hacer. */
+  function lost(e) {
+    if (!pointing) return;
+    if (
+      e.target?.closest?.(pointing) ||
+      e.target?.closest?.('.tuto-quit') ||
+      e.target?.closest?.('.topbar-actions') ||
+      e.target?.closest?.('#hud-menu')
+    ) {
+      return;
+    }
+    e.stopPropagation?.();
+    e.preventDefault?.();
+    overlay.hurry();
+  }
+
+  /** Pone las rondas en su lugar antes de que se repartan. */
+  function setRound(st, round) {
+    const deck = decks[round];
+    if (deck) {
+      st.decks.p1 = deck.p1.map((c) => ({ ...c }));
+      st.decks.p2 = deck.p2.map((c) => ({ ...c }));
+    }
+    st.tutorialBotStandAt = BOT_STAND_AT[round] ?? 2;
+    st.tutorialSkipDraft = !DRAFT_ROUNDS.has(round);
+  }
+
+  /** Las reglas del paso: qué botón vale y qué se puede llevar del centro. */
+  function gate(step, st) {
+    const rules = step.draft ?? {};
+    st.tutorialAllowed = step.allowed;
+    st.tutorialAllowedCol = step.col ?? null;
+    st.tutorialPlainOnly = Boolean(rules.plainOnly);
+    st.tutorialDisallowSkip = Boolean(rules.power);
+    st.tutorialAllowedCard = null;
+    if (rules.power) {
+      let card = st.market.find((c) => c.power === rules.power);
+      if (!card) {
+        // Nunca debería faltar (el guión no deja llevárselo antes), pero si falta el
+        // paso quedaría sin salida: se repone.
+        card = makeCard(['aquatic', 'bird'], rules.power);
+        st.market[0] = card;
+      }
+      st.tutorialAllowedCard = card.uid;
+    }
+  }
+
+  /** Avanza lo que haya que avanzar y acomoda la flecha y el brillo a lo que pide el paso. */
+  function sync(state) {
+    if (finished || !state) return;
+    let step = steps[index];
+    while (step && step.done(state)) {
+      step = steps[++index];
+      pointing = undefined;
+    }
+    if (!step) { finish(); return; }
+
+    overlay.glow(step.glow?.(state) ?? null);
+    const target = step.target(state) ?? null;
+    if (target !== pointing) {
+      pointing = target;
+      overlay.point(target, step.bubble, {
+        delay: step.delay ?? HINT_DELAY,
+        bubbleAfter: step.now ? 0 : BUBBLE_AFTER,
+        side: step.side,
+      });
+    }
+    if (gatedFor !== step) {
+      gatedFor = step;
+      gate(step, state);
+      game.refresh();
+    }
+  }
+
   game.newMatch({
     mode: 'tutorial',
     difficulty: 'facil',
     axie: 'aquatic',
     axie2: 'plant',
-    activePowers: ['pot', 'egg', 'poison', 'strength', 'snail', 'octopus'],
-    scriptedDecks: allDecks[1],
-    scriptedPool: pool,
+    activePowers: ['strength', 'pot', 'egg', 'snail', 'octopus', 'poison'],
+    scriptedPool: buildTutorialPool(),
+    onRoundStart: (round) => setRound(game.state, round),
   });
+  game.state.tutorialAllowed = steps[0].allowed;
 
-  game.state.onRoundStart = onRoundStart;
-  game.state.onTutorialBeforeBot = () => {
-    return new Promise((resolve) => {
-      pendingLastChanceResolve = resolve;
-      game.state.tutorialLastChanceReady = true;
-      game.refresh();
-    });
-  };
+  unsub = game.subscribe(sync);
+  document.addEventListener?.('pointerdown', lost, true);
+  // El primer paso, apenas la mesa está puesta.
+  setTimeout(() => sync(game.state), 400);
 
-  // Presentar el primer paso una vez que la mesa está lista
-  setTimeout(() => {
-    if (game.state) {
-      presentStep(STEPS[0], game.state);
-    }
-  }, 400);
-
-  // Escuchar cambios de estado para avanzar según las acciones del jugador
-  unsub = game.subscribe((state) => {
-    if (!state || finished) return;
-
-    // Refrescar texto dinámico del banner coach
-    overlay.updateText({ step: currentStep, state });
-
-    // Refrescar resaltado en el DOM si el estado cambió
-    if (currentStep?.highlight) {
-      const sel = typeof currentStep.highlight === 'function'
-        ? currentStep.highlight(state)
-        : currentStep.highlight;
-      overlay.refreshHighlight(sel);
-    }
-
-    // Si el paso actual es de acción y su condición de avance se cumplió:
-    if (currentStep && currentStep.allowedAction !== 'none') {
-      if (currentStep.advanceTrigger && currentStep.advanceTrigger(state)) {
-        advanceStep();
-        return;
-      }
-    }
-
-    // Si la partida terminó por victoria antes del último paso
-    if (state.phase === 'matchEnd' && currentStep?.id !== 'r5-victory') {
-      const victoryStep = STEPS.find((s) => s.id === 'r5-victory');
-      if (victoryStep) {
-        stepIndex = STEPS.indexOf(victoryStep);
-        setTimeout(() => {
-          if (!finished) presentStep(victoryStep, state);
-        }, 500);
-      }
-    }
-  });
-
-  return {
-    destroy: cleanup,
-  };
+  return { destroy: cleanup };
 }
 
 export { createSteps, createDecks, buildTutorialPool };
-

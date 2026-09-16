@@ -82,12 +82,18 @@ assert.equal(nodes['axie-p1'].dataset.stance, 'charging');
 assert.equal(nodes['axie-p2'].dataset.stance, 'idle');
 // La mesa es una sola y la usa el que está jugando.
 assert.match(nodes.field.innerHTML, /class="card"/);
+// Cada eslabón dice de qué símbolo es: el recorrido de la cadena lo busca por ahí
+// carta por carta (ver `traceChain` en `ui.js`).
+assert.match(nodes.field.innerHTML, /class="sym" data-sym="[a-z]+" data-on="(true|false)"/,
+  'el casillero lleva escrito su símbolo');
 assert.equal(nodes.field.dataset.owner, 'p1', 'la mesa es del que tiene el turno');
 // Los puntos cargados no van en la mesa: van encima del aro de la próxima carta, que
 // es la otra mitad de la misma decisión.
 assert.doesNotMatch(nodes.field.innerHTML, /swing-dmg/, 'el número no vive en la mesa');
 assert.match(nodes.swing.innerHTML, /class="swing-dmg"/, 'se ven los puntos de daño');
-assert.match(nodes.swing.innerHTML, /class="swing-cap">DAÑO</, 'y la palabra, debajo');
+// La palabra lleva cuántas letras tiene, que es de donde el CSS saca su cuerpo: con las
+// cuatro de "DAÑO" mide lo mismo que siempre.
+assert.match(nodes.swing.innerHTML, /class="swing-cap" style="--cap-chars:4">DAÑO</, 'y la palabra, debajo');
 // El número crece con lo que dice y no se pasa del ancho del aro: el CSS saca lo
 // primero de `--n` y lo segundo de cuántos dígitos ocupa.
 assert.match(nodes.swing.innerHTML, /--n:\d+;--chars:\d+/, 'el número lleva su tamaño puesto');
@@ -515,7 +521,7 @@ console.log('✓ render ok (los dos asientos de una sala)');
   assert.match(html, /class="plate-shield"/, 'el escudo se muestra al lado de la vida');
   assert.match(html, /shield\.png/, 'lleva el icono de escudo');
   assert.match(html, /<b>12<\/b>/, 'muestra el valor del escudo (12)');
-  assert.match(html, /title="Huevo: 16 de daño acumulado al romperse/, 'status effect dice el daño acumulado');
+  assert.match(html, /title="Secret Egg: 16 de daño acumulado al romperse/, 'status effect dice el daño acumulado');
   assert.match(html, /<b>16<\/b>/, 'el chip de status del huevo muestra el daño acumulado (16)');
 
   // Con 0 de huevo no hay escudo
@@ -529,4 +535,52 @@ console.log('✓ render ok (los dos asientos de una sala)');
   const htmlZero = plateHtml(stZero, 'p1');
   assert.doesNotMatch(htmlZero, /class="plate-shield"/, 'sin huevo no se muestra la insignia de escudo');
   console.log('  ✓ escudo en barra de vida y daño acumulado en status effects de huevo');
+}
+
+// ---- la furia de la última chance -------------------------------------------
+// Al que dejan sin vida antes de que ataque le queda su turno, y la pantalla lo cuenta
+// tres veces a la vez: el bicho prendido fuego (`data-last-chance` en el peleador), el
+// estallido con el que entra (`data-fury` y el anillo, una sola vez) y el renglón del
+// pie en fuego en vez de gris.
+//
+// Se juega con los dos asientos de persona para que la última chance se quede quieta en
+// pantalla: contra la máquina el turno regalado lo juega ella sola y el cuadro se va.
+{
+  screen.restart({ mode: 'net' });
+  await idle();
+
+  // Los dos a un punto de morir: el golpe del que abre deja sin vida al otro, que
+  // todavía no atacó.
+  const [opener, dying] = game.state.order;
+  game.state.totals[opener] = 99;
+  game.state.totals[dying] = 99;
+  await game.stand(opener);
+  await idle();
+
+  const fighter = nodes[`fighter-${dying}`];
+  assert.equal(fighter.dataset.lastChance, 'true', 'el que quedó sin vida arde');
+  assert.equal(nodes[`fighter-${opener}`].dataset.lastChance, 'false', 'el otro no');
+  assert.match(nodes.controls.innerHTML, /data-tone="fury"/,
+    'el renglón del pie deja de ser gris');
+  assert.match(nodes.controls.innerHTML, /última chance/,
+    'y dice lo que cambió: este golpe ya no gana, empata');
+
+  // El rugido cuelga del golpe que lo encendió, así que llega un rato después (ver
+  // `FURY_BEAT`): se espera a que salga en vez de mirar un instante fijo del reloj.
+  const axieNode = nodes[`axie-${dying}`];
+  for (let i = 0; i < 60 && !axieNode.innerHTML.includes('fury-ring'); i++) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const rings = () => axieNode.innerHTML.split('fury-ring').length - 1;
+  assert.equal(rings(), 1, 'el anillo de fuego se abre a los pies');
+  assert.match(axieNode.innerHTML, /data-kind="fury"/, 'y el aviso sube sobre la cabeza');
+  assert.ok(pulses[dying].fury?.includes('in'), 'el cuerpo se prende con él');
+
+  // Y pasa una sola vez: la última chance dura todo un turno y la pantalla se repinta
+  // a cada carta, así que sin memoria el bicho rugiría con cada una.
+  game.refresh();
+  await idle();
+  assert.equal(rings(), 1, 'la furia entra una vez, no en cada repintado');
+
+  console.log('✓ furia de la última chance ok');
 }

@@ -26,6 +26,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { loadStarter, restLayers } from './starters.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(root, '.cache');
@@ -308,6 +309,15 @@ function frameOf(mixer, built, skeleton) {
     const att = slotName in bag ? bag[slotName] : bag[Object.keys(bag)[0]];
     return { slot: slotName, x: layer.px, y: layer.py, w: att.width ?? 0, h: att.height ?? 0 };
   });
+  return frameFrom(boxes);
+}
+
+/**
+ * El marco a partir de las cajas de reposo, `{slot, x, y, w, h}` con la `y` para
+ * abajo. Las de un starter no salen de la librería sino de su esqueleto
+ * (`restLayers`), y el marco se arma igual.
+ */
+function frameFrom(boxes) {
   const x0 = Math.min(...boxes.map((b) => b.x));
   const y0 = Math.min(...boxes.map((b) => b.y));
   const x1 = Math.max(...boxes.map((b) => b.x + b.w));
@@ -347,7 +357,7 @@ function frameOf(mixer, built, skeleton) {
  */
 function bakeClip(skeleton, clip, frame, setup, rest) {
   const anim = skeleton.animations[clip.from];
-  if (!anim) throw new Error(`el mixer no trae "${clip.from}"`);
+  if (!anim) throw new Error(`el esqueleto no trae "${clip.from}"`);
   const times = [
     ...Object.values(anim.bones ?? {}),
     ...Object.values(anim.slots ?? {}),
@@ -359,7 +369,8 @@ function bakeClip(skeleton, clip, frame, setup, rest) {
   // parpadeo dura 80 ms y a 10 cuadros por segundo se pierde entero.
   const swaps = {};
   for (const [slotName, tl] of Object.entries(anim.slots ?? {})) {
-    if (!tl.attachment?.length || SKIP.has(slotName)) continue;
+    // Solo los slots que se dibujan: Olek tiene orejas en el esqueleto y no las muestra.
+    if (!tl.attachment?.length || SKIP.has(slotName) || !frame.boxes[slotName]) continue;
     const base = baseOf(skeleton, slotName);
     const list = [];
     for (const f of tl.attachment) {
@@ -403,6 +414,7 @@ function bakeClip(skeleton, clip, frame, setup, rest) {
     const cs = cosd(screenSpin);
     const ss = sind(screenSpin);
     for (const [name, pose] of Object.entries(now)) {
+      if (!frame.boxes[pose.slot]) continue;
       const home = setup[name];
       const wantX = ca * (home.x - rest.axieX) - sa * (home.y - rest.axieY) + axie.x;
       const wantY = sa * (home.x - rest.axieX) + ca * (home.y - rest.axieY) + axie.y;
@@ -461,22 +473,21 @@ function bakeClip(skeleton, clip, frame, setup, rest) {
  * tamaño y su propia posición respecto del hueso, así que cada uno necesita su
  * recorte — y una vez que lo tiene, cambiar de dibujo es solo encenderlo y apagarlo.
  */
-function bakeVariants(mixer, built, skeleton, frame, setup) {
-  const shift = mixer.getAxieColorPartShift(built.variant);
+function bakeVariants(skeleton, frame, setup, srcOf) {
   const attachments = skeleton.skins[0].attachments;
   const out = {};
   for (const slot of skeleton.slots) {
     const bag = attachments[slot.name];
-    if (!bag || SKIP.has(slot.name)) continue;
+    // Una variante de un slot que no se dibuja no tiene capa de reposo al lado de la
+    // cual ponerse.
+    if (!bag || SKIP.has(slot.name) || !frame.boxes[slot.name]) continue;
     const base = baseOf(skeleton, slot.name);
     for (const [name, att] of Object.entries(bag)) {
       if (name === base) continue;
       const home = setup[name];
       out[name] = {
         slot: slot.name,
-        // La misma resolución que hacen las capas de reposo: el color del Axie decide
-        // qué PNG del CDN es, y sin esto la boca abierta saldría de otro color.
-        src: mixer.getVariantAttachmentPath(slot.name, att.path, built.variant, shift),
+        src: srcOf(slot.name, att),
         x: round((home.x - home.w / 2 - frame.x0) / frame.width, 5),
         y: round((-home.y - home.h / 2 - frame.y0) / frame.height, 5),
         w: round(home.w / frame.width, 5),
@@ -489,12 +500,60 @@ function bakeVariants(mixer, built, skeleton, frame, setup) {
 
 // ---------- correrlo ----------
 
-const { AXIES } = await import(pathToFileURL(join(root, 'src', 'axies.js')).href);
+const { AXIES, STARTERS } = await import(pathToFileURL(join(root, 'src', 'axies.js')).href);
 const { AVATARS } = await import(pathToFileURL(join(root, 'src', 'axie-avatars.js')).href);
 const mixer = await loadMixer();
 
 const poses = {};
 const variants = {};
+
+/**
+ * Hornea un Axie: sus dibujos alternativos y todos sus clips. `srcOf` dice qué PNG es
+ * cada dibujo, que es lo único que cambia entre los del mixer y los starters.
+ */
+function bake(id, skeleton, frame, srcOf) {
+  const setup = layersAt(skeleton, null, 0);
+
+  // El control: la pose de reposo del horno tiene que caer sobre el manifiesto que ya
+  // usa el juego. Si no cae, las dos cuentas se separaron y todo lo demás es basura.
+  const manifest = AVATARS[id];
+  if (!manifest) throw new Error(`${id}: no está en axie-avatars.js — falta correr \`npm run axies\``);
+  for (const box of Object.values(frame.boxes)) {
+    const home = setup[baseOf(skeleton, box.slot)];
+    if (!home) throw new Error(`${id}: al horno le falta la capa ${box.slot}`);
+    const mineX = (home.x - box.w / 2 - frame.x0) / frame.width;
+    const mineY = (-home.y - box.h / 2 - frame.y0) / frame.height;
+    if (
+      Math.abs((box.x - frame.x0) / frame.width - mineX) > 1e-4 ||
+      Math.abs((box.y - frame.y0) / frame.height - mineY) > 1e-4
+    ) {
+      throw new Error(`${id}/${box.slot}: el reposo del horno no coincide con la librería`);
+    }
+  }
+  const ratio = round(frame.width / frame.height, 5);
+  if (Math.abs(ratio - manifest.ratio) > 1e-4) {
+    throw new Error(`${id}: marco distinto al de axie-avatars.js — falta correr \`npm run axies\``);
+  }
+
+  // El reposo del pivote del que cuelga todo: es contra esto que se mide el cuerpo.
+  const home = poseAt(skeleton, null, 0).get('@axie');
+  const rest = {
+    axieX: home.x,
+    axieY: home.y,
+    axieRot: Math.atan2(home.c, home.a) / RAD,
+  };
+
+  variants[id] = bakeVariants(skeleton, frame, setup, srcOf);
+  poses[id] = {};
+  const shown = [];
+  for (const [name, clip] of Object.entries(CLIPS)) {
+    const baked = bakeClip(skeleton, clip, frame, setup, rest);
+    poses[id][name] = baked;
+    shown.push(`${name}:${Object.keys(baked.parts).join('+') || '—'}`);
+  }
+  console.log(`  ${id.padEnd(8)} ${shown.join('  ')}`);
+}
+
 for (const axie of Object.values(AXIES)) {
   const combo = new Map([
     ['body', axie.body ?? 'body-normal'],
@@ -510,46 +569,17 @@ for (const axie of Object.values(AXIES)) {
   const built = mixer.getAxieSpineFromCombo(combo, variantIdx, false);
   if (built.error) throw new Error(`${axie.id}: ${built.error}`);
   const skeleton = built.skeletonDataAsset;
-  const frame = frameOf(mixer, built, skeleton);
-  const setup = layersAt(skeleton, null, 0);
+  const shift = mixer.getAxieColorPartShift(built.variant);
+  // La misma resolución que hacen las capas de reposo: el color del Axie decide qué PNG
+  // del CDN es, y sin esto la boca abierta saldría de otro color.
+  bake(axie.id, skeleton, frameOf(mixer, built, skeleton), (slot, att) =>
+    mixer.getVariantAttachmentPath(slot, att.path, built.variant, shift));
+}
 
-  // El control: la pose de reposo del horno tiene que caer sobre el manifiesto que ya
-  // usa el juego. Si no cae, las dos cuentas se separaron y todo lo demás es basura.
-  const manifest = AVATARS[axie.id];
-  for (const box of Object.values(frame.boxes)) {
-    const home = setup[baseOf(skeleton, box.slot)];
-    if (!home) throw new Error(`${axie.id}: al horno le falta la capa ${box.slot}`);
-    const mineX = (home.x - box.w / 2 - frame.x0) / frame.width;
-    const mineY = (-home.y - box.h / 2 - frame.y0) / frame.height;
-    if (
-      Math.abs((box.x - frame.x0) / frame.width - mineX) > 1e-4 ||
-      Math.abs((box.y - frame.y0) / frame.height - mineY) > 1e-4
-    ) {
-      throw new Error(`${axie.id}/${box.slot}: el reposo del horno no coincide con la librería`);
-    }
-  }
-  const ratio = round(frame.width / frame.height, 5);
-  if (Math.abs(ratio - manifest.ratio) > 1e-4) {
-    throw new Error(`${axie.id}: marco distinto al de axie-avatars.js — falta correr \`npm run axies\``);
-  }
-
-  // El reposo del pivote del que cuelga todo: es contra esto que se mide el cuerpo.
-  const home = poseAt(skeleton, null, 0).get('@axie');
-  const rest = {
-    axieX: home.x,
-    axieY: home.y,
-    axieRot: Math.atan2(home.c, home.a) / RAD,
-  };
-
-  variants[axie.id] = bakeVariants(mixer, built, skeleton, frame, setup);
-  poses[axie.id] = {};
-  const shown = [];
-  for (const [name, clip] of Object.entries(CLIPS)) {
-    const baked = bakeClip(skeleton, clip, frame, setup, rest);
-    poses[axie.id][name] = baked;
-    shown.push(`${name}:${Object.keys(baked.parts).join('+') || '—'}`);
-  }
-  console.log(`  ${axie.id.padEnd(8)} ${shown.join('  ')}`);
+// Los starters traen su propio esqueleto, con cada dibujo ya cortado en `Axies/`.
+for (const axie of Object.values(STARTERS)) {
+  const skeleton = await loadStarter(axie);
+  bake(axie.id, skeleton, frameFrom(restLayers(skeleton)), (slot, att) => att.path);
 }
 
 // Que ningún dibujo alternativo apunte a un PNG que el CDN no tiene, y que ninguno
@@ -577,9 +607,15 @@ await Promise.all(
     Object.entries(bag).map(async ([name, v]) => {
       if (!v.src) return;
       checked++;
-      const res = await fetch(IMAGES + v.src, { headers: { Range: 'bytes=0-63' } });
-      if (!res.ok) return void bad.push(`${id}/${name}: falta ${v.src} (HTTP ${res.status})`);
-      const png = Buffer.from(await res.arrayBuffer());
+      let png;
+      if (v.src.startsWith('Axies/')) {
+        // Los de un starter no están en el CDN: los acaba de escribir `starters.mjs`.
+        png = readFileSync(join(root, v.src));
+      } else {
+        const res = await fetch(IMAGES + v.src, { headers: { Range: 'bytes=0-63' } });
+        if (!res.ok) return void bad.push(`${id}/${name}: falta ${v.src} (HTTP ${res.status})`);
+        png = Buffer.from(await res.arrayBuffer());
+      }
       const wide = png.readUInt32BE(16);
       const tall = png.readUInt32BE(20);
       // El alto que tendría el dibujo si entrara en el recorte sin deformarse.

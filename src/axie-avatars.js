@@ -4,6 +4,8 @@
 // marco recortado al dibujo; `x/y/w/h` son fracciones de ese marco, así el avatar
 // escala a cualquier tamaño sin tocar estos números. `from` es la definición del roster
 // con la que se generó: si no coincide con `axies.js`, falta correr `npm run axies`.
+// Las capas que empiezan con `Axies/` son de los starters del kit y viajan con el
+// juego en vez de venir del CDN (ver `scripts/starters.mjs`).
 export const AVATAR_BASE = 'https://axiecdn.axieinfinity.com/mixer-stuffs/v6/';
 
 export const AVATARS = {
@@ -106,6 +108,105 @@ export const AVATARS = {
       { src: 'reptile-10/horn/reptile-03.png', x: 0.17939, y: 0, w: 0.32226, h: 0.31941 },
       { src: 'reptile-08/eyes/reptile-03.png', x: 0.09171, y: 0.36749, w: 0.35156, h: 0.23637 },
       { src: 'reptile-02/mouth/reptile-03.png', x: 0.10303, y: 0.55132, w: 0.29679, h: 0.13894 },
+    ],
+  },
+  olek: {
+    from: {"kit":2},
+    ratio: 1.21117,
+    layers: [
+      { src: 'Axies/olek/leg-front-right.png', x: 0.12135, y: 0.85143, w: 0.12616, h: 0.13972 },
+      { src: 'Axies/olek/tail.png', x: 0.76034, y: 0.5998, w: 0.23966, h: 0.23119 },
+      { src: 'Axies/olek/back.png', x: 0.42205, y: 0, w: 0.37646, h: 0.36604 },
+      { src: 'Axies/olek/body.png', x: 0.00742, y: 0.18752, w: 0.83669, h: 0.80016 },
+      { src: 'Axies/olek/leg-back-left.png', x: 0.61665, y: 0.84539, w: 0.12924, h: 0.14771 },
+      { src: 'Axies/olek/leg-front-left.png', x: 0.44329, y: 0.85179, w: 0.13141, h: 0.14821 },
+      { src: 'Axies/olek/eyes.png', x: 0.13998, y: 0.34037, w: 0.22057, h: 0.14642 },
+      { src: 'Axies/olek/mouth.png', x: 0, y: 0.48421, w: 0.51749, h: 0.28513 },
+      { src: 'Axies/olek/horn.png', x: 0.14527, y: 0.04623, w: 0.32555, h: 0.29284 },
+    ],
+  },
+  momo: {
+    from: {"kit":12},
+    ratio: 1.19604,
+    layers: [
+      { src: 'Axies/momo/leg-front-right.png', x: 0.13795, y: 0.83555, w: 0.1268, h: 0.16315 },
+      { src: 'Axies/momo/tail.png', x: 0.71109, y: 0.51221, w: 0.28891, h: 0.34254 },
+      { src: 'Axies/momo/back.png', x: 0.45701, y: 0, w: 0.43587, h: 0.53484 },
+      { src: 'Axies/momo/leg-back-left.png', x: 0.66135, y: 0.81827, w: 0.10741, h: 0.1482 },
+      { src: 'Axies/momo/body.png', x: 0, y: 0.1918, w: 0.8529, h: 0.7647 },
+      { src: 'Axies/momo/leg-front-left.png', x: 0.47073, y: 0.88736, w: 0.10325, h: 0.11264 },
+      { src: 'Axies/momo/eyes.png', x: 0.07801, y: 0.31991, w: 0.41577, h: 0.27944 },
+      { src: 'Axies/momo/mouth.png', x: 0.06921, y: 0.52273, w: 0.24369, h: 0.16977 },
+      { src: 'Axies/momo/ear-left.png', x: 0.48463, y: 0.15625, w: 0.23364, h: 0.33502 },
+      { src: 'Axies/momo/horn.png', x: 0.11318, y: 0.08254, w: 0.33412, h: 0.30648 },
+    ],
+  },
+  puffy: {
+    from: {"kit":3},
+    ratio: 1.23941,
+    layers: [
+      { src: 'Axies/puffy/leg-front-right.png', x: 0.13904, y: 0.82614, w: 0.11712, h: 0.16263 },
+      { src: 'Axies/puffy/ear-right.png', x: 0.04657, y: 0.03368, w: 0.15067, h: 0.3245 },
+      { src: 'Axies/puffy/tail.png', x: 0.66161, y: 0.43165, w: 0.33839, h: 0.41175 },
+      { src: 'Axies/puffy/back.png', x: 0.41707, y: 0, w: 0.27541, h: 0.36277 },
+      { src: 'Axies/puffy/leg-back-left.png', x: 0.65023, y: 0.81484, w: 0.10561, h: 0.15099 },
+      { src: 'Axies/puffy/body.png', x: 0, y: 0.17656, w: 0.83857, h: 0.77911 },
+      { src: 'Axies/puffy/leg-front-left.png', x: 0.46282, y: 0.88524, w: 0.10152, h: 0.11476 },
+      { src: 'Axies/puffy/eyes.png', x: 0.03545, y: 0.43624, w: 0.4199, h: 0.12705 },
+      { src: 'Axies/puffy/mouth.png', x: 0.18241, y: 0.55868, w: 0.08645, h: 0.04592 },
+      { src: 'Axies/puffy/ear-left.png', x: 0.47634, y: 0.04286, w: 0.23095, h: 0.31685 },
+      { src: 'Axies/puffy/horn.png', x: 0.17624, y: 0.08265, w: 0.21736, h: 0.28471 },
+    ],
+  },
+  buba: {
+    from: {"kit":1},
+    ratio: 1.24827,
+    layers: [
+      { src: 'Axies/buba/leg-front-right.png', x: 0.13091, y: 0.83513, w: 0.11027, h: 0.15421 },
+      { src: 'Axies/buba/ear-right.png', x: 0.07441, y: 0.00435, w: 0.16279, h: 0.43689 },
+      { src: 'Axies/buba/tail.png', x: 0.61512, y: 0.48333, w: 0.38488, h: 0.40641 },
+      { src: 'Axies/buba/back.png', x: 0.47791, y: 0.06967, w: 0.3593, h: 0.41947 },
+      { src: 'Axies/buba/leg-back-left.png', x: 0.61221, y: 0.82442, w: 0.09943, h: 0.14318 },
+      { src: 'Axies/buba/body.png', x: 0, y: 0.21917, w: 0.78953, h: 0.7388 },
+      { src: 'Axies/buba/leg-front-left.png', x: 0.43575, y: 0.89118, w: 0.09558, h: 0.10882 },
+      { src: 'Axies/buba/eyes.png', x: 0.04883, y: 0.36577, w: 0.37209, h: 0.21337 },
+      { src: 'Axies/buba/mouth.png', x: 0.13139, y: 0.54574, w: 0.17093, h: 0.13644 },
+      { src: 'Axies/buba/ear-left.png', x: 0.43139, y: 0, w: 0.2, h: 0.43834 },
+      { src: 'Axies/buba/horn.png', x: 0.13023, y: 0.04208, w: 0.38023, h: 0.36287 },
+    ],
+  },
+  pomodoro: {
+    from: {"kit":17},
+    ratio: 1.31352,
+    layers: [
+      { src: 'Axies/pomodoro/leg-front-right.png', x: 0.13608, y: 0.81966, w: 0.11463, h: 0.16868 },
+      { src: 'Axies/pomodoro/ear-right.png', x: 0.05236, y: 0.09527, w: 0.18977, h: 0.33024 },
+      { src: 'Axies/pomodoro/tail.png', x: 0.70023, y: 0.54141, w: 0.29977, h: 0.32071 },
+      { src: 'Axies/pomodoro/back.png', x: 0.49959, y: 0.09208, w: 0.41943, h: 0.335 },
+      { src: 'Axies/pomodoro/leg-back-left.png', x: 0.6364, y: 0.80794, w: 0.10336, h: 0.15662 },
+      { src: 'Axies/pomodoro/body.png', x: 0, y: 0.14589, w: 0.82073, h: 0.80814 },
+      { src: 'Axies/pomodoro/leg-front-left.png', x: 0.45297, y: 0.88097, w: 0.09936, h: 0.11903 },
+      { src: 'Axies/pomodoro/eyes.png', x: 0.0451, y: 0.31437, w: 0.40009, h: 0.23815 },
+      { src: 'Axies/pomodoro/mouth.png', x: 0.07169, y: 0.49377, w: 0.26834, h: 0.24451 },
+      { src: 'Axies/pomodoro/ear-left.png', x: 0.49596, y: 0.10002, w: 0.19702, h: 0.33818 },
+      { src: 'Axies/pomodoro/horn.png', x: 0.10917, y: 0, w: 0.39405, h: 0.33818 },
+    ],
+  },
+  venoki: {
+    from: {"kit":7},
+    ratio: 1.32158,
+    layers: [
+      { src: 'Axies/venoki/leg-front-right.png', x: 0.12751, y: 0.82999, w: 0.1074, h: 0.15902 },
+      { src: 'Axies/venoki/ear-right.png', x: 0.00222, y: 0.34575, w: 0.10759, h: 0.14369 },
+      { src: 'Axies/venoki/tail.png', x: 0.62173, y: 0.5014, w: 0.37827, h: 0.3682 },
+      { src: 'Axies/venoki/back.png', x: 0.42807, y: 0, w: 0.32504, h: 0.39813 },
+      { src: 'Axies/venoki/leg-back-left.png', x: 0.59629, y: 0.81895, w: 0.09685, h: 0.14764 },
+      { src: 'Axies/venoki/body.png', x: 0, y: 0.19481, w: 0.769, h: 0.76184 },
+      { src: 'Axies/venoki/leg-front-left.png', x: 0.42442, y: 0.88778, w: 0.09309, h: 0.11222 },
+      { src: 'Axies/venoki/eyes.png', x: 0.06791, y: 0.37118, w: 0.39413, h: 0.20356 },
+      { src: 'Axies/venoki/mouth.png', x: 0.10981, y: 0.56426, w: 0.20273, h: 0.14069 },
+      { src: 'Axies/venoki/ear-left.png', x: 0.48468, y: 0.34275, w: 0.09966, h: 0.1392 },
+      { src: 'Axies/venoki/horn.png', x: 0.08377, y: 0.07183, w: 0.32957, h: 0.29336 },
     ],
   },
 };

@@ -2,19 +2,26 @@ import assert from 'node:assert/strict';
 import {
   ADVENTURE_LEVELS, getAdventureProgress, saveAdventureProgress,
   isLevelUnlocked, markLevelCompleted, resetAdventureProgress,
-  getAdventureLevel,
+  getAdventureLevel, isFinalLevel, nextLevelId, buildAdventureLevels,
+  DIFFICULTY_LABELS,
 } from '../src/adventure.js';
 import { CLASS_POWER_IDS, buildPool, POWERS } from '../src/data.js';
 import { createGame } from '../src/game.js';
 import { fakeDom } from './dom.mjs';
+import { store } from '../src/loadout.js';
 
 // ---- Configuración de niveles -----------------------------------------------
-assert.equal(ADVENTURE_LEVELS.length, 6, 'deben ser 6 niveles');
+// La campaña base son los 6 primeros niveles y se prueba tal cual. Los que se agreguen
+// después van al final y no la tocan: estos tests siguen valiendo sin cambios.
+const BASE_LEVELS = ADVENTURE_LEVELS.slice(0, 6);
+const LAST_LEVEL = ADVENTURE_LEVELS.length;
+assert.ok(ADVENTURE_LEVELS.length >= 6, 'la campaña base tiene 6 niveles');
+ADVENTURE_LEVELS.forEach((lvl, i) => assert.equal(lvl.id, i + 1, `el id debe coincidir con ${i + 1}`));
 
 // Comprobar que los poderes se introducen de a 2 hasta llegar a los 12
 const seenPowers = new Set();
-for (let i = 0; i < ADVENTURE_LEVELS.length; i++) {
-  const lvl = ADVENTURE_LEVELS[i];
+for (let i = 0; i < BASE_LEVELS.length; i++) {
+  const lvl = BASE_LEVELS[i];
   assert.equal(lvl.id, i + 1, `el id debe coincidir con ${i + 1}`);
   assert.equal(lvl.newPowers.length, 2, `nivel ${lvl.id} debe introducir exactamente 2 poderes nuevos`);
 
@@ -53,6 +60,85 @@ for (const pid of CLASS_POWER_IDS) {
   assert.ok(seenPowers.has(pid), `el poder de clase ${pid} debe estar incluido en la aventura`);
 }
 console.log('✓ configuración de niveles y poderes de 2 en 2 hasta 12 ok');
+
+// ---- Derivación de activePowers por clase y overrides -----------------------
+const sampleCampaign = [
+  {
+    name: 'Nivel Test 1',
+    description: 'Nivel inicial de prueba',
+    rival: 'olek',
+    difficulty: 'facil',
+    newPowers: ['strength', 'pot'],
+  },
+  {
+    name: 'Nivel Test 2',
+    description: 'Reemplazo de fuerza (bestia) por garra brutal (bestia)',
+    rival: 'buba',
+    difficulty: 'normal',
+    newPowers: ['brutal'],
+  },
+  {
+    name: 'Nivel Test 3',
+    description: 'Nivel con override explícito',
+    rival: 'venoki',
+    difficulty: 'duro',
+    newPowers: ['steelskin'],
+    activePowers: ['poison', 'bubble'],
+  },
+];
+
+const derivedLevels = buildAdventureLevels(sampleCampaign);
+assert.equal(derivedLevels.length, 3);
+assert.equal(derivedLevels[0].id, 1);
+assert.equal(derivedLevels[1].id, 2);
+assert.equal(derivedLevels[2].id, 3);
+
+// Nivel 1 deriva ['strength', 'pot']
+assert.deepEqual(derivedLevels[0].activePowers, ['strength', 'pot']);
+
+// Nivel 2: brutal (bestia) reemplaza a strength (bestia) en la posición 0
+assert.deepEqual(derivedLevels[1].activePowers, ['brutal', 'pot']);
+
+// Nivel 3: override explícito tiene prioridad sobre lo derivado
+assert.deepEqual(derivedLevels[2].activePowers, ['poison', 'bubble']);
+
+console.log('✓ derivación de niveles, ids y sustitución de poderes por clase ok');
+
+// ---- Helpers de navegación de niveles (isFinalLevel, nextLevelId) ------------
+assert.equal(isFinalLevel(1), false, 'nivel 1 no es el nivel final');
+assert.equal(isFinalLevel(LAST_LEVEL - 1), false, 'el anteúltimo no es el nivel final');
+assert.equal(isFinalLevel(LAST_LEVEL), true, 'el último nivel es el final');
+assert.equal(isFinalLevel(LAST_LEVEL + 1), true, 'un id más allá del último cuenta como final');
+assert.equal(isFinalLevel(String(LAST_LEVEL)), true, 'soporta id numérico como string');
+assert.equal(isFinalLevel(null), false, 'id nulo devuelve false');
+
+assert.equal(nextLevelId(1), 2, 'el siguiente de 1 es 2');
+assert.equal(nextLevelId(5), 6, 'el siguiente de 5 es 6');
+assert.equal(nextLevelId(LAST_LEVEL), null, 'el último nivel no tiene siguiente (null)');
+assert.equal(nextLevelId('2'), 3, 'soporta id numérico como string');
+assert.equal(nextLevelId(99), null, 'un id inexistente devuelve null');
+
+assert.equal(DIFFICULTY_LABELS.facil, 'Fácil');
+assert.equal(DIFFICULTY_LABELS.normal, 'Normal');
+assert.equal(DIFFICULTY_LABELS.duro, 'Dura');
+
+console.log('✓ helpers isFinalLevel, nextLevelId y DIFFICULTY_LABELS ok');
+
+// ---- Validación de la definición de niveles ---------------------------------
+assert.throws(() => buildAdventureLevels(null), /array/i);
+assert.throws(() => buildAdventureLevels('invalido'), /array/i);
+assert.throws(() => buildAdventureLevels([null]), /objeto/i);
+assert.throws(() => buildAdventureLevels([{ description: 'd', rival: 'olek', difficulty: 'facil', newPowers: [] }]), /nombre/i);
+assert.throws(() => buildAdventureLevels([{ name: 'N1', rival: 'olek', difficulty: 'facil', newPowers: [] }]), /descripción/i);
+assert.throws(() => buildAdventureLevels([{ name: 'N1', description: 'd', rival: 'olek', difficulty: 'imposible', newPowers: [] }]), /dificultad/i);
+assert.throws(() => buildAdventureLevels([{ name: 'N1', description: 'd', rival: 'rival_fantasma', difficulty: 'facil', newPowers: [] }]), /rival/i);
+assert.throws(() => buildAdventureLevels([{ name: 'N1', description: 'd', rival: 'olek', difficulty: 'facil', newPowers: 'strength' }]), /newPowers/i);
+assert.throws(() => buildAdventureLevels([{ name: 'N1', description: 'd', rival: 'olek', difficulty: 'facil', newPowers: ['poder_inexistente'] }]), /inexistente/i);
+assert.throws(() => buildAdventureLevels([{ name: 'N1', description: 'd', rival: 'olek', difficulty: 'facil', newPowers: ['strength', 'brutal'] }]), /misma clase/i);
+assert.throws(() => buildAdventureLevels([{ name: 'N1', description: 'd', rival: 'olek', difficulty: 'facil', newPowers: ['strength'], showcase: ['invalido'] }]), /showcase/i);
+assert.throws(() => buildAdventureLevels([{ name: 'N1', description: 'd', rival: 'olek', difficulty: 'facil', newPowers: ['strength'], activePowers: ['strength', 'brutal'] }]), /misma clase/i);
+
+console.log('✓ validación de errores en campaña y niveles ok');
 
 // ---- Generación de la reserva de cartas según nivel --------------------------
 for (const lvl of ADVENTURE_LEVELS) {
@@ -104,18 +190,50 @@ assert.ok(!isLevelUnlocked(3), 'nivel 3 sigue bloqueado');
 prog = markLevelCompleted(1);
 assert.equal(prog.unlockedLevel, 2, 'repetir nivel 1 mantiene unlockedLevel en 2');
 
-// Completar progresivamente hasta el nivel 6
-for (let lvl = 2; lvl <= 6; lvl++) {
+// Completar progresivamente hasta el último nivel
+for (let lvl = 2; lvl <= LAST_LEVEL; lvl++) {
   prog = markLevelCompleted(lvl);
 }
-assert.equal(prog.unlockedLevel, 6, 'el máximo nivel desbloqueado es 6');
-assert.equal(prog.completedLevels.length, 6, 'los 6 niveles están completados');
+assert.equal(prog.unlockedLevel, LAST_LEVEL, 'el máximo nivel desbloqueado es el último');
+assert.equal(prog.completedLevels.length, LAST_LEVEL, 'todos los niveles están completados');
 
 // Reinicio
 resetAdventureProgress();
 assert.equal(getAdventureProgress().unlockedLevel, 1);
 assert.deepEqual(getAdventureProgress().completedLevels, []);
 console.log('✓ progresión y persistencia en localStorage ok');
+
+// ---- Compatibilidad y desbloqueo de nuevos niveles en campañas ampliadas ----
+// Caso: el jugador ya había completado hasta el nivel 5 cuando la campaña tenía 5 niveles.
+// Al abrir el juego con el nivel 6 presente en ADVENTURE_LEVELS, el nivel 6 debe figurar desbloqueado.
+store().setItem('axie-chance:adventure', JSON.stringify({
+  unlockedLevel: 5,
+  completedLevels: [1, 2, 3, 4, 5],
+}));
+
+const progAmple = getAdventureProgress();
+assert.equal(progAmple.unlockedLevel, 6, 'si completó el nivel 5, el nivel 6 queda automáticamente desbloqueado');
+assert.ok(isLevelUnlocked(6), 'el nivel 6 figura como disponible para jugar');
+
+// Simular agregar un nivel 7 a una campaña mediante buildAdventureLevels y verificar la lógica
+const campaignWith7 = [
+  ...ADVENTURE_LEVELS.map(({ name, description, rival, difficulty, newPowers, showcase }) => ({
+    name, description, rival, difficulty, newPowers, ...(showcase ? { showcase } : {}),
+  })),
+  {
+    name: 'Nivel 7: Desafío Extra',
+    description: 'Un séptimo nivel para probar la expansión.',
+    rival: 'olek',
+    difficulty: 'duro',
+    newPowers: ['strength'], // reemplaza brutal por strength
+  },
+];
+const levelsWith7 = buildAdventureLevels(campaignWith7);
+assert.equal(levelsWith7.length, LAST_LEVEL + 1);
+assert.equal(levelsWith7.at(-1).id, LAST_LEVEL + 1);
+assert.equal(levelsWith7.at(-1).activePowers.length, 6);
+
+console.log('✓ desbloqueo hacia adelante al incorporar nuevos niveles ok');
 
 // ---- Integración con el motor de juego (game.js) ----------------------------
 const game = createGame({ pace: 0 });
@@ -124,14 +242,14 @@ const game = createGame({ pace: 0 });
 game.newMatch({ mode: 'adventure', adventureLevel: 1, axie: 'beast' });
 assert.equal(game.state.mode, 'adventure');
 assert.equal(game.state.adventure?.level, 1);
-assert.equal(game.state.axies.p2, 'plant', 'el rival del nivel 1 es Brote (plant)');
+assert.equal(game.state.axies.p2, 'olek', 'el rival del nivel 1 es Olek, el starter de Planta');
 assert.equal(game.state.activePowers.length, 2, 'nivel 1 tiene 2 poderes activos');
 assert.deepEqual(game.state.activePowers, ['strength', 'pot']);
 
 // Iniciar en modo aventura nivel 3
 game.newMatch({ mode: 'adventure', adventureLevel: 3, axie: 'plant' });
 assert.equal(game.state.adventure?.level, 3);
-assert.equal(game.state.axies.p2, 'aquatic', 'el rival del nivel 3 es Marea (aquatic)');
+assert.equal(game.state.axies.p2, 'puffy', 'el rival del nivel 3 es Puffy, el starter de Pez');
 assert.equal(game.state.activePowers.length, 6, 'nivel 3 tiene 6 poderes activos');
 
 // Iniciar en modo aventura nivel 6
@@ -141,4 +259,3 @@ assert.equal(game.state.activePowers.length, 6, 'nivel 6 tiene 6 poderes activos
 assert.deepEqual(game.state.activePowers, ['brutal', 'leaf', 'feather', 'leech', 'bubble', 'steelskin']);
 
 console.log('✓ integración de partidas en modo aventura ok');
-

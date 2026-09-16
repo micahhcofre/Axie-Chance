@@ -1,0 +1,1022 @@
+================================================================================
+          CATÁLOGO OFICIAL DE AMULETOS (CHARMS) - ECOSISTEMA AXIE INFINITY      
+                         Proyecto: Axie Chance                                  
+================================================================================
+Origen de los nombres: App Axie Marketplace (https://app.axieinfinity.com/marketplace/charms/)
+Total de archivos registrados en "simbolos especiales/amuletos/": 150
+
+--------------------------------------------------------------------------------
+1. ASIGNACIONES ACTUALES EN AXIE CHANCE (src/data.js y scripts/amuletos.mjs)
+--------------------------------------------------------------------------------
+• Poder "bubble" (Burbuja de Retorno / Bubble Paste)
+  Archivo : ecard_aquatic_4003.png
+  Nombre  : Bubble Paste
+  Clase   : Aquatic | Rareza: Epic
+  Efecto  : (Enhance any Attack card) All teammates gain 1 {Bubble}.
+
+• Poder "brutal" (Garra Brutal / Beast Energy Drink M)
+  Archivo : ecard_beast_5003.png
+  Nombre  : Beast Energy Drink M
+  Clase   : Beast | Rareza: Mystic
+  Efecto  : (Enhance any card) Add <Banish>.
+
+• Poder "feather" (Pluma Sagrada / Feather Earring)
+  Archivo : ecard_bird_momo_1.png
+  Nombre  : Feather Earring
+  Clase   : Bird | Rareza: Starter
+  Efecto  : Amuleto inicial exclusivo de Momo (Pluma Sagrada)
+
+• Poder "leech" (Greedy Leech / Mantis Dagger)
+  Archivo : ecard_mantis_dagger.png
+  Nombre  : Mantis Dagger
+  Clase   : Bug | Rareza: Mystic
+  Efecto  : (Alter any Attack Card) The card Discards 1 random Card in opponent's Hand or Draw Pile
+
+• Poder "freegame" (Free Game / Rocket Stamp)
+  Archivo : ecard_neutral_5001.png
+  Nombre  : Rocket Stamp
+  Clase   : Neutral | Rareza: Mystic
+  Efecto  : (Enhance Single Target Attack cards) This card can target any enemy. Card's base stat -15%.
+
+• Poder "leaf" (Hoja / Spring Leaf)
+  Archivo : ecard_plant_ena_1.png
+  Nombre  : Spring Leaf
+  Clase   : Plant | Rareza: Starter
+  Efecto  : Amuleto inicial exclusivo de Ena (Hoja)
+
+• Poder "steelskin" (Piel de Escamas / Gecko Mask)
+  Archivo : ecard_reptile_4003.png
+  Nombre  : Gecko Mask
+  Clase   : Reptile | Rareza: Epic
+  Efecto  : (Enhance any Attack card) Apply {Taunt} to this Axie for 4 turns.
+
+• Poder "poison" (Veneno / Poison Vial)
+  Archivo : ecard_reptile_venoki_1.png
+  Nombre  : Poison Vial
+  Clase   : Reptile | Rareza: Starter
+  Efecto  : Amuleto inicial exclusivo de Venoki (Veneno)
+
+--------------------------------------------------------------------------------
+2. PODERES PENDIENTES DE ASIGNAR Y CANDIDATOS PERFECTOS
+--------------------------------------------------------------------------------
+• Poder "egg" (Huevo - Bird):
+  -> Candidato idóneo: ecard_bird_5003.png ("Secret Egg") [Bird / Mystic]
+
+• Poder "octopus" (Pulpo - Aquatic):
+  -> Candidato idóneo: ecard_aquatic_5004.png ("Sticky Octopus") [Aquatic / Mystic]
+
+• Poder "pot" (Maceta - Plant):
+  -> Candidato idóneo: ecard_plant_4003.png ("Leafy Pot") [Plant / Epic]
+
+• Poder "snail" (Caracol - Bug):
+  -> Candidato idóneo: ecard_bug_5005.png ("Lazy Snail") [Bug / Mystic]
+
+• Poder "strength" (Fuerza - Beast):
+  -> Candidato idóneo: ecard_beast_4001.png ("Beast's Charm of Power I") [Beast / Rare]
+                       o ecard_beast_5001.png ("Beast's Charm of Power II") [Beast / Epic]
+
+--------------------------------------------------------------------------------
+3. LISTADO COMPLETO POR CLASES
+--------------------------------------------------------------------------------
+
+=== CLASE: AQUATIC (15 amuletos) ===
+
+[ecard_aquatic_2012.png]
+  Nombre oficial : Aquatic's Charm of Focus I
+  Rareza         : Rare
+  Efecto Axie    : (Alter Multihit & <AoE> Attack cards) ATK + 3
+
+[ecard_aquatic_3011.png]
+  Nombre oficial : Aquatic's Charm of Focus II
+  Rareza         : Epic
+  Efecto Axie    : (Alter Multihit & <AoE> Attack cards) ATK + 5. The card's owner's max HP -6.
+
+[ecard_aquatic_4001.png]
+  Nombre oficial : Aquatic's Charm of Vitality I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance any card) Axie's max HP +12
+
+[ecard_aquatic_4002.png]
+  Nombre oficial : Aquatic's  Charm of Power I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance a Non-Multihit Attack card) ATK +6
+
+[ecard_aquatic_4003.png]
+  Nombre oficial : Bubble Paste
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any Attack card) All teammates gain 1 {Bubble}.
+  En el juego    : Poder "bubble" (Burbuja de Retorno / Bubble Paste)
+
+[ecard_aquatic_5001.png]
+  Nombre oficial : Aquatic's Charm of Vitality II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any card) Axie's max HP +18
+
+[ecard_aquatic_5002.png]
+  Nombre oficial : Aquatic's Charm of Power II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance a Non-Multihit Attack card) ATK +10
+
+[ecard_aquatic_5003.png]
+  Nombre oficial : Aquatic Energy Drink S
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Ethereal>.
+
+[ecard_aquatic_5004.png]
+  Nombre oficial : Sticky Octopus
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Retain>. Card's base stat -10%.
+
+[ecard_aquatic_5005.png]
+  Nombre oficial : Paralyzing Jellyfish
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any Attack card) Attack applies {Vulnerable} for 4 turns.
+
+[ecard_aquatic_awaken_stamp.png]
+  Nombre oficial : Awaken Stamp (Aquatic)
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2). +1 {Bubble} to Allied Axies.
+
+[ecard_aquatic_noir_1.png]
+  Nombre oficial : Black Bubble
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Noir
+
+[ecard_aquatic_puffy_1.png]
+  Nombre oficial : Bubble Maker
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Puffy
+
+[ecard_aquatic_rouge_1.png]
+  Nombre oficial : Red Bubble
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Rouge
+
+[ecard_exploding_bombshell.png]
+  Nombre oficial : Exploding Bombshell
+  Rareza         : Mystic
+  Efecto Axie    : (Alter any Single Attack Cards) This card deals 20% <Splash DMG>.
+
+
+=== CLASE: BEAST (17 amuletos) ===
+
+[ecard_beast_2012.png]
+  Nombre oficial : Beast's Charm of Focus I
+  Rareza         : Rare
+  Efecto Axie    : (Alter Multihit & <AoE> Attack cards) ATK +3
+
+[ecard_beast_3011.png]
+  Nombre oficial : Beast's Charm of Focus II
+  Rareza         : Epic
+  Efecto Axie    : (Alter Multihit & <AoE> Attack cards) ATK + 5. The card's owner's max HP -6.
+
+[ecard_beast_4001.png]
+  Nombre oficial : Beast's Charm of Power I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance a Non-Multihit Attack card) ATK +6
+
+[ecard_beast_4002.png]
+  Nombre oficial : Beast's Charm of Vitality I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance any card) Axie's max HP +12
+
+[ecard_beast_4003.png]
+  Nombre oficial : Mask of Frenzy
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any Attack card) All teammates gain 1 {Rage}.
+
+[ecard_beast_5001.png]
+  Nombre oficial : Beast's Charm of Power II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance a Non-Multihit Attack card) ATK +10
+
+[ecard_beast_5002.png]
+  Nombre oficial : Beast's Charm of Vitality II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any card) Axie's max HP +18
+
+[ecard_beast_5003.png]
+  Nombre oficial : Beast Energy Drink M
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Banish>.
+  En el juego    : Poder "brutal" (Garra Brutal / Beast Energy Drink M)
+
+[ecard_beast_5004.png]
+  Nombre oficial : Beast Energy Drink S
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any cards) Add <Ethereal>.
+
+[ecard_beast_5005.png]
+  Nombre oficial : Hidden Razor
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance an Attack card) Attacks appy {Bleed} for 4 turns.
+
+[ecard_beast_awaken_stamp.png]
+  Nombre oficial : Awaken Stamp (Beast)
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2). +1 {Rage} to Allied Axies.
+
+[ecard_beast_bing_1.png]
+  Nombre oficial : Bing's Ice Cream
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Bing
+
+[ecard_beast_buba_1.png]
+  Nombre oficial : Raging Dagger
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Buba
+
+[ecard_beast_hope_1.png]
+  Nombre oficial : Overclocking
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Hope
+
+[ecard_beast_tripp_1.png]
+  Nombre oficial : Common Pliers
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Tripp
+
+[ecard_beast_xia_1.png]
+  Nombre oficial : Pangolin Shard
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Xia
+
+[ecard_mad_moon_mask.png]
+  Nombre oficial : Mad Moon Mask
+  Rareza         : Mystic
+  Efecto Axie    : (Alter any Attack Cards) This card can't generate Energy Fragment. Base ATK + 25%.
+
+
+=== CLASE: BIRD (11 amuletos) ===
+
+[ecard_bird_4001.png]
+  Nombre oficial : Bird's Charm of Power I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance a Non-Multihit Attack card) ATK +6
+
+[ecard_bird_4002.png]
+  Nombre oficial : Bird's Charm of Focus I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance a Multihit Attack card) ATK +3
+
+[ecard_bird_4003.png]
+  Nombre oficial : Feather Fan
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any Attack card) All teammates gain 1 {Feather}.
+
+[ecard_bird_5001.png]
+  Nombre oficial : Bird's Charm of Power II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance a Non-Multihit Attack card) ATK +10
+
+[ecard_bird_5002.png]
+  Nombre oficial : Bird's Charm of Focus II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance a Multihit Attack card) ATK +4
+
+[ecard_bird_5003.png]
+  Nombre oficial : Secret Egg
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Innate>. Card's base stat -10%.
+
+[ecard_bird_5004.png]
+  Nombre oficial : Bird Energy Drink S
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Ethereal>.
+
+[ecard_bird_5005.png]
+  Nombre oficial : Flamingo Hammer
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance an Attack card) Attack applies {Fragile} for 4 turns.
+
+[ecard_bird_awaken_stamp.png]
+  Nombre oficial : Awaken Stamp (Bird)
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2). +1 {Feather} to Allied Axies.
+
+[ecard_bird_momo_1.png]
+  Nombre oficial : Feather Earring
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Momo (Pluma Sagrada)
+  En el juego    : Poder "feather" (Pluma Sagrada / Feather Earring)
+
+[ecard_storm_shuriken.png]
+  Nombre oficial : Storm Shuriken
+  Rareza         : Mystic
+  Efecto Axie    : (Alter any Single Attack Card) Deal 40% DMG to another random target.
+
+
+=== CLASE: PLANT (17 amuletos) ===
+
+[ecard_oak_bud.png]
+  Nombre oficial : Oak Bud
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Attack and Shield cards) Shield card heals the targets equal to 30% of Shield granted. Attack card heals the owner equal to 30% of Unblocked DMG.
+
+[ecard_plant_2011.png]
+  Nombre oficial : Plant's Charm of Vitality I
+  Rareza         : Rare
+  Efecto Axie    : (Alter any card) The card's owner's max HP +10.
+
+[ecard_plant_3010.png]
+  Nombre oficial : Plant's Charm of Vitality II
+  Rareza         : Epic
+  Efecto Axie    : (Alter any card) The card's owner's max HP +20. Its base stat -10%.
+
+[ecard_plant_4001.png]
+  Nombre oficial : Plant's Charm of Vitality I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance any card) Axie's max HP +12
+
+[ecard_plant_4002.png]
+  Nombre oficial : Plant's Charm of Faith I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance any Healing card) Heal Stat +6
+
+[ecard_plant_4003.png]
+  Nombre oficial : Leafy Pot
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any Skill or Secret card) All teammates gain 1 {Leaf}.
+
+[ecard_plant_4010.png]
+  Nombre oficial : Red Sage
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Shield & Heal cards) The card <Cleanse> its targets 1 time. Card's base stat +20%.
+
+[ecard_plant_5001.png]
+  Nombre oficial : Plant's Charm of Vitality II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any card) Axie's max HP +18
+
+[ecard_plant_5002.png]
+  Nombre oficial : Plant's Charm of Faith II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any Healing card) Heal Stat +10
+
+[ecard_plant_5003.png]
+  Nombre oficial : Secret Sprout
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Innate>. Card's base stat -10%.
+
+[ecard_plant_5004.png]
+  Nombre oficial : Ancient Root
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Retain>. Card's base stat -10%.
+
+[ecard_plant_5005.png]
+  Nombre oficial : Red Sage
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance Shield and Healing cards) Add <Cleanse>.
+
+[ecard_plant_awaken_stamp.png]
+  Nombre oficial : Awaken Stamp (Plant)
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2). +1 {Leaf} to Allied Axies.
+
+[ecard_plant_bard_1.png]
+  Nombre oficial : Sleepy Guard
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Bard
+
+[ecard_plant_ena_1.png]
+  Nombre oficial : Spring Leaf
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Ena (Hoja)
+  En el juego    : Poder "leaf" (Hoja / Spring Leaf)
+
+[ecard_plant_mit_1.png]
+  Nombre oficial : Mít's Comfy Pillow
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Mít
+
+[ecard_plant_olek_1.png]
+  Nombre oficial : Soldier Medal
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Olek
+
+
+=== CLASE: BUG (12 amuletos) ===
+
+[ecard_bug_4001.png]
+  Nombre oficial : Bug's Charm of Endurance I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance a Shielding card) Shield Stat +6
+
+[ecard_bug_4002.png]
+  Nombre oficial : Bug's Charm of Power I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance a Non-Multihit Attack card) ATK +6
+
+[ecard_bug_4003.png]
+  Nombre oficial : Trickster's Card
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any Skill or Secret card) Draw 1 Card
+
+[ecard_bug_5001.png]
+  Nombre oficial : Bug's Charm of Endurance II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance a Shielding card) Shield Stat +10
+
+[ecard_bug_5002.png]
+  Nombre oficial : Bug's Charm of Power II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance a Non-Multihit Attack card) ATK +10
+
+[ecard_bug_5003.png]
+  Nombre oficial : Secret Cocoon
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Innate>.
+
+[ecard_bug_5004.png]
+  Nombre oficial : Bug Energy Drink M
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Banish>.
+
+[ecard_bug_5005.png]
+  Nombre oficial : Lazy Snail
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance an Attack card) Attack applies {Weak} for 4 turns.
+
+[ecard_bug_awaken_stamp.png]
+  Nombre oficial : Awaken Stamp (Bug)
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2). +1 {Cocoon} to Allied Axies.
+
+[ecard_bug_pomodoro_1.png]
+  Nombre oficial : Cocoon Whistle
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Pomodoro
+
+[ecard_bug_shillin_1.png]
+  Nombre oficial : Metal Scanner
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Shillin
+
+[ecard_mantis_dagger.png]
+  Nombre oficial : Mantis Dagger
+  Rareza         : Mystic
+  Efecto Axie    : (Alter any Attack Card) The card Discards 1 random Card in opponent's Hand or Draw Pile
+  En el juego    : Poder "leech" (Greedy Leech / Mantis Dagger)
+
+
+=== CLASE: REPTILE (14 amuletos) ===
+
+[ecard_glove_of_infection.png]
+  Nombre oficial : Gloves of Infection
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Debuff card) Apply 4 poison per Energy cost to 1 random enemy Axie.
+
+[ecard_reptile_2012.png]
+  Nombre oficial : Reptile's Charm of Endurance I
+  Rareza         : Rare
+  Efecto Axie    : (Alter Shield cards) Shield +7
+
+[ecard_reptile_3011.png]
+  Nombre oficial : Reptile's Charm of Endurance II
+  Rareza         : Epic
+  Efecto Axie    : (Alter Shield cards) Shield +13. The card's owner's max HP -6.
+
+[ecard_reptile_4001.png]
+  Nombre oficial : Reptile's Charm of Vitality I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance any card) Axie's Max HP +12
+
+[ecard_reptile_4002.png]
+  Nombre oficial : Reptile's Charm of Endurance I
+  Rareza         : Rare
+  Efecto Axie    : (Enhance any Shielding card) Shield Stat +6
+
+[ecard_reptile_4003.png]
+  Nombre oficial : Gecko Mask
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any Attack card) Apply {Taunt} to this Axie for 4 turns.
+  En el juego    : Poder "steelskin" (Piel de Escamas / Gecko Mask)
+
+[ecard_reptile_5001.png]
+  Nombre oficial : Reptile's Charm of Vitality II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any card) Axie's Max HP +18
+
+[ecard_reptile_5002.png]
+  Nombre oficial : Reptile's Charm of Endurance II
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any Shielding card) Shield Stat +10
+
+[ecard_reptile_5003.png]
+  Nombre oficial : Sticky Lizard
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Retain>. Card's base stat -10%.
+
+[ecard_reptile_5004.png]
+  Nombre oficial : Reptile Energy Drink M
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Banish>.
+
+[ecard_reptile_5005.png]
+  Nombre oficial : Viper's Venom
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance an Attack card) Attack applies 2 {Poison}.
+
+[ecard_reptile_awaken_stamp.png]
+  Nombre oficial : Awaken Stamp (Reptile)
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2). +1 {Spike} to Allied Axies.
+
+[ecard_reptile_machito_1.png]
+  Nombre oficial : Sharp Edge
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Machito
+
+[ecard_reptile_venoki_1.png]
+  Nombre oficial : Poison Vial
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Venoki (Veneno)
+  En el juego    : Poder "poison" (Veneno / Poison Vial)
+
+
+=== CLASE: DAWN (5 amuletos) ===
+
+[ecard_dawn_4001.png]
+  Nombre oficial : Dawn's Charm of Focus I
+  Rareza         : Rare
+  Efecto Axie    : Mejora de ataque multihit
+
+[ecard_dawn_4002.png]
+  Nombre oficial : Dawn's Charm of Faith I
+  Rareza         : Rare
+  Efecto Axie    : Mejora de curación
+
+[ecard_dawn_5001.png]
+  Nombre oficial : Dawn's Charm of Focus II
+  Rareza         : Epic
+  Efecto Axie    : Mejora avanzada de ataque multihit
+
+[ecard_dawn_5002.png]
+  Nombre oficial : Dawn's Charm of Faith II
+  Rareza         : Epic
+  Efecto Axie    : Mejora avanzada de curación
+
+[ecard_dawn_5003.png]
+  Nombre oficial : Dawn Energy Drink S
+  Rareza         : Mystic
+  Efecto Axie    : Otorga Ethereal y aumento porcentual de stats
+
+
+=== CLASE: DUSK (5 amuletos) ===
+
+[ecard_dusk_4001.png]
+  Nombre oficial : Dusk's Charm of Power I
+  Rareza         : Rare
+  Efecto Axie    : Mejora de ataque base
+
+[ecard_dusk_4002.png]
+  Nombre oficial : Dusk's Charm of Focus I
+  Rareza         : Rare
+  Efecto Axie    : Mejora de multihit o debuff
+
+[ecard_dusk_5001.png]
+  Nombre oficial : Dusk's Charm of Power II
+  Rareza         : Epic
+  Efecto Axie    : Mejora avanzada de ataque
+
+[ecard_dusk_5002.png]
+  Nombre oficial : Dusk's Charm of Focus II
+  Rareza         : Epic
+  Efecto Axie    : Mejora avanzada de multihit
+
+[ecard_dusk_5003.png]
+  Nombre oficial : Dusk Energy Drink M
+  Rareza         : Mystic
+  Efecto Axie    : Otorga Banish y +20% de stats
+
+
+=== CLASE: MECH (8 amuletos) ===
+
+[ecard_mech_4001.png]
+  Nombre oficial : Mech's Charm of Power I
+  Rareza         : Rare
+  Efecto Axie    : Mejora de ataque base (+6 ATK)
+
+[ecard_mech_4002.png]
+  Nombre oficial : Mech's Charm of Endurance I
+  Rareza         : Rare
+  Efecto Axie    : Mejora de escudo base (+6 Escudo)
+
+[ecard_mech_4003.png]
+  Nombre oficial : Mech RAM Module
+  Rareza         : Epic
+  Efecto Axie    : Módulo de memoria RAM con escudo alado
+
+[ecard_mech_5001.png]
+  Nombre oficial : Mech's Charm of Power II
+  Rareza         : Epic
+  Efecto Axie    : Mejora avanzada de ataque (+10 ATK)
+
+[ecard_mech_5002.png]
+  Nombre oficial : Mech's Charm of Endurance II
+  Rareza         : Epic
+  Efecto Axie    : Mejora avanzada de escudo (+10 Escudo)
+
+[ecard_mech_5003.png]
+  Nombre oficial : Tachyon Processor
+  Rareza         : Mystic
+  Efecto Axie    : Microprocesador integrado con símbolo Mech
+
+[ecard_mech_5004.png]
+  Nombre oficial : Pocket Console
+  Rareza         : Mystic
+  Efecto Axie    : Dispositivo portátil con pantalla retro y d-pad
+
+[ecard_mech_5005.png]
+  Nombre oficial : Cyber Drive
+  Rareza         : Mystic
+  Efecto Axie    : Memoria USB púrpura con espada cibernética
+
+
+=== CLASE: NEUTRAL (46 amuletos) ===
+
+[ecard_alien_intervention.png]
+  Nombre oficial : Alien Intervention
+  Rareza         : Rare
+  Efecto Axie    : Otorga efecto Initial: Exile a la carta
+
+[ecard_black_sage.png]
+  Nombre oficial : Black Sage
+  Rareza         : Rare
+  Efecto Axie    : (Alter Single Attack cards) Add <Dispel>. Card's base stat -15%.
+
+[ecard_dawn_4003.png]
+  Nombre oficial : Bean's Blessing
+  Rareza         : Rare
+  Efecto Axie    : (Alter Heal and Shield cards) Add Remove 1 Curse. Card's base stat -15%.
+
+[ecard_dawn_5004.png]
+  Nombre oficial : Wooden Idol
+  Rareza         : Mystic
+  Efecto Axie    : (Alter 2E Cards) +10% Stat. When your turn start, if this Card is in your Draw Pile or Hand, <Purify>: 1.
+
+[ecard_dawn_5005.png]
+  Nombre oficial : Purifying Incense
+  Rareza         : Epic
+  Efecto Axie    : (Alter Attacks/Heals/Shields) <Cleanse>: 2 on allies or <Dispel>: 1 on enemies. <Initial>: <Purify> 1.
+
+[ecard_dusk_4003.png]
+  Nombre oficial : Novice Spell
+  Rareza         : Rare
+  Efecto Axie    : (Alter Curses) Randomly heal 6 HP or gain 6 Shield. Deal 6 DMG to a random enemy.
+
+[ecard_dusk_5004.png]
+  Nombre oficial : Cursed Doll
+  Rareza         : Epic
+  Efecto Axie    : (Alter Curses) <Steal> 10 HP from a random enemy if it isn't {Alert}.
+
+[ecard_dusk_5005.png]
+  Nombre oficial : Deadly Spell
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Curses) Add 1 [Confused] to the Enemy's Discard Pile. If they have ≥ 5 Cursed Cards, remove 2 at random and deal (10% of the target's Max HP) as DMG to all enemies.
+
+[ecard_lens_of_revelation.png]
+  Nombre oficial : Lens of Revelation
+  Rareza         : Rare
+  Efecto Axie    : (Alter Single Attack cards) Add Remove 1 Secret. Card's base stat -15%.
+
+[ecard_mama_bear.png]
+  Nombre oficial : Mama Bear
+  Rareza         : Mystic
+  Efecto Axie    : Rondas impares: +15% curación/escudo. Rondas pares: daño 0.4x al enemigo frontal
+
+[ecard_neutral_1001.png]
+  Nombre oficial : Charm of Vitality I
+  Rareza         : Common
+  Efecto Axie    : Aumenta la vida máxima (+10 HP)
+
+[ecard_neutral_1002.png]
+  Nombre oficial : Charm of Power I
+  Rareza         : Common
+  Efecto Axie    : Aumenta el ataque base (+4 ATK)
+
+[ecard_neutral_1003.png]
+  Nombre oficial : Charm of Focus I
+  Rareza         : Common
+  Efecto Axie    : Aumenta el ataque en cartas multihit (+2 ATK)
+
+[ecard_neutral_1004.png]
+  Nombre oficial : Charm of Endurance I
+  Rareza         : Common
+  Efecto Axie    : Aumenta el escudo (+4 Escudo)
+
+[ecard_neutral_1005.png]
+  Nombre oficial : Charm of Faith I
+  Rareza         : Common
+  Efecto Axie    : Aumenta la curación (+4 Heal)
+
+[ecard_neutral_2001.png]
+  Nombre oficial : Charm of Vitality II
+  Rareza         : Rare
+  Efecto Axie    : (Enhance any card) Axie's max HP +8
+
+[ecard_neutral_2002.png]
+  Nombre oficial : Charm of Power II
+  Rareza         : Rare
+  Efecto Axie    : (Enhance Non-Multihit Attack card) ATK +4
+
+[ecard_neutral_2003.png]
+  Nombre oficial : Charm of Focus II
+  Rareza         : Rare
+  Efecto Axie    : (Enhance Multihit Attack card) ATK +2
+
+[ecard_neutral_2004.png]
+  Nombre oficial : Charm of Endurance II
+  Rareza         : Rare
+  Efecto Axie    : (Enhance Shielding cards) Shield Stat +4
+
+[ecard_neutral_2005.png]
+  Nombre oficial : Charm of Faith II
+  Rareza         : Rare
+  Efecto Axie    : (Enhance Healing cards) Heal Stat +4
+
+[ecard_neutral_3001.png]
+  Nombre oficial : Charm of Vitality III
+  Rareza         : Epic
+  Efecto Axie    : (Enhance any card) Axie's max HP +12
+
+[ecard_neutral_3002.png]
+  Nombre oficial : Charm of Power III
+  Rareza         : Epic
+  Efecto Axie    : (Enhance Non-Multihit Attack card) ATK +7
+
+[ecard_neutral_3003.png]
+  Nombre oficial : Charm of Focus III
+  Rareza         : Epic
+  Efecto Axie    : (Enhance Multihit Attack card) ATK +3
+
+[ecard_neutral_3004.png]
+  Nombre oficial : Charm of Endurance III
+  Rareza         : Epic
+  Efecto Axie    : (Enhance Shielding cards) Shield Stat +7
+
+[ecard_neutral_3005.png]
+  Nombre oficial : Charm of Faith III
+  Rareza         : Epic
+  Efecto Axie    : (Enhance Healing cards) Heal Stat +7
+
+[ecard_neutral_4001.png]
+  Nombre oficial : Earth Stamp
+  Rareza         : Rare
+  Efecto Axie    : (Enhance Single Target Attack cards) This card targets the closest enemy.
+
+[ecard_neutral_4002.png]
+  Nombre oficial : Moon Stamp
+  Rareza         : Epic
+  Efecto Axie    : (Enhance Single Target Attack cards) This card targets the second closest enemy. Card's base stat -10%.
+
+[ecard_neutral_4003.png]
+  Nombre oficial : Sun Stamp
+  Rareza         : Epic
+  Efecto Axie    : (Enhance Single Target Attack cards) This card targets the furthest enemy. Card's base stat -10%.
+
+[ecard_neutral_5001.png]
+  Nombre oficial : Rocket Stamp
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance Single Target Attack cards) This card can target any enemy. Card's base stat -15%.
+  En el juego    : Poder "freegame" (Free Game / Rocket Stamp)
+
+[ecard_neutral_5002.png]
+  Nombre oficial : Discount Coupon
+  Rareza         : Mystic
+  Efecto Axie    : (Alter 2E Attacks) -50% ATK, -1 Energy Cost.
+
+[ecard_neutral_5003.png]
+  Nombre oficial : Pre Order Tag
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Innate>. Card's base stat -10%.
+
+[ecard_neutral_5004.png]
+  Nombre oficial : Scotch Tape
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Retain>. Card's base stat -10%.
+
+[ecard_neutral_5005.png]
+  Nombre oficial : Energy Drink M
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Banish>.
+
+[ecard_neutral_5006.png]
+  Nombre oficial : Energy Drink S
+  Rareza         : Mystic
+  Efecto Axie    : (Enhance any card) Add <Ethereal>.
+
+[ecard_neutral_awaken_stamp_l.png]
+  Nombre oficial : Awaken Stamp (L)
+  Rareza         : Mystic
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2) This Axie's HP +5. Card Stat + 10%.
+
+[ecard_neutral_awaken_stamp_m.png]
+  Nombre oficial : Awaken Stamp (M)
+  Rareza         : Epic
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2). This Axie's HP +5.
+
+[ecard_neutral_awaken_stamp_s.png]
+  Nombre oficial : Awaken Stamp (S)
+  Rareza         : Rare
+  Efecto Axie    : (Alter Any Card) Card Level +1 (cap at Stage 2).
+
+[ecard_neutral_bloodpact.png]
+  Nombre oficial : Bloodpact
+  Rareza         : Epic
+  Efecto Axie    : (Alter Single Attacks) Apply 3 {Death Mark}. Apply 3 {Bleed} to self.
+
+[ecard_neutral_blue_mirror.png]
+  Nombre oficial : Blue Mirror
+  Rareza         : Rare
+  Efecto Axie    : (Alter Any) When the battle starts, Exile this Card. +1 [Blue Mirror] to your Deck.
+
+[ecard_neutral_green_mirror.png]
+  Nombre oficial : Green Mirror
+  Rareza         : Rare
+  Efecto Axie    : (Alter Any) When the battle starts, Exile this Card. +1 [Green Mirror] to your Deck.
+
+[ecard_neutral_last_gift.png]
+  Nombre oficial : Last Gift
+  Rareza         : Epic
+  Efecto Axie    : (Alter Summons) When the Summon dies, deal 50% of its max HP as DMG to all Enemies (Cap: 25 DMG).
+
+[ecard_neutral_red_mirror.png]
+  Nombre oficial : Red Mirror
+  Rareza         : Rare
+  Efecto Axie    : (Alter Any) When the battle starts, Exile this Card. +1 [Red Mirror] to your Deck.
+
+[ecard_neutral_shufen_1.png]
+  Nombre oficial : Cursed Urn
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Shu Fen
+
+[ecard_neutral_temujin_1.png]
+  Nombre oficial : Black Gourd
+  Rareza         : Starter
+  Efecto Axie    : Amuleto inicial exclusivo de Temujin
+
+[ecard_papa_bear.png]
+  Nombre oficial : Papa Bear
+  Rareza         : Mystic
+  Efecto Axie    : Rondas impares: escuda 20% del daño. Rondas pares: +15% de daño
+
+[ecard_plant_0001.png]
+  Nombre oficial : White Sage
+  Rareza         : Rare
+  Efecto Axie    : (Alter Healing and Shielding Skill cards) Add <Cleanse>. Card's base stat -20%.
+
+
+--------------------------------------------------------------------------------
+4. TABLA RÁPIDA DE BÚSQUEDA (ARCHIVO -> NOMBRE OFICIAL)
+--------------------------------------------------------------------------------
+ecard_alien_intervention.png        | Alien Intervention               | [Neutral] (Rare)
+ecard_aquatic_2012.png              | Aquatic's Charm of Focus I       | [Aquatic] (Rare)
+ecard_aquatic_3011.png              | Aquatic's Charm of Focus II      | [Aquatic] (Epic)
+ecard_aquatic_4001.png              | Aquatic's Charm of Vitality I    | [Aquatic] (Rare)
+ecard_aquatic_4002.png              | Aquatic's  Charm of Power I      | [Aquatic] (Rare)
+ecard_aquatic_4003.png              | Bubble Paste                     | [Aquatic] (Epic)
+ecard_aquatic_5001.png              | Aquatic's Charm of Vitality II   | [Aquatic] (Epic)
+ecard_aquatic_5002.png              | Aquatic's Charm of Power II      | [Aquatic] (Epic)
+ecard_aquatic_5003.png              | Aquatic Energy Drink S           | [Aquatic] (Mystic)
+ecard_aquatic_5004.png              | Sticky Octopus                   | [Aquatic] (Mystic)
+ecard_aquatic_5005.png              | Paralyzing Jellyfish             | [Aquatic] (Mystic)
+ecard_aquatic_awaken_stamp.png      | Awaken Stamp (Aquatic)           | [Aquatic] (Mystic)
+ecard_aquatic_noir_1.png            | Black Bubble                     | [Aquatic] (Starter)
+ecard_aquatic_puffy_1.png           | Bubble Maker                     | [Aquatic] (Starter)
+ecard_aquatic_rouge_1.png           | Red Bubble                       | [Aquatic] (Starter)
+ecard_beast_2012.png                | Beast's Charm of Focus I         | [Beast  ] (Rare)
+ecard_beast_3011.png                | Beast's Charm of Focus II        | [Beast  ] (Epic)
+ecard_beast_4001.png                | Beast's Charm of Power I         | [Beast  ] (Rare)
+ecard_beast_4002.png                | Beast's Charm of Vitality I      | [Beast  ] (Rare)
+ecard_beast_4003.png                | Mask of Frenzy                   | [Beast  ] (Epic)
+ecard_beast_5001.png                | Beast's Charm of Power II        | [Beast  ] (Epic)
+ecard_beast_5002.png                | Beast's Charm of Vitality II     | [Beast  ] (Epic)
+ecard_beast_5003.png                | Beast Energy Drink M             | [Beast  ] (Mystic)
+ecard_beast_5004.png                | Beast Energy Drink S             | [Beast  ] (Mystic)
+ecard_beast_5005.png                | Hidden Razor                     | [Beast  ] (Mystic)
+ecard_beast_awaken_stamp.png        | Awaken Stamp (Beast)             | [Beast  ] (Mystic)
+ecard_beast_bing_1.png              | Bing's Ice Cream                 | [Beast  ] (Starter)
+ecard_beast_buba_1.png              | Raging Dagger                    | [Beast  ] (Starter)
+ecard_beast_hope_1.png              | Overclocking                     | [Beast  ] (Starter)
+ecard_beast_tripp_1.png             | Common Pliers                    | [Beast  ] (Starter)
+ecard_beast_xia_1.png               | Pangolin Shard                   | [Beast  ] (Starter)
+ecard_bird_4001.png                 | Bird's Charm of Power I          | [Bird   ] (Rare)
+ecard_bird_4002.png                 | Bird's Charm of Focus I          | [Bird   ] (Rare)
+ecard_bird_4003.png                 | Feather Fan                      | [Bird   ] (Epic)
+ecard_bird_5001.png                 | Bird's Charm of Power II         | [Bird   ] (Epic)
+ecard_bird_5002.png                 | Bird's Charm of Focus II         | [Bird   ] (Epic)
+ecard_bird_5003.png                 | Secret Egg                       | [Bird   ] (Mystic)
+ecard_bird_5004.png                 | Bird Energy Drink S              | [Bird   ] (Mystic)
+ecard_bird_5005.png                 | Flamingo Hammer                  | [Bird   ] (Mystic)
+ecard_bird_awaken_stamp.png         | Awaken Stamp (Bird)              | [Bird   ] (Mystic)
+ecard_bird_momo_1.png               | Feather Earring                  | [Bird   ] (Starter)
+ecard_black_sage.png                | Black Sage                       | [Neutral] (Rare)
+ecard_bug_4001.png                  | Bug's Charm of Endurance I       | [Bug    ] (Rare)
+ecard_bug_4002.png                  | Bug's Charm of Power I           | [Bug    ] (Rare)
+ecard_bug_4003.png                  | Trickster's Card                 | [Bug    ] (Epic)
+ecard_bug_5001.png                  | Bug's Charm of Endurance II      | [Bug    ] (Epic)
+ecard_bug_5002.png                  | Bug's Charm of Power II          | [Bug    ] (Epic)
+ecard_bug_5003.png                  | Secret Cocoon                    | [Bug    ] (Mystic)
+ecard_bug_5004.png                  | Bug Energy Drink M               | [Bug    ] (Mystic)
+ecard_bug_5005.png                  | Lazy Snail                       | [Bug    ] (Mystic)
+ecard_bug_awaken_stamp.png          | Awaken Stamp (Bug)               | [Bug    ] (Mystic)
+ecard_bug_pomodoro_1.png            | Cocoon Whistle                   | [Bug    ] (Starter)
+ecard_bug_shillin_1.png             | Metal Scanner                    | [Bug    ] (Starter)
+ecard_dawn_4001.png                 | Dawn's Charm of Focus I          | [Dawn   ] (Rare)
+ecard_dawn_4002.png                 | Dawn's Charm of Faith I          | [Dawn   ] (Rare)
+ecard_dawn_4003.png                 | Bean's Blessing                  | [Neutral] (Rare)
+ecard_dawn_5001.png                 | Dawn's Charm of Focus II         | [Dawn   ] (Epic)
+ecard_dawn_5002.png                 | Dawn's Charm of Faith II         | [Dawn   ] (Epic)
+ecard_dawn_5003.png                 | Dawn Energy Drink S              | [Dawn   ] (Mystic)
+ecard_dawn_5004.png                 | Wooden Idol                      | [Neutral] (Mystic)
+ecard_dawn_5005.png                 | Purifying Incense                | [Neutral] (Epic)
+ecard_dusk_4001.png                 | Dusk's Charm of Power I          | [Dusk   ] (Rare)
+ecard_dusk_4002.png                 | Dusk's Charm of Focus I          | [Dusk   ] (Rare)
+ecard_dusk_4003.png                 | Novice Spell                     | [Neutral] (Rare)
+ecard_dusk_5001.png                 | Dusk's Charm of Power II         | [Dusk   ] (Epic)
+ecard_dusk_5002.png                 | Dusk's Charm of Focus II         | [Dusk   ] (Epic)
+ecard_dusk_5003.png                 | Dusk Energy Drink M              | [Dusk   ] (Mystic)
+ecard_dusk_5004.png                 | Cursed Doll                      | [Neutral] (Epic)
+ecard_dusk_5005.png                 | Deadly Spell                     | [Neutral] (Mystic)
+ecard_exploding_bombshell.png       | Exploding Bombshell              | [Aquatic] (Mystic)
+ecard_glove_of_infection.png        | Gloves of Infection              | [Reptile] (Mystic)
+ecard_lens_of_revelation.png        | Lens of Revelation               | [Neutral] (Rare)
+ecard_mad_moon_mask.png             | Mad Moon Mask                    | [Beast  ] (Mystic)
+ecard_mama_bear.png                 | Mama Bear                        | [Neutral] (Mystic)
+ecard_mantis_dagger.png             | Mantis Dagger                    | [Bug    ] (Mystic)
+ecard_mech_4001.png                 | Mech's Charm of Power I          | [Mech   ] (Rare)
+ecard_mech_4002.png                 | Mech's Charm of Endurance I      | [Mech   ] (Rare)
+ecard_mech_4003.png                 | Mech RAM Module                  | [Mech   ] (Epic)
+ecard_mech_5001.png                 | Mech's Charm of Power II         | [Mech   ] (Epic)
+ecard_mech_5002.png                 | Mech's Charm of Endurance II     | [Mech   ] (Epic)
+ecard_mech_5003.png                 | Tachyon Processor                | [Mech   ] (Mystic)
+ecard_mech_5004.png                 | Pocket Console                   | [Mech   ] (Mystic)
+ecard_mech_5005.png                 | Cyber Drive                      | [Mech   ] (Mystic)
+ecard_neutral_1001.png              | Charm of Vitality I              | [Neutral] (Common)
+ecard_neutral_1002.png              | Charm of Power I                 | [Neutral] (Common)
+ecard_neutral_1003.png              | Charm of Focus I                 | [Neutral] (Common)
+ecard_neutral_1004.png              | Charm of Endurance I             | [Neutral] (Common)
+ecard_neutral_1005.png              | Charm of Faith I                 | [Neutral] (Common)
+ecard_neutral_2001.png              | Charm of Vitality II             | [Neutral] (Rare)
+ecard_neutral_2002.png              | Charm of Power II                | [Neutral] (Rare)
+ecard_neutral_2003.png              | Charm of Focus II                | [Neutral] (Rare)
+ecard_neutral_2004.png              | Charm of Endurance II            | [Neutral] (Rare)
+ecard_neutral_2005.png              | Charm of Faith II                | [Neutral] (Rare)
+ecard_neutral_3001.png              | Charm of Vitality III            | [Neutral] (Epic)
+ecard_neutral_3002.png              | Charm of Power III               | [Neutral] (Epic)
+ecard_neutral_3003.png              | Charm of Focus III               | [Neutral] (Epic)
+ecard_neutral_3004.png              | Charm of Endurance III           | [Neutral] (Epic)
+ecard_neutral_3005.png              | Charm of Faith III               | [Neutral] (Epic)
+ecard_neutral_4001.png              | Earth Stamp                      | [Neutral] (Rare)
+ecard_neutral_4002.png              | Moon Stamp                       | [Neutral] (Epic)
+ecard_neutral_4003.png              | Sun Stamp                        | [Neutral] (Epic)
+ecard_neutral_5001.png              | Rocket Stamp                     | [Neutral] (Mystic)
+ecard_neutral_5002.png              | Discount Coupon                  | [Neutral] (Mystic)
+ecard_neutral_5003.png              | Pre Order Tag                    | [Neutral] (Mystic)
+ecard_neutral_5004.png              | Scotch Tape                      | [Neutral] (Mystic)
+ecard_neutral_5005.png              | Energy Drink M                   | [Neutral] (Mystic)
+ecard_neutral_5006.png              | Energy Drink S                   | [Neutral] (Mystic)
+ecard_neutral_awaken_stamp_l.png    | Awaken Stamp (L)                 | [Neutral] (Mystic)
+ecard_neutral_awaken_stamp_m.png    | Awaken Stamp (M)                 | [Neutral] (Epic)
+ecard_neutral_awaken_stamp_s.png    | Awaken Stamp (S)                 | [Neutral] (Rare)
+ecard_neutral_bloodpact.png         | Bloodpact                        | [Neutral] (Epic)
+ecard_neutral_blue_mirror.png       | Blue Mirror                      | [Neutral] (Rare)
+ecard_neutral_green_mirror.png      | Green Mirror                     | [Neutral] (Rare)
+ecard_neutral_last_gift.png         | Last Gift                        | [Neutral] (Epic)
+ecard_neutral_red_mirror.png        | Red Mirror                       | [Neutral] (Rare)
+ecard_neutral_shufen_1.png          | Cursed Urn                       | [Neutral] (Starter)
+ecard_neutral_temujin_1.png         | Black Gourd                      | [Neutral] (Starter)
+ecard_oak_bud.png                   | Oak Bud                          | [Plant  ] (Mystic)
+ecard_papa_bear.png                 | Papa Bear                        | [Neutral] (Mystic)
+ecard_plant_0001.png                | White Sage                       | [Neutral] (Rare)
+ecard_plant_2011.png                | Plant's Charm of Vitality I      | [Plant  ] (Rare)
+ecard_plant_3010.png                | Plant's Charm of Vitality II     | [Plant  ] (Epic)
+ecard_plant_4001.png                | Plant's Charm of Vitality I      | [Plant  ] (Rare)
+ecard_plant_4002.png                | Plant's Charm of Faith I         | [Plant  ] (Rare)
+ecard_plant_4003.png                | Leafy Pot                        | [Plant  ] (Epic)
+ecard_plant_4010.png                | Red Sage                         | [Plant  ] (Mystic)
+ecard_plant_5001.png                | Plant's Charm of Vitality II     | [Plant  ] (Epic)
+ecard_plant_5002.png                | Plant's Charm of Faith II        | [Plant  ] (Epic)
+ecard_plant_5003.png                | Secret Sprout                    | [Plant  ] (Mystic)
+ecard_plant_5004.png                | Ancient Root                     | [Plant  ] (Mystic)
+ecard_plant_5005.png                | Red Sage                         | [Plant  ] (Mystic)
+ecard_plant_awaken_stamp.png        | Awaken Stamp (Plant)             | [Plant  ] (Mystic)
+ecard_plant_bard_1.png              | Sleepy Guard                     | [Plant  ] (Starter)
+ecard_plant_ena_1.png               | Spring Leaf                      | [Plant  ] (Starter)
+ecard_plant_mit_1.png               | Mít's Comfy Pillow               | [Plant  ] (Starter)
+ecard_plant_olek_1.png              | Soldier Medal                    | [Plant  ] (Starter)
+ecard_reptile_2012.png              | Reptile's Charm of Endurance I   | [Reptile] (Rare)
+ecard_reptile_3011.png              | Reptile's Charm of Endurance II  | [Reptile] (Epic)
+ecard_reptile_4001.png              | Reptile's Charm of Vitality I    | [Reptile] (Rare)
+ecard_reptile_4002.png              | Reptile's Charm of Endurance I   | [Reptile] (Rare)
+ecard_reptile_4003.png              | Gecko Mask                       | [Reptile] (Epic)
+ecard_reptile_5001.png              | Reptile's Charm of Vitality II   | [Reptile] (Epic)
+ecard_reptile_5002.png              | Reptile's Charm of Endurance II  | [Reptile] (Epic)
+ecard_reptile_5003.png              | Sticky Lizard                    | [Reptile] (Mystic)
+ecard_reptile_5004.png              | Reptile Energy Drink M           | [Reptile] (Mystic)
+ecard_reptile_5005.png              | Viper's Venom                    | [Reptile] (Mystic)
+ecard_reptile_awaken_stamp.png      | Awaken Stamp (Reptile)           | [Reptile] (Mystic)
+ecard_reptile_machito_1.png         | Sharp Edge                       | [Reptile] (Starter)
+ecard_reptile_venoki_1.png          | Poison Vial                      | [Reptile] (Starter)
+ecard_storm_shuriken.png            | Storm Shuriken                   | [Bird   ] (Mystic)

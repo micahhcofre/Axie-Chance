@@ -311,7 +311,7 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 
 // --- el roster --------------------------------------------------------------
 {
-  const { AXIES, AXIE_IDS, axie, deckFor, axieArt } = await import('../src/axies.js');
+  const { AXIES, AXIE_IDS, STARTERS, axie, deckFor, axieArt } = await import('../src/axies.js');
   const { AVATARS, PART_CATALOG } = await import('../src/axie-avatars.js');
 
   assert.equal(AXIE_IDS.length, 6, 'seis Axies');
@@ -354,6 +354,25 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 
   // Un id que no existe no rompe el render: cae en el primero del roster.
   assert.equal(axie('no-existe').id, AXIE_IDS[0]);
+
+  // Los starters de la Aventura: fuera del roster, pero con dibujo propio y el mazo de
+  // su clase.
+  assert.deepEqual(
+    Object.values(STARTERS).map((s) => s.class).sort(),
+    SYMBOL_IDS.slice().sort(),
+    'un starter por clase',
+  );
+  for (const [id, s] of Object.entries(STARTERS)) {
+    assert.ok(!AXIE_IDS.includes(id), `${id}: un starter no es del roster`);
+    assert.equal(axie(id), s, `${id}: axie() conoce a los starters`);
+    assert.deepEqual(
+      deckFor(id).map((c) => c.key).sort(),
+      buildPersonalDeck(s.class).map((c) => c.key).sort(),
+      `${id}: el mazo no es el de su clase`,
+    );
+    assert.deepEqual(AVATARS[id]?.from, { kit: s.kit }, `${id}: el dibujo es de otro starter — corré npm run axies`);
+    assert.match(axieArt(id), /src="Axies\//, `${id}: las capas de un starter viajan con el juego`);
+  }
 }
 
 // --- stackOnCard (Free Game) -------------------------------------------------

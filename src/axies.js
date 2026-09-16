@@ -84,9 +84,27 @@ export const AXIES = {
 
 export const AXIE_IDS = Object.keys(AXIES);
 
-/** El Axie de un id, o el primero del roster si el id no existe. */
+/**
+ * Los starters de Origins: los rivales del Modo Aventura, uno por clase.
+ *
+ * No son del roster —no se eligen ni salen sorteados contra la CPU— y no están hechos
+ * de partes: el kit los trae como cuerpos fijos de Spine, y `kit` es el número de su
+ * carpeta en `PvE/Starters/`. El dibujo y las animaciones los arman `npm run axies` y
+ * `npm run poses` desde ahí (ver `scripts/starters.mjs`). El mazo sale de la clase,
+ * como el de cualquiera.
+ */
+export const STARTERS = {
+  olek: { id: 'olek', class: 'plant', name: 'Olek', kit: 2 },
+  momo: { id: 'momo', class: 'bird', name: 'Momo', kit: 12 },
+  puffy: { id: 'puffy', class: 'aquatic', name: 'Puffy', kit: 3 },
+  buba: { id: 'buba', class: 'beast', name: 'Buba', kit: 1 },
+  pomodoro: { id: 'pomodoro', class: 'bug', name: 'Pomodoro', kit: 17 },
+  venoki: { id: 'venoki', class: 'reptile', name: 'Venoki', kit: 7 },
+};
+
+/** El Axie de un id —del roster o starter—, o el primero del roster si el id no existe. */
 export function axie(id) {
-  return AXIES[id] ?? AXIES[AXIE_IDS[0]];
+  return AXIES[id] ?? STARTERS[id] ?? AXIES[AXIE_IDS[0]];
 }
 
 /**
@@ -98,11 +116,20 @@ export function axie(id) {
  * `buildPersonalDeck`). Sin ellas es el mazo pelado de siempre.
  */
 export function deckFor(id, boosts = {}, nftState = null) {
-  const state = nftState ? toAxieNFTState(nftState) : toAxieNFTState(axie(id));
+  const a = axie(id);
+  // Un starter no tiene partes que leer: su mazo es el de su clase.
+  const state = toAxieNFTState(nftState ?? (a.parts ? a : a.class));
   return buildPersonalDeck(state, boosts);
 }
 
 const pc = (n) => `${(n * 100).toFixed(3)}%`;
+
+/**
+ * La URL de una capa. Las del mixer están en el CDN; las de los starters viajan con el
+ * juego en `Axies/`, y en el build de un solo archivo son data URI (`AXIE_URLS`).
+ */
+const layerUrl = (src) =>
+  src.startsWith('Axies/') ? (globalThis.AXIE_URLS?.[src] ?? src) : AVATAR_BASE + src;
 
 /**
  * De qué parte del bicho es una capa, sacado de la ruta del PNG: `.../tail.png` es
@@ -120,7 +147,7 @@ const partOf = (src) => src.replace('body-normal/', '').match(PARTS)?.[1] ?? 'bo
 
 /** Una capa: el PNG del CDN puesto en porcentajes del marco del dibujo. */
 function layerImg(src, slot, att, box, alt) {
-  return `<img src="${AVATAR_BASE}${src}" alt=""${alt ? ' class="axie-alt"' : ' loading="lazy"'}
+  return `<img src="${layerUrl(src)}" alt=""${alt ? ' class="axie-alt"' : ' loading="lazy"'}
     data-part="${slot}" data-att="${att}"
     onerror="this.closest('.axie').dataset.broken='true'"
     style="left:${pc(box.x)};top:${pc(box.y)};width:${pc(box.w)};height:${pc(box.h)}">`;

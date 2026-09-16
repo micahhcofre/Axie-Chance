@@ -2,6 +2,11 @@ import { createGame } from './game.js';
 import { mount } from './ui.js';
 import { createLobby } from './lobby.js';
 import { connect } from './net.js';
+import { currentLang, translateDom } from './i18n.js';
+
+// Establece el idioma del documento y traduce el HTML estático antes de montar la UI.
+document.documentElement.lang = currentLang();
+translateDom(document.body);
 
 // `?red` es la partida contra otro aparato; sin eso, la de siempre acá adentro. Es la
 // URL y no un botón porque es lo que se escribe en el celular, y porque las dos son

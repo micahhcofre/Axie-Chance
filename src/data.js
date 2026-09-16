@@ -1,11 +1,13 @@
+import { tr } from './i18n.js';
+
 // Símbolos del juego. `color` es el del anillo del crest y tiñe las cadenas en la mesa.
 export const SYMBOLS = {
-  beast:   { id: 'beast',   name: 'Bestia', color: '#f5b53d' },
-  aquatic: { id: 'aquatic', name: 'Pez',    color: '#4bb8f0' },
-  bird:    { id: 'bird',    name: 'Pájaro', color: '#ff7bac' },
-  plant:   { id: 'plant',   name: 'Planta', color: '#54cf8b' },
-  bug:     { id: 'bug',     name: 'Bicho',  color: '#ff6a5c' },
-  reptile: { id: 'reptile', name: 'Reptil', color: '#a97cff' },
+  beast:   { id: 'beast',   name: tr('Bestia'), color: '#f5b53d' },
+  aquatic: { id: 'aquatic', name: tr('Pez'),    color: '#4bb8f0' },
+  bird:    { id: 'bird',    name: tr('Pájaro'), color: '#ff7bac' },
+  plant:   { id: 'plant',   name: tr('Planta'), color: '#54cf8b' },
+  bug:     { id: 'bug',     name: tr('Bicho'),  color: '#ff6a5c' },
+  reptile: { id: 'reptile', name: tr('Reptil'), color: '#a97cff' },
 };
 
 /**
@@ -99,59 +101,75 @@ export const TUNING = {
   steelskinFloor: 6,
 };
 
-const LEAF_NOTE = `+${TUNING.leafGain} hojas (hasta ${TUNING.leafMax}): cada hoja te cura ${TUNING.leafHeal} de vida al final de tu turno y se gasta 1 hoja`;
+// Cada `note` es la definición entera del poder: cuándo salta y qué hace. "Al pegar"
+// es siempre lo mismo —te plantaste y el ataque hizo más de 0—; los que salen de
+// otra forma lo dicen. Es el texto que ve el jugador en la aventura y en el `title`
+// de cada ícono, así que los números salen de `TUNING` y no se escriben a mano.
+const LEAF_NOTE = tr(
+  'al pegar, +{gain} hojas (hasta {max}); al final de cada turno tuyo, cada hoja te cura {heal} y se gasta 1',
+  { gain: TUNING.leafGain, max: TUNING.leafMax, heal: TUNING.leafHeal },
+);
 
+// Todos los símbolos especiales se obtienen EXCLUSIVAMENTE de la carpeta amuletos
+// (`simbolos especiales/amuletos/`).
 export const POWERS = {
   egg: {
-    id: 'egg', symbol: 'bird', name: 'Huevo',
-    note: `escudo por la mitad de tu golpe; al romperse devuelve ${TUNING.eggBreak} de daño directo al rival`,
+    id: 'egg', symbol: 'bird', name: 'Secret Egg', amuleto: 'ecard_bird_5003.png',
+    note: tr('al pegar, ganás un escudo de la mitad del golpe; si el rival lo rompe, recibe {dmg} de daño', { dmg: TUNING.eggBreak }),
   },
   feather: {
-    id: 'feather', symbol: 'bird', name: 'Pluma Sagrada',
-    note: `inflige ${TUNING.featherDamage} de daño directo al rival apenas sale la carta (incluso si te cortás)`,
+    id: 'feather', symbol: 'bird', name: 'Feather Earring', amuleto: 'ecard_bird_momo_1.png',
+    note: tr('apenas la robás, {dmg} de daño directo al rival, aunque después te cortes', { dmg: TUNING.featherDamage }),
   },
   octopus: {
-    id: 'octopus', symbol: 'aquatic', name: 'Pulpo',
-    note: 'te llevás 1 carta extra del mercado para tu mazo',
+    id: 'octopus', symbol: 'aquatic', name: 'Sticky Octopus', amuleto: 'ecard_aquatic_5004.png',
+    note: tr('al plantarte (aunque pegues 0), elegís 1 carta extra del mercado para tu mazo'),
   },
   pot: {
-    id: 'pot', symbol: 'plant', name: 'Maceta',
-    note: 'te curás todo el daño que pegaste',
+    id: 'pot', symbol: 'plant', name: 'Leafy Pot', amuleto: 'ecard_plant_4003.png',
+    note: tr('al pegar, te curás lo mismo que pegaste'),
   },
   poison: {
-    id: 'poison', symbol: 'reptile', name: 'Veneno',
-    note: 'envenena por la mitad de tu golpe; daña cada turno y se reduce a la mitad',
+    id: 'poison', symbol: 'reptile', name: 'Poison Vial', amuleto: 'ecard_reptile_venoki_1.png',
+    note: tr('al pegar, envenenás al rival con la mitad del golpe; al final de cada turno suyo le saca eso ' +
+      'y se reduce a la mitad'),
   },
   snail: {
-    id: 'snail', symbol: 'bug', name: 'Caracol',
-    note: 'el próximo ataque del rival hace la mitad de daño (acumulable en siguientes ataques)',
+    id: 'snail', symbol: 'bug', name: 'Lazy Snail', amuleto: 'ecard_bug_5005.png',
+    note: tr('al pegar, el próximo ataque del rival hace la mitad de daño'),
   },
   strength: {
-    id: 'strength', symbol: 'beast', name: 'Fuerza',
-    note: `+${TUNING.strengthStep} de daño permanente en todos tus ataques`,
+    id: 'strength', symbol: 'beast', name: 'Charm of Power', amuleto: 'ecard_beast_4001.png',
+    note: tr('al pegar, +{step} de daño en ese ataque y en todos los que siguen', { step: TUNING.strengthStep }),
   },
   brutal: {
-    id: 'brutal', symbol: 'beast', name: 'Garra Brutal',
-    note: `+${TUNING.brutalStep} de daño por cada símbolo de tu cadena más larga`,
+    id: 'brutal', symbol: 'beast', name: 'Energy Drink M', amuleto: 'ecard_beast_5003.png',
+    note: tr('al pegar, +{step} de daño por cada símbolo de tu racha más larga', { step: TUNING.brutalStep }),
   },
   bubble: {
-    id: 'bubble', symbol: 'aquatic', name: 'Burbuja de Retorno',
-    note: 'la carta que elijas del mercado abrirá tu próxima ronda',
+    id: 'bubble', symbol: 'aquatic', name: 'Bubble Paste', amuleto: 'ecard_aquatic_4003.png',
+    note: tr('al plantarte, la carta que elijas del mercado abre tu próxima ronda'),
   },
   freegame: {
-    id: 'freegame', symbol: null, name: 'Free Game',
-    note: 'al entrar en mesa alarga una carta existente sumando sus símbolos',
+    id: 'freegame', symbol: null, name: 'Rocket Stamp', amuleto: 'ecard_neutral_5001.png',
+    note: tr('si comparte un símbolo con tu cadena, tu próximo robo se monta sobre una carta de la mesa ' +
+      'y le suma sus símbolos'),
   },
-  leaf: { id: 'leaf', symbol: 'plant', name: 'Hoja', note: LEAF_NOTE },
+  leaf: { id: 'leaf', symbol: 'plant', name: 'Spring Leaf', amuleto: 'ecard_plant_ena_1.png', note: LEAF_NOTE },
   // Alias viejo de la hoja: mismo poder con otro id.
-  oak: { id: 'oak', symbol: 'plant', name: 'Hoja', note: LEAF_NOTE },
+  oak: { id: 'oak', symbol: 'plant', name: 'Spring Leaf', amuleto: 'ecard_plant_ena_1.png', note: LEAF_NOTE },
   leech: {
-    id: 'leech', symbol: 'bug', name: 'Greedy Leech',
-    note: `al atacar roba 6 de vida al rival (se duplica a 12 con ${TUNING.leechBonusThreshold} columnas en mesa)`,
+    id: 'leech', symbol: 'bug', name: 'Mantis Dagger', amuleto: 'ecard_mantis_dagger.png',
+    note: tr('al pegar, le sacás {drain} de vida al rival y te los curás ' +
+      '({bonus} con {thresh} o más columnas en mesa)', {
+      drain: TUNING.leechDrain,
+      bonus: TUNING.leechBonusDrain,
+      thresh: TUNING.leechBonusThreshold,
+    }),
   },
   steelskin: {
-    id: 'steelskin', symbol: 'reptile', name: 'Piel de Escamas',
-    note: 'tope defensivo: el próximo ataque rival no superará los 12 de daño',
+    id: 'steelskin', symbol: 'reptile', name: 'Gecko Mask', amuleto: 'ecard_reptile_4003.png',
+    note: tr('al pegar, el próximo golpe del rival te hace {cap} de daño como máximo', { cap: TUNING.steelskinBaseCap }),
   },
 };
 
@@ -244,7 +262,7 @@ export function makeCard(symbols, power = null, opts = {}) {
   return {
     uid,
     id: opts.id ?? `c_${uid}`,
-    name: opts.name ?? (power ? (POWERS[power]?.name || 'Poder') : sorted.map((s) => SYMBOLS[s]?.name || s).join(' · ')),
+    name: opts.name ?? (power ? (POWERS[power]?.name || tr('Poder')) : sorted.map((s) => SYMBOLS[s]?.name || s).join(' · ')),
     symbols: sorted,
     isFavorable: opts.isFavorable ?? false,
     associatedPart: opts.associatedPart,
@@ -293,12 +311,12 @@ export const CANONICAL_CLASSES = ['plant', 'beast', 'aquatic', 'bird', 'bug', 'r
 export const ANATOMICAL_PARTS = ['eyes', 'ears', 'horn', 'mouth', 'back', 'tail'];
 
 export const PART_NAMES = {
-  tail: 'Cola',
-  mouth: 'Boca',
-  eyes: 'Ojos',
-  ears: 'Orejas',
-  horn: 'Cuerno',
-  back: 'Espalda',
+  tail: tr('Cola'),
+  mouth: tr('Boca'),
+  eyes: tr('Ojos'),
+  ears: tr('Orejas'),
+  horn: tr('Cuerno'),
+  back: tr('Espalda'),
 };
 
 /**
@@ -449,10 +467,10 @@ export function baseDeck(baseClass, nftState = null) {
   // 4 cartas desfavorables (Counter Suppression Formula)
   const unfavorablePairs = getCounterSuppressionCards(baseClass);
   const unfavorableNames = [
-    'Alianza Presa 1',
-    'Alianza Presa 2',
-    'Doble Presa',
-    'Confinamiento',
+    tr('Alianza Presa 1'),
+    tr('Alianza Presa 2'),
+    tr('Doble Presa'),
+    tr('Confinamiento'),
   ];
 
   const unfavorableCards = unfavorablePairs.map((pair, idx) =>

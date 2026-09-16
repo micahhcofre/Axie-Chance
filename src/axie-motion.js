@@ -81,8 +81,12 @@ function swapFrames(points, att) {
  * parpadean al mismo tiempo, y dos muñecos sincronizados se leen como un solo muñeco
  * repetido. Va como parámetro y no sale del nombre del Axie para poder ponerlos en
  * contrafase exacta, que es lo más lejos que pueden estar.
+ *
+ * `fidget` es cada cuánto se aburre, en ms. El de la mesa espera lo suyo para no
+ * distraer; uno que está solo en un cuadro para mostrarse —el rival de la Aventura—
+ * puede ir más rápido, o se lo ve respirar medio minuto sin hacer nada.
  */
-export function createMotion(node, phase = 0) {
+export function createMotion(node, phase = 0, { fidget = FIDGET } = {}) {
   // Todo esto es decorado. Si el navegador no tiene `animate()` —o si esto corre
   // fuera de un navegador, como en los tests, que renderizan contra un DOM de
   // mentira—, el reproductor existe igual y no hace nada: los Axies quedan quietos y
@@ -176,7 +180,7 @@ export function createMotion(node, phase = 0) {
     // el de la CPU, que espera en `idle`. El festejo y el desmayo tienen bucle propio
     // y ahí no hay nada que interrumpir.
     if (loop && base !== 'idle') return;
-    const [min, max] = FIDGET;
+    const [min, max] = fidget;
     timer = setTimeout(() => {
       pulse(FIDGETS[Math.floor(Math.random() * FIDGETS.length)]);
     }, min + Math.random() * (max - min));
