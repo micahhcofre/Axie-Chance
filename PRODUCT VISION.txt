@@ -1,0 +1,155 @@
+# PRODUCT VISION & AXIE CORE INTEGRATION
+## Game Title: Axie Chance
+**Track:** Axie Infinity Vibeathon — Round 1
+**Platform:** Web
+**Session Length:** 3–4 minutos por partida
+
+
+---
+
+
+### 1. EXECUTIVE SUMMARY & NORTH STAR
+
+
+**Logline:**
+Un combate táctico 1v1 por turnos que fusiona la adrenalina del "push-your-luck" (tentar a la suerte), el encadenamiento de símbolos y la construcción de mazo en tiempo real (in-match deckbuilding), donde cada parte anatómica y evolución on-chain de tu Axie modifica directamente la matemática y la consistencia de tu baraja.
+
+
+**Vacío en el ecosistema:**
+Los juegos competitivos en Ronin suelen demandar curvas de aprendizaje pronunciadas y memorización de extensos árboles de habilidades o metas fijos de cartas. Falta una experiencia hiper-accesible, rápida y de alta tensión psicológica pensada para partidas casuales y móviles, altamente transmisible en streamings donde cada turno genera suspenso instantáneo de "todo o nada".
+
+
+**Propuesta de valor:**
+Duelos psicológicos de ritmo ágil. La anatomía NFT del Axie deja de ser una simple tarjeta de estadísticas fijas: se convierte en la estructura de las cartas con las que jugás, premiando la evolución on-chain con mayor estabilidad probabilística.
+
+
+**Target:**
+* Jugadores casuales y móviles que buscan partidas cortas de alta intensidad.
+* Coleccionistas y holders de Axie que desean ver el impacto tangible de sus Part Evolutions en el gameplay.
+* Audiencias de streaming y creadores de contenido (dinámicas de tensión, suerte visible y remontadas épicas).
+
+
+---
+
+
+### 2. CORE GAMEPLAY & RULES DESIGN
+
+
+**Mecánica Base (Push-Your-Luck + Chaining):**
+En su turno, cada jugador interactúa con su propio mazo personal de robo. El objetivo es encadenar cartas que compartan símbolos para acumular daño potencial, sabiendo que el riesgo crece con cada robo.
+
+
+* **Robo de Apertura:** Se revela la primera carta del mazo personal; cada símbolo distinto que trae abre su propia racha (*run*) sobre la mesa. Una sola carta de apertura con dos o tres símbolos puede dejar varias rachas vivas en paralelo desde el primer robo.
+* **Decisión A — Seguir Robando (Push):**
+  * Cada carta nueva debe compartir al menos un símbolo con **alguna** de las rachas todavía vivas (no solo con la última carta robada): la alarga. Las rachas cuyo símbolo no aparece en la nueva carta quedan congeladas, conservando el largo que ya tenían.
+  * Se puede seguir robando indefinidamente mientras al menos una racha viva siga conectando.
+* **Fallo de Cadena (Bust):**
+  * Si la carta robada no comparte **ningún** símbolo con ninguna racha viva, todas se apagan a la vez: se produce el corte (*bust*), el jugador pierde todo el daño acumulado en esa racha y su turno concluye de inmediato con un golpe de 0.
+* **Decisión B — Atacar (Cash Out):**
+  * El jugador decide no arriesgar más y se planta: descarga el daño acumulado directo a la barra de vida (HP) del Axie rival.
+* **La matemática del riesgo — daño cuadrático ($L^2$):**
+  * Cada racha pega por su **largo al cuadrado**, no de forma lineal. Solo puntúan los símbolos que ya estaban en la carta de apertura del turno: una racha de 2 vale 4, una de 3 vale 9, una de 4 vale 16. Esta curva es el motor psicológico del *push-your-luck*: cada carta extra que se arriesga vale sensiblemente más que la anterior, pero un bust la borra entera.
+* **El reloj:** 30 segundos para decidir entre robar o plantarse (si se agota, se corta la cadena solo) y 20 segundos por elección en el mercado central — el pulso detrás de la sesión de 3–4 minutos.
+* **Fin de Partida y Desempate:**
+  * Gana el primer jugador en reducir la vida del rival a 0 HP.
+  * Si el primer jugador liquida la barra de HP en su turno, el segundo jugador recibe una **Última Chance**: un turno final de réplica. Si con ese turno también deja al rival en 0 HP, la partida termina en **empate**.
+
+
+**In-Match Deckbuilding (Mercado Central Dinámico):**
+Al concluir el turno (haya terminado en Ataque exitoso o en Bust), el jugador adquiere cartas de un suministro central compartido de 6 cartas boca arriba para mutar y engrosar su mazo:
+
+
+* **Oferta del Mercado:**
+  * Cartas sin poder: combinaciones de 2 a 3 símbolos de clase.
+  * Cartas con poder: 2 a 3 símbolos de clase + 1 efecto especial único. Cada partida sortea 6 poderes en juego, uno por cada clase (Beast, Plant, Bug, Bird, Aqua, Reptile), de un roster de 12.
+  * Cartas comodín **Free Game** (neutrales, sin clase): se apilan sobre una carta ya jugada en la mesa y le suman sus símbolos, funcionando como multiplicador de conectividad para cualquier mazo.
+* **Reglas de Adquisición:**
+  * Si el jugador sufrió un **Bust (fallo):** Como mecanismo de compensación táctica (anti-snowball), puede elegir **1 carta sin poder** del mercado para robustecer la densidad de símbolos de su mazo.
+  * Si el jugador realizó un **Ataque exitoso:** Puede capitalizar su ventaja eligiendo entre **1 carta con poder** (añadiendo un efecto especial y símbolos) o **2 cartas sin poder** (priorizando volumen y conexión).
+  * **Elegibilidad y renovación:** Solo se pueden elegir cartas que contengan el símbolo de la propia clase (o Free Game). Si ninguna de las 6 cartas del mercado sirve, se puede renovar el centro entero una vez por draft.
+* **Integración Inmediata:**
+  * Las cartas seleccionadas se barajan de inmediato dentro del mazo de robo personal, quedando disponibles para aparecer a partir del siguiente turno.
+
+
+---
+
+
+### 3. AXIE CORE INTEGRATION
+
+
+Axie Core define la relación entre coleccionismo, progresión on-chain y jugabilidad. En *Chance*, la integración no es meramente cosmética ni pay-to-win: actúa como un **reductor de varianza matemática**.
+
+
+**Mazo Base Anatómico (10 Cartas Iniciales):**
+Cada Axie ingresa a la arena con un mazo predeterminado por su código genético:
+* **Clase Pura:** Define la inclinación del mazo inicial.
+  * **6 Cartas Favorables:** Contienen el símbolo de la clase base del Axie (5 pares de su símbolo + 1 carta solitaria mono-símbolo, ligada a la Cola).
+  * **4 Cartas Desfavorables:** Se derivan matemáticamente de la taxonomía piedra-papel-o-tijera del Axie (Aliado, dos Presas, dos Counters): Aliado+Presa 1, Aliado+Presa 2, Presa 1+Presa 2, y Counter 1+Counter 2. El Aliado y las Presas aparecen 2 veces cada uno; los Counters, exactamente 1 — el mazo está sesgado a favor de la propia tríada por diseño.
+* **Mapeo Biunívoco de Partes NFT:**
+  * Cada una de las 6 cartas favorables está ligada directamente a una de las 6 partes del Axie: Ojos, Orejas, Cuernos, Boca, Espalda y Cola.
+
+
+**Part Evolution (Nivel 2+) como Modificador Probabilístico:**
+* **Axie Base (Sin evolucionar):**
+  * Las cartas favorables estándar poseen 2 símbolos (el de su clase base + un símbolo secundario fijado por el salto de esa parte).
+* **Axie con Partes Evolucionadas:**
+  * Al evolucionar una parte, la carta asociada a esa parte anatómica muta e incorpora un **tercer símbolo** correspondiente a la clase de dicha parte.
+  * *Ejemplo concreto:* Un Axie de clase Bug que tiene una parte de Bird evolucionada a Nivel 2, transforma su carta favorable habitual (Bug + Aqua) en una carta de tres símbolos (Bug + Aqua + Bird).
+* **Impacto Lúdico:**
+  * Sumar un tercer símbolo a las cartas favorables no otorga daño artificial, sino que amplía drásticamente las vías de conexión posibles con las cartas del mercado central.
+  * Disminuye la tasa de fallo (bust), viabiliza cadenas más extensas y permite desplegar estrategias de riesgo más agresivas.
+* **Estado actual (Ronda 1):** hoy esta evolución se simula **localmente**, sin wallet: en la pantalla de elección de Axie el jugador puede asignar una mejora (+) por carta que agrega ese tercer símbolo, con el mismo efecto matemático que tendría leer una Part Evolution real on-chain. Es el sustituto jugable de lo que la Fase 2 conecta a metadata real.
+
+
+**Flywheel con el Ecosistema Ronin:**
+1. **Jugar:** Cada partida otorga AXP en función de la longitud de las cadenas y el daño ejecutado.
+2. **Evolucionar:** El AXP acumulado se utiliza on-chain en App.Axie para ascender y evolucionar partes anatómicas.
+3. **Optimizar:** La evolución impacta en *Chance*, devolviendo una carta mejorada al mazo inicial.
+4. **Coleccionar / Criar:** Incentiva la experimentación genética para armar combinaciones anatómicas híbridas con alta sinergia en el mercado central.
+
+
+---
+
+
+### 4. ONBOARDING & USER ADOPTION (WEB2 TO WEB3)
+
+
+* **Fricción Cero:**
+  * El juego puede iniciarse al instante sin necesidad de conectar wallet previa ni firmar transacciones, y sin paso de build: es HTML5 + CSS3 + JS de módulos nativos servido tal cual.
+  * Los nuevos usuarios juegan con los 6 Axies starter predeterminados, con mazos base equilibrados y mejoras (+) opcionales que hoy reemplazan a la lectura on-chain.
+  * El **Tutorial guiado** (5 rondas jugables, sin modales ni texto largo) enseña objetivo, cadena, corte y mercado central jugando, no leyendo.
+* **Conversión vía Ronin Waypoint:**
+  * El juego leerá automáticamente la metadata de la wallet: si el jugador posee Axies y partes evolucionadas, sus mazos personalizados se cargarían de inmediato y la ganancia de AXP on-chain quedaría habilitada.
+
+
+---
+
+
+### 5. PRODUCTION ROADMAP
+
+
+**Fase 1: Prototipo Vibeathon (Ronda 1 — completada, y superada)**
+Lo planeado para esta fase ya está jugable de punta a punta, y el alcance terminó siendo mayor al previsto originalmente:
+* Core loop 1v1 operativo: Push (robar), Cash Out (plantarse) y Bust (fallar), con daño cuadrático ($L^2$) y rachas múltiples en paralelo.
+* Sistema de barras de HP, Última Chance y empate.
+* Mazo base anatómico de 10 cartas por clase, con mejoras (+) como sustituto local de la Part Evolution on-chain.
+* Mercado central interactivo con cartas sin poder, cartas de poder y el comodín apilable Free Game.
+* **12 poderes de clase** (2 por clase, uno activo por partida) en vez de los 6 previstos originalmente: Charm of Power, Energy Drink M, Sticky Octopus, Bubble Paste, Secret Egg, Feather Earring, Leafy Pot, Spring Leaf, Lazy Snail, Mantis Dagger, Poison Vial, Gecko Mask.
+* **Modo Aventura**: campaña de 6 niveles contra los starters de Origins, con dificultad y pool de cartas escalonados.
+* **Modo Red / Multijugador**: partidas 1v1 online por sala con código y QR, sin servidor con costo fijo (el anfitrión corre la sala en su propio navegador; un relay Lambda + API Gateway WebSocket solo reenvía mensajes).
+* **Tutorial guiado** de 5 rondas jugables.
+* IA de dificultad ajustable (fácil / normal / duro) vía expectimax con lookahead.
+* Barajado dinámico e inmediato tras la selección de cartas del mercado.
+
+
+**Fase 2: Producción & API Integration (Ronda 2)**
+* Conexión con Ronin Waypoint y Axie Core API para lectura automática de genes y Part Evolutions, reemplazando las mejoras (+) locales por la metadata real de la wallet.
+* Asignación procedimental de las 6 cartas anatómicas según la metadata del Axie conectado.
+* Conexión con el endpoint oficial de Sky Mavis para la acreditación real de AXP.
+* Matchmaking multijugador en tiempo real (hoy el Modo Red es por sala privada con código, no por matchmaking).
+
+
+**Fase 3: Live-Ops & Comunidad (Lanzamiento Full)**
+* Modo competitivo estacional con tablas de clasificación (Leaderboards).
+* Soporte cosmético para Axies coleccionables (Mystic, Origin, Shiny) con efectos visuales y auras de ataque exclusivas.
+* Modo King of the Hill.

@@ -12,7 +12,13 @@
   --danger: #ff6a5c;
   --radius: 14px;
   --display: "Archivo", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Los números y los botones van en la letra gorda y redonda del Origins, la misma de
+     los títulos: una monoespaciada o una sans de interfaz sobre este dibujo se leían
+     como una herramienta y no como el juego. `--mono` queda para lo que de verdad es
+     texto de máquina: una dirección, un código. */
+  --num: "Lilita One", var(--display);
+  --btn: "Lilita One", var(--display);
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --shadow: 0 10px 30px -12px rgba(0, 0, 0, .7);
 }
 
@@ -27,14 +33,19 @@ body {
     var(--bg);
   color: var(--ink);
   font: 400 15px/1.5 var(--display);
+  font-synthesis-weight: none;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Los números se leen en columna por todos lados: marcador, rachas, probabilidades. */
-.sb-round, .swing-dmg, .swing-cap, .swing-mods, .plate-hp b, .plate-tag, .pip-status,
-.odds-pct, .deck, .run, .controls-msg b {
-  font-family: var(--mono);
+/* Los números del juego: marcador, rachas, probabilidades, vida. Con contorno oscuro,
+   como los del Origins, para que se despeguen de cualquier dibujo del terreno. */
+.sb-round, .swing-dmg, .swing-cap, .swing-mods, .plate-hp b, .pip-status,
+.odds-pct, .deck, .run {
+  font-family: var(--num);
   font-variant-numeric: tabular-nums;
+}
+.sb-round, .swing-dmg, .swing-cap, .plate-hp b, .odds-pct, .clock b {
+  -webkit-text-stroke: .1em rgba(8, 10, 24, .85); paint-order: stroke fill;
 }
 
 :where(button, select, [href]):focus-visible {
@@ -140,7 +151,6 @@ body {
 
      `--pie` es la suma, y la miran los dos lados: el pie para medirse y `--resto` para
      saber cuánto hay que dejar libre debajo de las patas. */
-  --aviso: 48px;
   --botones: 70px;
   /* Y un zócalo: el aire que queda **debajo** de los botones, entre ellos y el borde de
      la ventana. Antes no existía y apoyaban directo sobre el padding del arena, o sea a
@@ -148,14 +158,9 @@ body {
      la página y no como lo que hay que apretar, y en un teléfono cae justo donde el
      navegador pone su propia barra. Va como fila del pie y no como padding para que
      siga siendo cierta la única regla de acá abajo: el alto de la franja es la suma de
-     medidas elegidas y ninguna depende del contenido.
-
-     Los botones, además, crecieron y el aviso se achicó en la misma cuenta. El aviso
-     ya no lleva el renglón del turno —lo que decía estaba dibujado más arriba, ver
-     `controlsHtml`—, así que casi siempre está vacío: era aire caro justo encima de lo
-     único que se aprieta. */
+     medidas elegidas y ninguna depende del contenido. */
   --zocalo: 14px;
-  --pie: calc(var(--aviso) + var(--botones) + var(--zocalo));
+  --pie: calc(var(--botones) + var(--zocalo));
 
   /* El renglón de las rachas, debajo de las cartas. Son tres chapitas como mucho —una
      por símbolo de la primera carta— así que nunca se parte en dos renglones, y por eso
@@ -232,7 +237,7 @@ body {
 
    Sin chapa el trabajo lo hace la sombra del propio logo, que es lo que ya lo despegaba
    del vidrio: más larga y más oscura, alcanza para separarlo de cualquier fondo. La
-   única caja que queda en la barra es la de las tres rayitas, que es la que tiene que
+   única caja que queda en la barra es la de configuración, que es la que tiene que
    parecer un botón porque lo es. */
 .brand {
   justify-self: start;
@@ -269,11 +274,11 @@ body {
   text-align: center;
 }
 .sb-round {
-  font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: .2em;
+  font-size: 20px; text-transform: uppercase; letter-spacing: .08em;
   /* El espaciado se reparte a los dos costados de cada letra, así que el último hueco
      cae después de la última: sin esto la palabra queda medio hueco corrida a la
      izquierda de un centro que es exacto por todos lados menos por el ojo. */
-  text-indent: .2em;
+  text-indent: .08em;
   color: var(--ink); white-space: nowrap;
   line-height: 1.15;
   text-shadow: 0 2px 12px rgba(4, 7, 18, .95), 0 1px 3px rgba(4, 7, 18, .9);
@@ -285,7 +290,7 @@ body {
    saltito en cada cambio de turno. Los últimos segundos se ponen en rojo y laten. */
 .clock {
   display: flex; align-items: center; gap: 7px;
-  font-family: var(--mono); font-size: 13px; line-height: 1;
+  font-family: var(--num); font-size: 15px; line-height: 1;
   color: var(--ink);
   text-shadow: 0 1px 6px rgba(4, 7, 18, .95);
   transition: opacity .2s ease;
@@ -306,8 +311,6 @@ body {
 .clock[data-low="true"] .clock-bar i { background: var(--danger); }
 @keyframes clock-low { 50% { transform: scale(1.18); } }
 /* La copia de adentro del centro, debajo de la bajada. */
-.clock--draft { justify-content: center; margin-top: 10px; font-size: 15px; }
-.clock--draft .clock-bar { width: 120px; height: 6px; }
 
 .topbar-actions {
   justify-self: end; min-width: 0;
@@ -315,44 +318,15 @@ body {
   flex-wrap: wrap;
 }
 
-/* ---------- el menú de la mesa ---------- */
-
-/* Las tres rayitas. Es el único botón de la barra: adentro está todo lo que no es
-   jugar. Cuadrado y con las rayas dibujadas a mano —tres `<i>` y no un carácter— para
-   que midan siempre lo mismo, no dependan de la fuente y se puedan animar. */
-.btn-burger {
-  display: flex; flex-direction: column; justify-content: center; gap: 5px;
-  /* Es la única puerta que tiene la mesa —el sonido, las reglas y la salida están todos
-     adentro—, y medía 40×36: menos que el mínimo cómodo para un dedo (44) y menos que
-     todo lo que tiene al lado. Ahora es un cuadrado franco, del alto de la chapa de la
-     marca, y las rayas crecen con él: a 17×2 se leían como una textura, a 22×3 se leen
-     como tres rayas. */
-  width: 52px; height: 48px; padding: 0;
-  border-radius: 14px;
-  background: rgba(11, 16, 36, .46); border-color: rgba(255, 255, 255, .1);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  box-shadow: none;
-}
-.btn-burger:hover:not(:disabled) { background: rgba(26, 34, 68, .72); }
-.btn-burger i {
-  display: block; width: 22px; height: 3px; margin: 0 auto;
-  border-radius: 2px; background: var(--ink-dim);
-  transition: background .15s ease;
-}
-.btn-burger:hover i { background: var(--ink); }
-/* Abierto, el botón se queda encendido: es lo que ata el panel al lugar de donde salió. */
-.btn-burger[aria-expanded="true"] { background: rgba(26, 34, 68, .92); border-color: var(--accent); }
-.btn-burger[aria-expanded="true"] i { background: var(--accent); }
 
 /* El panel, colgado debajo de su botón. Va fijo para flotar sobre la mesa y sobre
    la portada sin recortarse por el índice de apilamiento. */
 .hud-menu,
 .hud-menu.o-panel {
   position: fixed; z-index: 50;
-  top: clamp(52px, 7vh, 64px); right: clamp(12px, 2.2vw, 24px);
-  width: min(300px, calc(100vw - 24px)); padding: 12px 14px;
-  display: flex; flex-direction: column; gap: 8px;
+  top: clamp(56px, 7.5vh, 68px); right: clamp(12px, 2.2vw, 24px);
+  width: min(280px, calc(100vw - 24px)); padding: 12px 16px 10px;
+  display: flex; flex-direction: column; gap: 4px;
   border-radius: 16px;
   animation: hud-in .16s cubic-bezier(.2, .9, .3, 1) backwards;
 }
@@ -362,113 +336,99 @@ body {
 }
 .hud-header {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 2px;
 }
 .hud-label {
-  margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
-  color: var(--tinta); font-weight: 700;
+  margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--tinta-dim); font-weight: 800;
 }
-.o-x--sm {
-  width: 28px; height: 28px; border-radius: 9px; flex-shrink: 0;
-  box-shadow: 0 3px 0 -1px var(--madera-sombra), 0 8px 14px -8px rgba(0, 0, 0, .8);
+.hud-header .hud-label { font-size: 13px; color: var(--tinta); }
+/* `.o-x` se declara más abajo con el mismo peso y pisaba este tamaño: la cruz del panel
+   salía de 46 px. Con las dos clases gana siempre la chica. */
+.o-x.o-x--sm {
+  width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+  box-shadow: 0 2px 0 -1px var(--madera-sombra), 0 4px 8px -5px rgba(0, 0, 0, .7);
 }
-.o-x--sm::before {
-  width: 14px; height: 14px;
+.o-x.o-x--sm::before {
+  width: 12px; height: 12px;
 }
-.o-x--sm:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 -1px var(--madera-sombra), 0 4px 8px -6px rgba(0, 0, 0, .9);
+.o-x.o-x--sm:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 -1px var(--madera-sombra), 0 2px 4px -3px rgba(0, 0, 0, .8);
 }
-/* Selector / alternador de idioma en el panel */
+/* El idioma: una pastilla hundida en la madera, como las perillas. Nada dorado: el
+   dorado se lee como "esto está elegido". */
 .hud-row--lang {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 34px;
 }
 .hud-lang-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 12px;
-  border: 1.5px solid #ffd15c;
+  padding: 5px 10px;
+  border: 1px solid rgba(94, 58, 34, .45);
   border-radius: 8px;
-  background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
-  box-shadow: 0 0 0 1px #ffd15c, 0 2px 5px -1px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .25);
-  color: #fff;
-  font-family: var(--display); font-size: 12px; font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+  background: rgba(58, 32, 14, .14);
+  box-shadow: inset 0 1px 2px rgba(45, 24, 10, .25);
+  color: var(--tinta);
+  font-family: var(--btn); font-size: 13px; letter-spacing: .02em;
   cursor: pointer;
-  transition: filter .12s ease, transform .08s ease, box-shadow .08s ease;
+  transition: background .12s ease;
 }
-.hud-lang-btn:hover {
-  filter: brightness(1.15) saturate(1.05);
-}
-.hud-lang-btn:active {
-  transform: translateY(1px);
-  box-shadow: 0 0 0 1px #ffd15c, 0 1px 2px -1px rgba(0, 0, 0, .6);
-}
+.hud-lang-btn:hover { background: rgba(58, 32, 14, .26); }
+.hud-lang-btn:active { background: rgba(58, 32, 14, .34); }
 .hud-lang-icon {
-  opacity: .85;
+  opacity: .6;
   flex-shrink: 0;
 }
 /* Un interruptor, su nombre, su perilla y el número. La perilla se lleva el espacio
    que sobra: es lo único de la fila que se puede estirar sin romperse. */
-.hud-row { display: flex; align-items: center; gap: 10px; }
-.hud-name { font-size: 13px; color: var(--tinta); font-weight: 600; width: 52px; flex: 0 0 auto; }
+.hud-row { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+.hud-name { font-size: 13px; color: var(--tinta); font-weight: 600; width: 56px; flex: 0 0 auto; }
 .hud-pct {
-  font-family: var(--mono); font-size: 12px; color: var(--tinta-dim); font-weight: 600;
-  width: 34px; text-align: right; flex: 0 0 auto;
+  font-family: var(--num); font-size: 13px; color: var(--tinta-dim);
+  width: 32px; text-align: right; flex: 0 0 auto;
 }
+/* La parte recorrida de la perilla va pintada (`--v` lo pone `paintToggles`). */
 .hud-vol {
-  flex: 1 1 auto; min-width: 0; height: 6px; margin: 0;
+  flex: 1 1 auto; min-width: 0; height: 5px; margin: 0;
   -webkit-appearance: none; appearance: none;
-  border-radius: 3px; background: rgba(58, 32, 14, .35);
-  box-shadow: inset 0 1px 3px rgba(45, 24, 10, .4);
+  border-radius: 3px;
+  background: linear-gradient(var(--madera-borde), var(--madera-borde)) 0 0 / var(--v, 100%) 100% no-repeat,
+    rgba(58, 32, 14, .22);
+  box-shadow: inset 0 1px 2px rgba(45, 24, 10, .3);
   cursor: pointer;
 }
 .hud-vol::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 14px; height: 14px; border-radius: 50%;
-  background: var(--madera-borde); border: 2px solid #fff; cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  background: #f4e6d0; border: 2px solid var(--madera-borde); cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
 }
 .hud-vol::-moz-range-thumb {
   width: 14px; height: 14px; border-radius: 50%;
-  background: var(--madera-borde); border: 2px solid #fff; cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  background: #f4e6d0; border: 2px solid var(--madera-borde); cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
 }
 /* Con el sonido apagado la perilla sigue puesta —dice a qué volumen va a volver— pero
    deja de ser lo que hay que mirar. */
-.btn-sound[data-on="false"] ~ .hud-vol { opacity: .4; }
-.hud-sep { border: 0; border-top: 1px solid rgba(94, 58, 34, .35); margin: 4px 0; width: 100%; }
+.btn-sound[data-on="false"] ~ .hud-vol,
+.btn-sound[data-on="false"] ~ .hud-pct { opacity: .4; }
+.hud-sep { border: 0; border-top: 1px solid rgba(94, 58, 34, .28); margin: 6px 0; width: 100%; }
 /* Los botones de adentro son renglones de un menú, no botones sueltos sobre el cielo:
    se les saca el cuerpo que `.topbar .btn-ghost` les pone para que se lean contra la
    ilustración. Sobre madera van en tinta y tinta-dim. */
 .hud-menu .btn-ghost { background: transparent; border-color: transparent; color: var(--tinta); }
-.hud-menu .btn-ghost:hover:not(:disabled) { background: rgba(58, 32, 14, .18); color: var(--tinta); }
-.hud-item { text-align: left; color: var(--tinta); font-weight: 700; }
-.hud-item:hover:not(:disabled) { color: var(--tinta); background: rgba(58, 32, 14, .18); }
+.hud-menu .btn-ghost:hover:not(:disabled) { background: rgba(58, 32, 14, .14); color: var(--tinta); }
+.hud-menu .btn-sound { width: 28px; height: 28px; padding: 0; margin-left: -6px; border-radius: 7px; }
+/* Los renglones se corren a la izquierda lo mismo que su relleno: así el texto queda
+   alineado con los títulos y el resaltado igual llega al borde. */
+.hud-menu .hud-item {
+  text-align: left; color: var(--tinta); font-size: 13px; font-weight: 600;
+  padding: 7px 8px; margin: 0 -8px; border-radius: 8px;
+}
+.hud-menu .hud-item:hover:not(:disabled) { color: var(--tinta); background: rgba(58, 32, 14, .14); }
 .hud-menu .hud-quit { color: #8c1414; font-weight: 700; }
-.hud-menu .hud-quit:hover:not(:disabled) { background: rgba(187, 0, 53, .18); color: #630c0c; }
-
-/* El selector integrado a la madera: fondo hundido como pozo (.o-well), texto en
-   tinta y borde de madera para leerse como parte del panel. */
-.select {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; font-weight: 700; color: var(--tinta-dim);
-  text-transform: uppercase; letter-spacing: .08em;
-}
-.select select {
-  background: rgba(58, 32, 14, .35); color: var(--tinta);
-  border: 1.5px solid var(--madera-borde); border-radius: 8px;
-  box-shadow: inset 0 2px 6px rgba(45, 24, 10, .45);
-  padding: 6px 10px; font: inherit; font-size: 13px; font-weight: 600;
-  text-transform: none; letter-spacing: 0;
-  cursor: pointer;
-}
-.select select:focus {
-  outline: 2px solid var(--madera-borde);
-  outline-offset: 1px;
-}
-.select select option {
-  background: #ac8a68;
-  color: var(--tinta);
-}
+.hud-menu .hud-quit:hover:not(:disabled) { background: rgba(187, 0, 53, .12); color: #630c0c; }
 
 /* ---------- botones ---------- */
 
@@ -496,11 +456,11 @@ body {
    barra y de la elección se dibujan pisándole el `border-color`; sin ancho, esa línea
    no tendría dónde aparecer. */
 .btn {
-  font: inherit; font-weight: 700;
+  font: inherit; font-family: var(--btn); font-weight: 400; letter-spacing: .02em;
   border-radius: 11px; padding: 10px 18px;
   border: 1px solid transparent;
   background: #00527c url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_blue.png") center / 100% 100% no-repeat;
-  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, .3), 0 1px 3px rgba(0, 0, 0, .45);
   box-shadow: 0 4px 0 -1px rgba(0, 0, 0, .45), 0 14px 22px -14px rgba(0, 0, 0, .9);
   cursor: pointer;
   transition: transform .08s ease, box-shadow .08s ease, filter .15s ease;
@@ -517,7 +477,7 @@ body {
    de cintas y ninguna diría nada. */
 .btn-ghost {
   background: transparent; box-shadow: none; text-shadow: none;
-  font-size: 13px; font-weight: 600; padding: 7px 12px; color: var(--ink-dim);
+  font-size: 14px; padding: 7px 12px; color: var(--ink-dim);
 }
 .btn-ghost:hover:not(:disabled) { color: var(--ink); filter: none; }
 .btn-ghost:active:not(:disabled) { box-shadow: none; }
@@ -537,12 +497,12 @@ body {
 .btn-primary {
   background-color: #00766c;
   background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-fill.png");
-  padding: 12px 26px; font-size: 15px;
+  padding: 12px 26px; font-size: 19px;
 }
 .btn-danger {
   background-color: #bb0035;
   background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_red.png");
-  padding: 12px 26px; font-size: 15px;
+  padding: 12px 26px; font-size: 19px;
 }
 
 /* ---------- el sistema Origins ----------
@@ -582,10 +542,40 @@ body {
   box-shadow: 0 6px 0 -1px var(--madera-sombra), 0 30px 60px -18px rgba(0, 0, 0, .8);
 }
 
+/* El cartel de los títulos es una cinta: una tabla de madera con las puntas redondeadas
+   y dos colas con muesca que asoman por detrás, un poco más abajo. Antes era el
+   `name_panel` del kit estirado a lo que midiera el texto: un rectángulo con el
+   agujero deformado. La tabla es la de los botones (`player_name_bg`), que aguanta
+   estirarse; las colas se dibujan con `clip-path` y el doblez es un triángulo oscuro. */
+.o-banner,
+.netbox-banner {
+  --tail: #6e3521; --tail-end: #55291a; --fold: #3a1a0c;
+  position: relative;
+  border-radius: 10px;
+  background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
+  box-shadow: inset 0 -3px 0 rgba(58, 26, 12, .35), inset 0 2px 0 rgba(255, 196, 150, .22);
+}
+.o-banner::before, .o-banner::after,
+.netbox-banner::before, .netbox-banner::after {
+  content: ""; position: absolute; top: 9px; bottom: -9px; width: 26px;
+}
+.o-banner::before, .netbox-banner::before {
+  right: 100%;
+  background:
+    linear-gradient(to bottom left, var(--fold) 50%, transparent 50%) right bottom / 9px 9px no-repeat,
+    linear-gradient(to left, var(--tail), var(--tail-end));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 40% 50%);
+}
+.o-banner::after, .netbox-banner::after {
+  left: 100%;
+  background:
+    linear-gradient(to bottom right, var(--fold) 50%, transparent 50%) left bottom / 9px 9px no-repeat,
+    linear-gradient(to right, var(--tail), var(--tail-end));
+  clip-path: polygon(0 0, 100% 0, 60% 50%, 100% 100%, 0 100%);
+}
 .o-banner {
   display: block; align-self: center; margin: 0 auto;
-  width: fit-content; min-width: min(280px, 82%); padding: 12px 30px 14px;
-  background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/name_panel.png") center / 100% 100% no-repeat;
+  width: fit-content; min-width: min(240px, 70%); padding: 11px 28px 13px;
   font: 400 clamp(17px, 2.3vw, 24px)/1 var(--title);
   text-align: center; text-transform: uppercase; letter-spacing: .04em;
   color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .5);
@@ -1078,16 +1068,22 @@ body {
    la sombra de contacto le sigue pasando por encima: el bicho arde sin despegarse
    del suelo, que es justo lo que le pasó al charco de luz que se probó para el turno
    (ver `.board-axie::before`). Por lo mismo el degradé se apaga antes de llegar a las
-   patas, en vez de terminar en el piso. */
+   patas, en vez de terminar en el piso.
+
+   Se mide por el Axie (`--axie-w`, `--axie-h`) y no por el peleador. Medido por el
+   peleador, en escritorio el halo quedaba del mismo alto que el bicho y el cuerpo lo
+   tapaba entero: solo se veía en el celular, donde el peleador le sobra. Y lo fuerte
+   del degradé va hasta el borde del cuerpo, que es lo único que asoma: contra el fondo
+   claro de la pantalla ancha, un naranja a media luz no se distingue de las hojas. */
 .fighter[data-last-chance="true"]::before {
   content: ""; position: absolute; z-index: 0; pointer-events: none;
-  left: 50%; bottom: 10px;
-  width: min(100%, 340px); height: min(74%, 290px);
+  left: 50%; bottom: 0;
+  width: calc(var(--axie-w) * 1.7); height: calc(var(--axie-h) * 1.6);
   transform: translateX(-50%);
-  background: radial-gradient(closest-side ellipse at 50% 42%,
-    rgba(255, 228, 150, .68) 0%,
-    rgba(255, 122, 26, .56) 36%,
-    rgba(236, 44, 10, .3) 66%,
+  background: radial-gradient(closest-side ellipse at 50% 50%,
+    rgba(255, 214, 120, .9) 0%,
+    rgba(255, 128, 26, .85) 48%,
+    rgba(240, 58, 12, .55) 72%,
     rgba(200, 30, 10, 0) 100%);
   animation: last-chance 1.1s ease-in-out infinite;
 }
@@ -1218,26 +1214,17 @@ body {
 .plate-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .plate-top .crest { width: 17px; height: 17px; flex: 0 0 auto; }
 .plate-name {
-  font-weight: 700; letter-spacing: .02em; color: var(--c);
+  font-family: var(--num); font-size: 17px; letter-spacing: .02em; color: var(--c);
+  -webkit-text-stroke: .1em rgba(8, 10, 24, .85); paint-order: stroke fill;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .plate-who {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-dim);
+  font-family: var(--num); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-dim);
 }
-/* Lo que está haciendo ahora, o lo que acaba de sacar de daño. Uno solo por vez. */
-.plate-tag {
-  margin-left: auto; flex: 0 0 auto;
-  font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-  padding: 2px 7px; border-radius: 999px;
-  border: 1px solid var(--line); color: var(--ink-faint);
-}
-.plate-tag[data-kind="turn"] { color: #0d1020; background: var(--accent-2); border-color: transparent; }
-.plate-tag[data-kind="bust"] { color: #fff; background: var(--danger); border-color: transparent; }
-.plate-tag[data-kind="hit"]  { color: var(--accent); border-color: #2f6d5f; }
 
 /* La barrita. En rojo cuando queda un cuarto, que es cuando conviene arriesgar. */
 .plate-hp { display: flex; align-items: center; gap: 8px; }
-.plate-hp > b { font-size: 14px; font-weight: 600; width: 28px; text-align: right; }
+.plate-hp > b { font-size: 16px; width: 30px; text-align: right; }
 .plate-hp[data-low="true"] > b { color: var(--danger); }
 .plate-shield {
   display: inline-flex; align-items: center; gap: 3px;
@@ -1461,7 +1448,7 @@ body {
     calc(var(--dial) * (var(--dmg-base)
       + var(--n, 0) * (var(--dmg-tope) - var(--dmg-base)) / 20)),
     calc(var(--dial) / (var(--chars, 1) * .6)));
-  font-weight: 600; line-height: .9;
+  line-height: .9;
   color: var(--ink);
   /* Sobre el terreno hay dibujo, no franja oscura: el número se lo saca de encima con
      su propia sombra —negra y pegada para el contraste, y del color de la clase y
@@ -1487,8 +1474,8 @@ body {
    la última letra, que si no la corre medio espacio a la izquierda. */
 .swing-cap {
   font-size: calc(var(--dial) / (var(--cap-chars, 4) * .72));
-  font-weight: 500; line-height: 1.1;
-  letter-spacing: .12em; margin-right: -.12em;
+  line-height: 1.1;
+  letter-spacing: .08em; margin-right: -.08em;
   color: var(--ink-dim);
   text-shadow: 0 1px 8px rgba(0, 0, 0, .9);
 }
@@ -1560,7 +1547,7 @@ body {
 
 /* Todo lo de adentro se mide contra `--dial`: achicar el aro achica el número. */
 .odds-pct {
-  font-size: calc(var(--dial) * .27); font-weight: 600; line-height: 1;
+  font-size: calc(var(--dial) * .29); line-height: 1;
   color: var(--ink);
 }
 .odds-pct i {
@@ -1622,44 +1609,9 @@ body {
 .controls {
   grid-area: 4 / 1 / 5 / -1;
   position: relative; z-index: 5;
-  /* Dos casilleros de alto fijo, y el alto de la franja entera también fijo: ver
-     `--pie` en `:root`, que es donde está contada la historia. Lo que hay que respetar
-     acá es que ninguna de las dos medidas dependa del contenido — ni un `auto`, ni un
-     `min-height`, ni un `gap` que solo aparezca cuando hay dos cosas. */
-  display: grid; grid-template-rows: var(--aviso) var(--botones) var(--zocalo);
+  display: grid; grid-template-rows: var(--botones) var(--zocalo);
   justify-items: center;
   height: var(--pie);
-}
-
-/* El casillero de arriba: lo que dice el turno, y nada más — el cierre de la ronda ya
-   no pone nada acá (ver `controlsHtml`).
-
-   Apoyado contra abajo y no centrado, y esa es toda la gracia: lo que tiene que quedar
-   quieto es el renglón, que sale siempre a la misma distancia de lo que se aprieta —dos
-   líneas de texto en vez de una lo hacen crecer hacia el aire de arriba y no hacia los
-   botones—. Y si alguna vez no entra, se sale por arriba sobre el terreno en vez de
-   empujar la pantalla entera. */
-.controls-say {
-  align-self: end;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding-bottom: 8px;
-}
-.controls-msg {
-  color: var(--ink-dim); font-size: 14px; text-align: center;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
-}
-.controls-msg b { color: var(--ink); }
-/* El renglón de la última chance. Es el único que no es gris, y late: lo que dice —que
-   este golpe ya no gana, empata— cambia por completo cómo se lee el turno, y tiene que
-   pesar lo mismo que el fuego que el bicho tiene encendido arriba. */
-.controls-msg[data-tone="fury"] {
-  color: #ffb057; font-weight: 700; letter-spacing: .01em;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, .9), 0 0 14px rgba(255, 90, 20, .55);
-  animation: fury-msg 1.1s ease-in-out infinite;
-}
-@keyframes fury-msg {
-  0%, 100% { opacity: .82; }
-  30%      { opacity: 1; }
 }
 
 /* Los dos botones del turno, que son la partida entera: robar otra carta o soltar el
@@ -1681,7 +1633,7 @@ body {
 }
 .controls-acts .btn {
   flex: 1 1 0; min-width: 0;
-  min-height: 64px; padding: 14px 16px; font-size: 18px;
+  min-height: 64px; padding: 14px 16px; font-size: 22px;
   /* Un rótulo de dos renglones ("Siguiente Nivel", "Menú principal") tiene que caber
      en el alto fijo de la fila: con el interlineado heredado no entra, y un <button>
      cuyo contenido desborda lo apoya arriba en vez de centrarlo, así que el texto se
@@ -1703,101 +1655,9 @@ body {
   animation: act-in .36s cubic-bezier(.2, .9, .3, 1.12) backwards;
 }
 .controls[data-enter="turn"] .controls-acts .btn:nth-child(2) { animation-delay: .07s; }
-.controls[data-enter="turn"] .controls-msg { animation: say-in .34s ease-out backwards; }
 @keyframes act-in {
   from { opacity: 0; transform: translateY(16px) scale(.96); }
   to   { opacity: 1; transform: none; }
-}
-@keyframes say-in {
-  from { opacity: 0; transform: translateY(5px); }
-  to   { opacity: 1; transform: none; }
-}
-
-/* El cartel del final, el grande.
-
-   Este no es un cartel más de la fila: es cómo terminó la partida, y por eso no vive
-   en el pie ni sobre la cinta tallada. Abajo, apoyado sobre la cinta y pegado al botón
-   de "Jugar de nuevo", parecía **otro botón** —dos rectángulos verdes uno encima del
-   otro, y el de arriba no se apretaba—. Acá es letra sola en el medio de la escena,
-   encima de los dos bichos: el que festeja y el que quedó tirado.
-
-   Sin caja, entonces: ni fondo, ni borde, ni radio. Lo único que hay detrás es un
-   resplandor redondo que se apaga contra la nada mucho antes de llegar a un borde, y
-   está solo para que la letra blanca se lea igual sobre el cielo claro del terreno de
-   los pájaros que sobre la caverna. Un halo no tiene forma; una caja sí, y la forma es
-   lo que invita a apretar.
-
-   `pointer-events: none` porque tapa media pantalla: los botones de abajo y los Axies
-   —que abren su mazo— siguen ahí abajo y se tienen que poder tocar. */
-.finale {
-  position: absolute; inset: 0; z-index: 6;
-  display: grid; place-items: center;
-  /* Juntos en el medio: con la nota del abandono abajo, sin esto la grilla les daría
-     media pantalla a cada uno y quedarían separados. */
-  align-content: center; row-gap: 14px;
-  padding: 0 var(--pad);
-  pointer-events: none;
-  /* El color de la noticia, y son dos. Ganar es el verde de la casa, encendido. Lo
-     otro es un violeta apagado y no el rojo del peligro: el cartel no dice "te
-     equivocaste", dice que la suerte fue para el otro lado, y el rojo es el color con
-     el que este juego avisa que algo salió mal —el ataque que se desarma, la vida en
-     rojo—. Perder una partida no es un error. */
-  --tono: var(--accent);
-}
-.finale[data-won="false"] { --tono: #aab4e2; }
-
-/* Quién se fue, cuando la partida terminó por abandono. Chica y debajo: el título dice
-   cómo terminó y esto solo explica por qué se cortó de golpe. */
-.finale-note {
-  max-width: 28em;
-  font-size: clamp(14px, 1.6vw, 18px); font-weight: 600;
-  text-align: center; text-wrap: balance;
-  color: #fff;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, .8);
-  animation: finale-in .72s cubic-bezier(.16, 1, .3, 1) .15s both;
-}
-
-.finale-text {
-  position: relative;
-  /* El resplandor de atrás, en su propia capa: puesto en la letra sería una sombra
-     más y lo que hace falta es luz **alrededor** del bloque entero. */
-  display: block; max-width: 9em;
-  font-family: var(--display);
-  font-size: clamp(34px, 7.4vw, 86px);
-  font-weight: 800; letter-spacing: -.025em; line-height: 1.02;
-  text-align: center; text-wrap: balance;
-  color: #fff;
-  /* Tres sombras y cada una hace algo: la de color tiñe el aire alrededor de la letra,
-     la negra grande la despega del fondo y la corta le da el filo. */
-  text-shadow:
-    0 0 34px color-mix(in srgb, var(--tono) 70%, transparent),
-    0 6px 30px rgba(0, 0, 0, .75),
-    0 2px 0 rgba(0, 0, 0, .35);
-  animation: finale-in .72s cubic-bezier(.16, 1, .3, 1) both;
-}
-.finale-text::before {
-  content: ""; position: absolute; z-index: -1; inset: -55% -30%;
-  background: radial-gradient(closest-side,
-    color-mix(in srgb, var(--tono) 26%, transparent) 0%,
-    rgba(9, 12, 26, .42) 45%,
-    transparent 100%);
-  animation: finale-halo 3.4s ease-in-out 0.7s infinite;
-}
-
-/* Entra de golpe y frena: llega grande y borrosa —como algo que se acerca— y se
-   asienta en su tamaño. Es el único momento de la partida donde la pantalla se permite
-   un gesto así, y es el que corresponde: se acabó. */
-@keyframes finale-in {
-  0%   { opacity: 0; transform: scale(1.55); filter: blur(14px); }
-  45%  { opacity: 1; }
-  62%  { transform: scale(.965); filter: blur(0); }
-  100% { opacity: 1; transform: scale(1); filter: blur(0); }
-}
-/* Y después respira, apenas: lo justo para que la pantalla no quede congelada mientras
-   el que ganó festeja atrás. */
-@keyframes finale-halo {
-  0%, 100% { opacity: .82; transform: scale(1); }
-  50%      { opacity: 1; transform: scale(1.06); }
 }
 
 /* Los papelitos de la victoria.
@@ -1807,7 +1667,7 @@ body {
    papelito sumado se convierte en un destello. Estos tapan lo que pasa por atrás, que
    es lo único que hace que se lean como papel cayendo.
 
-   Cada uno trae sus números de `confettiHtml`: de dónde sale, cuánto tarda, cuánto se
+   Cada uno trae sus números de `resultConfettiHtml`: de dónde sale, cuánto tarda, cuánto se
    corre y cuánto gira. Acá está la caída, que es la misma para todos.
 
    Caen y se terminan: nada de `infinite`. Una lluvia que no para deja la pantalla del
@@ -1839,6 +1699,652 @@ body {
                     rotate(calc(var(--spin) * .8)) scaleY(.4); }
   92%  { opacity: 1; }
   100% { opacity: 0; transform: translate(0, 112vh) rotate(var(--spin)) scaleY(1); }
+}
+
+/* ---------- la pantalla del final ----------
+
+   Victoria, derrota y empate, cada una con su escena (ver `result.js`). Las piezas son
+   las de las pantallas de resultado del Origins Asset Kit —la tela azul con la rama que
+   florece, la roja con la rama seca y las telarañas—, cortadas por `npm run
+   result-art`; la palabra la escribe el juego para que hable los dos idiomas.
+
+   Todo entra en orden y el orden es uno solo: `result.js` escribe en la raíz `--wait`
+   (cuánto espera a que caiga el último golpe) y un `--t-*` por momento, y cada
+   animación de acá arranca en `calc(var(--wait) + var(--t-algo))`. El efecto del kit,
+   el sonido y los números que cuentan salen de los mismos números.
+
+   Mientras espera, la pantalla ya está puesta pero invisible: `visibility` no deja
+   tocar lo que no se ve, así que durante la espera la mesa de abajo sigue viva. Por eso
+   cada animación arranca desde "no está" y ninguna desde algo visible: con `both`, el
+   primer cuadro se ve durante toda la espera.
+
+   Encima de la mesa, de la barra y del centro (`25`); debajo de las salas (`40`) y de
+   la portada (`45`), que se abren desde sus botones. */
+.result {
+  position: fixed; inset: 0; z-index: 30;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  --tela: #d4ecfa; --tela-borde: rgba(8, 36, 70, .92);
+  animation: result-show 1ms linear var(--wait, 0ms) both;
+}
+.result[data-outcome="lose"] { --tela: #fbe3d2; --tela-borde: rgba(70, 18, 6, .92); }
+.result[data-outcome="tie"] { --tela: #f4f0ff; --tela-borde: rgba(30, 20, 60, .92); }
+@keyframes result-show {
+  from { visibility: hidden; }
+  to   { visibility: visible; }
+}
+
+/* La escena entera: se apaga junta para mirar la mesa (`data-peek`). */
+.result-scene {
+  position: relative; display: flex; min-height: 100%;
+  transition: opacity .3s ease;
+}
+.result[data-peek="true"] { overflow: hidden; pointer-events: none; }
+.result[data-peek="true"] .result-scene { opacity: 0; }
+
+/* La mesa de atrás se oscurece y se desenfoca: sigue ahí —el que ganó festejando, el
+   que perdió tirado—, pero ya no es lo que se lee. En la derrota además se destiñe. */
+.result-scene::before {
+  content: ""; position: fixed; inset: 0;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(8, 10, 26, .62), rgba(4, 5, 14, .9));
+  -webkit-backdrop-filter: blur(5px) saturate(.8);
+  backdrop-filter: blur(5px) saturate(.8);
+  animation: result-fade .5s ease var(--wait) both;
+}
+.result[data-outcome="lose"] .result-scene::before {
+  -webkit-backdrop-filter: blur(6px) grayscale(.85) brightness(.75);
+  backdrop-filter: blur(6px) grayscale(.85) brightness(.75);
+}
+@keyframes result-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.result-sky, .result-vfx {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+.result-sky { overflow: hidden; }
+/* Los efectos del kit vienen capturados sobre negro: se suman, como en la mesa. */
+.result-vfx { z-index: 3; mix-blend-mode: plus-lighter; }
+
+.result-glow {
+  position: absolute; inset: 0;
+  background: radial-gradient(60vmax 44vmax at 50% 42%, rgba(255, 206, 102, .28), transparent 70%);
+  animation: result-fade .9s ease calc(var(--wait) + var(--t-sky)) both;
+}
+
+/* -- victoria: rayos de sol, brillitos y papelitos -- */
+.result-rays {
+  position: absolute; left: 50%; top: 40%;
+  width: 190vmax; height: 190vmax; margin: -95vmax 0 0 -95vmax;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 216, 120, .2) 0deg 6deg, transparent 6deg 18deg);
+  -webkit-mask: radial-gradient(closest-side, #000 8%, rgba(0, 0, 0, .55) 30%, transparent 62%);
+  mask: radial-gradient(closest-side, #000 8%, rgba(0, 0, 0, .55) 30%, transparent 62%);
+  animation:
+    result-rays-in 1.1s cubic-bezier(.2, .8, .3, 1) calc(var(--wait) + var(--t-sky)) both,
+    result-spin 60s linear var(--wait) infinite;
+}
+@keyframes result-rays-in {
+  from { opacity: 0; scale: .4; }
+  to   { opacity: 1; scale: 1; }
+}
+@keyframes result-spin { to { rotate: 360deg; } }
+
+.result-sparks i {
+  position: absolute; left: var(--x); top: calc(var(--y) * .7);
+  width: calc(18px * var(--s)); aspect-ratio: 1;
+  background: #fff4c8;
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  filter: drop-shadow(0 0 6px rgba(255, 210, 110, .9));
+  opacity: 0;
+  animation: result-twinkle 2.6s ease-in-out calc(var(--wait) + var(--t-banner) + var(--d)) infinite;
+}
+@keyframes result-twinkle {
+  0%, 100% { opacity: 0; transform: scale(.2) rotate(0deg); }
+  45%      { opacity: 1; transform: scale(1) rotate(45deg); }
+  70%      { opacity: 0; transform: scale(.4) rotate(90deg); }
+}
+.result .confetti { position: fixed; }
+.result .confetti i { animation-delay: calc(var(--wait) + var(--t-title) + var(--delay)); }
+
+/* -- derrota: luz fría, llovizna y niebla -- */
+.result[data-outcome="lose"] .result-glow {
+  background: radial-gradient(60vmax 40vmax at 50% 38%, rgba(128, 118, 210, .22), transparent 70%);
+}
+.result-rain i {
+  position: absolute; left: var(--x); top: -25vh;
+  width: 2px; height: calc(70px * var(--s));
+  border-radius: 2px;
+  background: linear-gradient(transparent, rgba(180, 196, 255, .5));
+  opacity: 0;
+  animation: result-rain 1.15s linear calc(var(--wait) + var(--d) * .6) infinite;
+}
+@keyframes result-rain {
+  0%   { opacity: 0; transform: translate(0, 0) rotate(14deg); }
+  12%  { opacity: 1; }
+  100% { opacity: 1; transform: translate(-26vh, 140vh) rotate(14deg); }
+}
+.result-fog {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 55%;
+  background: linear-gradient(to top, rgba(28, 22, 52, .85), transparent);
+  animation: result-fade 1.6s ease calc(var(--wait) + var(--t-axie)) both;
+}
+
+/* -- empate: dos mitades que chocan, un rayo en la costura y chispas -- */
+.result-half {
+  position: absolute; top: 0; bottom: 0; width: 56%;
+  animation: result-from-left .6s cubic-bezier(.2, .9, .3, 1.15) calc(var(--wait) + var(--t-sky)) both;
+}
+.result-half--l {
+  left: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 42%, transparent), color-mix(in srgb, var(--c) 12%, transparent));
+  clip-path: polygon(0 0, 100% 0, 88% 22%, 96% 46%, 86% 70%, 94% 100%, 0 100%);
+}
+.result-half--r {
+  right: 0;
+  background: linear-gradient(270deg, color-mix(in srgb, var(--c) 42%, transparent), color-mix(in srgb, var(--c) 12%, transparent));
+  clip-path: polygon(12% 0, 100% 0, 100% 100%, 6% 100%, 14% 70%, 4% 46%, 12% 22%);
+  animation-name: result-from-right;
+}
+@keyframes result-from-left {
+  0%   { opacity: 0; transform: translateX(-70vw); }
+  70%  { opacity: 1; transform: translateX(2%); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes result-from-right {
+  0%   { opacity: 0; transform: translateX(70vw); }
+  70%  { opacity: 1; transform: translateX(-2%); }
+  100% { opacity: 1; transform: none; }
+}
+.result-bolt {
+  position: absolute; left: 50%; top: 0; width: 36px; height: 100%;
+  translate: -50% 0;
+  fill: none; stroke: #fff; stroke-width: 3; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 6px #b9a8ff) drop-shadow(0 0 16px #8a74ff);
+  opacity: 0;
+  animation: result-bolt 2.4s linear calc(var(--wait) + var(--t-title) + 60ms) infinite;
+}
+.result-bolt polyline { vector-effect: non-scaling-stroke; }
+@keyframes result-bolt {
+  0%, 3%, 9%, 100% { opacity: 0; }
+  1%, 6%          { opacity: 1; }
+  12%, 60%        { opacity: .18; }
+}
+/* El choque: un fogonazo y las chispas saliendo del medio. */
+.result[data-outcome="tie"] .result-sky::after {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 38%, #fff, rgba(255, 255, 255, .5) 30%, transparent 70%);
+  opacity: 0;
+  animation: result-flash .55s ease-out calc(var(--wait) + var(--t-title) + 40ms) both;
+}
+@keyframes result-flash {
+  0%   { opacity: 0; }
+  12%  { opacity: .85; }
+  100% { opacity: 0; }
+}
+.result-clash i {
+  position: absolute; left: 50%; top: 34%;
+  width: calc(7px * var(--s)); aspect-ratio: 1; margin: -4px;
+  border-radius: 50%;
+  background: #fff; box-shadow: 0 0 10px 2px #c9bcff;
+  opacity: 0;
+  animation: result-burst .9s cubic-bezier(.1, .7, .3, 1) calc(var(--wait) + var(--t-title) + 60ms) both;
+}
+@keyframes result-burst {
+  0%   { opacity: 0; transform: rotate(var(--a)) translateX(0) scale(1.4); }
+  10%  { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateX(calc(38vmin * var(--s))) scale(.2); }
+}
+
+/* ---- la caja ---- */
+.result-box {
+  position: relative; z-index: 2;
+  margin: auto;
+  /* Es un hijo de flex: sin `min-width: 0` no se achica por debajo de lo que mide su
+     contenido, y dos Axies lado a lado lo empujaban más allá del borde del teléfono. */
+  width: min(100%, 640px); min-width: 0;
+  display: grid; justify-items: center;
+  grid-template-areas: "head" "stage" "stats" "loot" "acts";
+  gap: clamp(8px, 1.7vh, 18px);
+  padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+}
+/* El golpe de la palabra sacude la caja: en la derrota cae pesada, en el empate chocan. */
+.result[data-outcome="lose"] .result-box,
+.result[data-outcome="tie"] .result-box {
+  animation: result-shake .42s ease-out calc(var(--wait) + var(--t-title) + 260ms) both;
+}
+.result[data-outcome="tie"] .result-box { animation-delay: calc(var(--wait) + var(--t-title) + 40ms); }
+@keyframes result-shake {
+  0%, 100% { transform: none; }
+  20% { transform: translate(-5px, 3px); }
+  40% { transform: translate(5px, -2px); }
+  60% { transform: translate(-3px, 1px); }
+  80% { transform: translate(2px, 0); }
+}
+
+.result-head {
+  grid-area: head; width: 100%;
+  display: grid; justify-items: center; gap: 10px;
+}
+.result-kicker {
+  margin: 0;
+  font: 400 clamp(12px, 1.5vw, 15px)/1.2 var(--title);
+  letter-spacing: .12em; text-transform: uppercase; text-align: center;
+  color: rgba(255, 255, 255, .82);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .7);
+  animation: result-rise .5s ease calc(var(--wait) + var(--t-banner)) both;
+}
+.result-line {
+  margin: 2px 0 0; max-width: 34em;
+  font: 600 clamp(14px, 1.7vw, 17px)/1.35 var(--display);
+  text-align: center; text-wrap: balance;
+  color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, .85);
+  animation: result-rise .5s ease calc(var(--wait) + var(--t-title) + 250ms) both;
+}
+@keyframes result-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* La tela. Mide lo que mide el dibujo del kit y crece para abajo si la palabra no entra
+   en un renglón ("¡Aventura completada!" en un teléfono). */
+.result-banner {
+  position: relative;
+  width: min(calc(100% - 56px), 540px);
+  aspect-ratio: 698 / 199;
+  display: grid; place-items: center;
+  padding: 7% 7% 4%;
+  container-type: inline-size;
+  animation: result-drop .75s cubic-bezier(.2, .9, .3, 1) calc(var(--wait) + var(--t-banner)) both;
+}
+@keyframes result-drop {
+  0%   { opacity: 0; transform: translateY(-60px) scaleY(.7); }
+  55%  { opacity: 1; transform: translateY(8px) scaleY(1.05); }
+  78%  { transform: translateY(-3px) scaleY(.99); }
+  100% { opacity: 1; transform: none; }
+}
+.result-cloth {
+  position: absolute; inset: 0;
+  background: var(--cloth) center / 100% 100% no-repeat;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, .55));
+}
+/* La derrota cae pesada y queda hamacándose torcida, colgada de una punta. */
+.result[data-outcome="lose"] .result-banner {
+  transform-origin: 18% 0;
+  animation: result-drop-heavy 1.5s cubic-bezier(.3, .6, .3, 1) calc(var(--wait) + var(--t-banner)) both;
+}
+@keyframes result-drop-heavy {
+  0%   { opacity: 0; transform: translateY(-120px); }
+  22%  { opacity: 1; transform: translateY(6px) rotate(0deg); }
+  30%  { transform: translateY(0) rotate(-1deg); }
+  48%  { transform: rotate(4.5deg); }
+  66%  { transform: rotate(1deg); }
+  82%  { transform: rotate(3deg); }
+  100% { opacity: 1; transform: rotate(2.2deg); }
+}
+/* El empate no baja: media tela desde cada costado, y se cosen en el medio. */
+.result[data-outcome="tie"] .result-banner { animation: none; }
+.result-cloth--l {
+  clip-path: polygon(0 0, 51% 0, 47% 28%, 53% 52%, 47% 76%, 51% 100%, 0 100%);
+  animation: result-from-left .5s cubic-bezier(.3, .9, .4, 1.2) calc(var(--wait) + var(--t-banner)) both;
+}
+.result-cloth--r {
+  clip-path: polygon(51% 0, 100% 0, 100% 100%, 51% 100%, 47% 76%, 53% 52%, 47% 28%);
+  animation: result-from-right .5s cubic-bezier(.3, .9, .4, 1.2) calc(var(--wait) + var(--t-banner)) both;
+}
+
+/* Los adornos del kit, colgados de las puntas de la tela. */
+.result-deco { position: absolute; pointer-events: none; }
+.result-branch {
+  left: -9%; top: -14%; width: 44%;
+  transform-origin: 6% 20%;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .45));
+  animation:
+    result-grow .7s cubic-bezier(.2, .9, .3, 1.3) calc(var(--wait) + var(--t-title)) both,
+    result-sway 3.6s ease-in-out calc(var(--wait) + var(--t-title) + 700ms) infinite;
+}
+@keyframes result-grow {
+  from { opacity: 0; transform: scale(.3) rotate(-24deg); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes result-sway {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(3.5deg); }
+}
+.result-twig {
+  left: -8%; top: -11%; width: 40%;
+  transform-origin: 4% 18%;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .45)) saturate(.8);
+  animation: result-snap 1.3s cubic-bezier(.3, .6, .3, 1) calc(var(--wait) + var(--t-title) + 200ms) both;
+}
+/* La rama seca se quiebra y queda colgando más abajo. */
+@keyframes result-snap {
+  0%   { opacity: 0; transform: rotate(-18deg); }
+  25%  { opacity: 1; transform: rotate(0deg); }
+  45%  { transform: rotate(16deg); }
+  65%  { transform: rotate(9deg); }
+  100% { opacity: 1; transform: rotate(12deg); }
+}
+.result[data-outcome="tie"] .result-twig {
+  left: auto; right: -8%;
+  /* Espejada sobre su centro: sobre la punta de la que cuelga, el espejo la tiraba
+     afuera de la tela. */
+  transform-origin: 50% 18%;
+  scale: -1 1;
+}
+.result-web {
+  top: -8%; width: 17%;
+  opacity: .8;
+  transform-origin: 50% 0;
+  animation: result-web 1.1s cubic-bezier(.2, .9, .3, 1.2) calc(var(--wait) + var(--t-axie)) both;
+}
+.result-web--l { left: 6%; }
+.result-web--r { right: 4%; }
+@keyframes result-web {
+  from { opacity: 0; transform: scaleY(0); }
+  to   { opacity: .8; transform: none; }
+}
+
+/* La palabra, con la letra redonda del Origins y los colores de los carteles del kit:
+   celeste sobre la tela azul, durazno sobre la roja. */
+.result-title {
+  position: relative; z-index: 2; margin: 0;
+  font: 400 clamp(22px, 11.5cqi, 66px)/1.02 var(--title);
+  letter-spacing: .03em; text-transform: uppercase; text-align: center;
+  color: var(--tela);
+  -webkit-text-stroke: .09em var(--tela-borde); paint-order: stroke fill;
+  text-shadow: 0 .07em 0 rgba(0, 0, 0, .35), 0 .14em .3em rgba(0, 0, 0, .4);
+}
+.result-word { display: block; }
+.result-w { display: inline-block; white-space: nowrap; }
+.result-l { display: inline-block; }
+
+/* Victoria: llega de golpe y después cada tanto le pasa un brillo, letra por letra. */
+.result[data-outcome="win"] .result-word {
+  animation: result-slam .6s cubic-bezier(.2, .9, .25, 1.25) calc(var(--wait) + var(--t-title)) both;
+}
+@keyframes result-slam {
+  0%   { opacity: 0; transform: scale(2.3); filter: blur(10px); }
+  55%  { opacity: 1; transform: scale(.94); filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+.result[data-outcome="win"] .result-l {
+  animation: result-glint 3.2s ease-in-out calc(var(--wait) + var(--t-title) + 900ms + var(--i) * 55ms) infinite;
+}
+@keyframes result-glint {
+  0%, 18%, 100% { transform: none; filter: none; }
+  8% { transform: translateY(-9%) scale(1.08); filter: brightness(1.35) drop-shadow(0 0 8px rgba(255, 226, 140, .95)); }
+}
+
+/* Derrota: las letras caen de a una y la última se queda torcida. */
+.result[data-outcome="lose"] .result-l {
+  animation: result-letter .55s cubic-bezier(.5, 0, .5, 1.4) calc(var(--wait) + var(--t-title) + var(--i) * 65ms) both;
+}
+@keyframes result-letter {
+  0%   { opacity: 0; transform: translateY(-140%) rotate(-12deg); }
+  60%  { opacity: 1; transform: translateY(6%) rotate(2deg); }
+  100% { opacity: 1; transform: none; }
+}
+.result[data-outcome="lose"] .result-w:last-child .result-l:last-child {
+  transform-origin: 15% 12%;
+  /* `forwards` y no `both`: mientras espera, la que manda es la caída. */
+  animation:
+    result-letter .55s cubic-bezier(.5, 0, .5, 1.4) calc(var(--wait) + var(--t-title) + var(--i) * 65ms) both,
+    result-hang 1.8s ease-in-out calc(var(--wait) + var(--t-title) + var(--i) * 65ms + 600ms) forwards;
+}
+@keyframes result-hang {
+  0%   { transform: none; }
+  30%  { transform: rotate(26deg); }
+  55%  { transform: rotate(13deg); }
+  78%  { transform: rotate(21deg); }
+  100% { transform: rotate(18deg); }
+}
+
+/* Empate: la palabra dos veces, cortada al medio, y cada mitad llega desde su lado. */
+.result-word--l {
+  clip-path: inset(-30% 50% -30% -10%);
+  animation: result-from-left .5s cubic-bezier(.3, .9, .4, 1.2) calc(var(--wait) + var(--t-title) - 460ms) both;
+}
+.result-word--r {
+  position: absolute; inset: 0;
+  clip-path: inset(-30% -10% -30% 50%);
+  animation: result-from-right .5s cubic-bezier(.3, .9, .4, 1.2) calc(var(--wait) + var(--t-title) - 460ms) both;
+}
+
+/* ---- el escenario ---- */
+.result-stage {
+  grid-area: stage; position: relative;
+  display: flex; justify-content: center; align-items: flex-end;
+  width: 100%;
+}
+.result-fighter {
+  --fwd: 1;
+  position: relative;
+  width: clamp(110px, min(28vh, 46vw), 250px);
+  animation: result-jump .7s cubic-bezier(.2, .9, .3, 1) calc(var(--wait) + var(--t-axie)) both;
+}
+/* Los dibujos vienen mirando a la izquierda: el tuyo se da vuelta, como en la mesa. */
+.result-fighter[data-role="hero"] .axie-body { transform: scaleX(-1); }
+.result-fighter[data-role="rival"] { --fwd: -1; }
+.result-axie { position: relative; z-index: 1; }
+.result-pedestal {
+  position: absolute; left: 50%; bottom: 1%;
+  width: 96%; height: 20%;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c) 60%, transparent), transparent);
+  animation: result-fade .6s ease calc(var(--wait) + var(--t-axie) + 250ms) both;
+}
+@keyframes result-jump {
+  0%   { opacity: 0; transform: translateY(45%) scale(.7); }
+  50%  { opacity: 1; transform: translateY(-14%) scale(1.04); }
+  72%  { transform: translateY(2%) scale(1.02, .97); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* Victoria: pedestal dorado y una onda al aterrizar. */
+.result[data-outcome="win"] .result-pedestal {
+  background: radial-gradient(closest-side, rgba(255, 214, 110, .75), rgba(255, 170, 60, .25) 60%, transparent);
+}
+.result[data-outcome="win"] .result-pedestal::after {
+  content: ""; position: absolute; inset: 0;
+  border-radius: 50%; border: 3px solid rgba(255, 226, 150, .9);
+  opacity: 0;
+  animation: result-ring 1s ease-out calc(var(--wait) + var(--t-axie) + 330ms) both;
+}
+@keyframes result-ring {
+  0%   { opacity: 0; transform: scale(.3); }
+  15%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.6); }
+}
+
+/* Festejando: la misma mortal en su lugar que en la mesa, cuando ya aterrizó en el
+   pedestal. El rival que festeja atrás en la derrota la hace a destiempo. */
+/* Tirado: como en la mesa, triste y gris en su lugar. Sin giro ni corrimiento. */
+.result-fighter[data-stance="ko"] .axie-rig {
+  animation: axie-ko 1.1s ease-out calc(var(--wait) + var(--t-axie) + 250ms) both;
+}
+.result-fighter[data-stance="ko"] .result-axie {
+  animation: result-drain 1.4s ease calc(var(--wait) + var(--t-axie) + 300ms) both;
+}
+@keyframes result-drain {
+  from { filter: none; }
+  to   { filter: grayscale(.85) brightness(.72); }
+}
+/* En la derrota el tuyo no entra saltando: aparece despacio, ya sin ganas. */
+.result[data-outcome="lose"] .result-fighter[data-role="hero"] {
+  animation: result-fade .9s ease calc(var(--wait) + var(--t-axie)) both;
+}
+
+/* Derrota: el rival festeja atrás, más chico y en la niebla. */
+.result[data-outcome="lose"] .result-fighter[data-role="rival"] {
+  z-index: -1;
+  width: clamp(80px, min(16vh, 30vw), 160px);
+  margin-left: -6%;
+  filter: brightness(.7) saturate(.8);
+  animation: result-from-right .9s cubic-bezier(.2, .8, .3, 1) calc(var(--wait) + var(--t-axie) + 400ms) both;
+}
+.result[data-outcome="lose"] .result-pedestal {
+  background: radial-gradient(closest-side, rgba(0, 0, 0, .55), transparent);
+}
+
+/* Empate: cada uno entra desde su lado y quedan mirándose, mareados. */
+.result[data-outcome="tie"] .result-stage { gap: clamp(4px, 6vw, 90px); }
+.result[data-outcome="tie"] .result-fighter { width: clamp(100px, min(24vh, 40vw), 230px); }
+.result[data-outcome="tie"] .result-fighter[data-role="hero"] {
+  animation: result-from-left .7s cubic-bezier(.2, .9, .3, 1.1) calc(var(--wait) + var(--t-axie)) both;
+}
+.result[data-outcome="tie"] .result-fighter[data-role="rival"] {
+  animation: result-from-right .7s cubic-bezier(.2, .9, .3, 1.1) calc(var(--wait) + var(--t-axie)) both;
+}
+
+/* ---- las marcas: una tabla de madera, un número por columna ---- */
+.result-stats {
+  grid-area: stats;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: min(100%, 540px);
+  margin: 0; padding: 10px 6px 12px;
+  border-radius: 16px;
+  animation: result-rise .5s cubic-bezier(.2, .9, .3, 1.2) calc(var(--wait) + var(--t-stats)) both;
+}
+.result-stat {
+  display: grid; align-content: start; justify-items: center; gap: 4px;
+  padding: 0 4px;
+  animation: result-rise .45s cubic-bezier(.2, .9, .3, 1.3) calc(var(--wait) + var(--t-stats) + var(--i) * 90ms) both;
+}
+.result-stat + .result-stat { border-left: 2px solid rgba(94, 58, 34, .3); }
+.result-stat dd {
+  order: -1; margin: 0;
+  font: 400 clamp(24px, 3.6vw, 34px)/1 var(--num);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  -webkit-text-stroke: .1em rgba(43, 24, 9, .9); paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(43, 24, 9, .45);
+}
+.result-stat dt {
+  font: 700 clamp(10px, 1.3vw, 12px)/1.15 var(--display);
+  letter-spacing: .04em; text-transform: uppercase; text-align: center;
+  color: var(--tinta);
+}
+
+/* ---- el botín ----
+
+   Cada objeto cae en su casillero, uno detrás del otro, con el color de su rareza: gris
+   el común, azul el raro, violeta el épico y dorado el legendario. Los dos últimos
+   además tienen un brillo que les cruza por encima cada tanto. */
+.result-loot {
+  grid-area: loot; width: min(100%, 560px);
+  display: grid; justify-items: center; gap: 8px;
+  animation: result-rise .45s ease calc(var(--wait) + var(--t-loot) - 200ms) both;
+}
+.result-loot-title {
+  margin: 0;
+  font: 400 clamp(15px, 1.8vw, 19px)/1 var(--title);
+  letter-spacing: .14em; text-transform: uppercase;
+  color: #ffe6a6;
+  -webkit-text-stroke: .08em rgba(43, 24, 9, .9); paint-order: stroke fill;
+}
+.result-items {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+}
+.result-item {
+  --r: #c3cadb;
+  position: relative;
+  display: grid; justify-items: center; gap: 5px;
+  width: 78px;
+  animation: result-pop .55s cubic-bezier(.2, .9, .3, 1.5) calc(var(--wait) + var(--t-loot) + var(--i) * 350ms) both;
+}
+.result-item[data-rarity="rare"]      { --r: #5ab2ff; }
+.result-item[data-rarity="epic"]      { --r: #c67dff; }
+.result-item[data-rarity="legendary"] { --r: #ffc53a; }
+@keyframes result-pop {
+  0%   { opacity: 0; transform: translateY(-50px) scale(.4) rotate(-14deg); }
+  60%  { opacity: 1; transform: translateY(4px) scale(1.1) rotate(3deg); }
+  100% { opacity: 1; transform: none; }
+}
+/* El destello de la rareza detrás del casillero, al caer. */
+.result-item::before {
+  content: ""; position: absolute; left: 50%; top: 34px;
+  width: 64px; aspect-ratio: 1; margin: -32px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--r), transparent);
+  opacity: 0;
+  animation: result-ring .8s ease-out calc(var(--wait) + var(--t-loot) + var(--i) * 350ms + 250ms) both;
+}
+.result-item-slot {
+  position: relative; overflow: hidden;
+  width: 68px; aspect-ratio: 1;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  border: 2px solid var(--r);
+  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--r) 38%, #1c2346), #0f1329);
+  box-shadow: 0 4px 0 -1px rgba(0, 0, 0, .5), 0 0 16px color-mix(in srgb, var(--r) 45%, transparent);
+}
+.result-item-slot img {
+  width: 80%; height: 80%; object-fit: contain;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .55));
+}
+.result-item[data-rarity="epic"] .result-item-slot::after,
+.result-item[data-rarity="legendary"] .result-item-slot::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .6) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: result-shine 2.6s ease-in-out calc(var(--wait) + var(--t-loot) + var(--i) * 350ms + 600ms) infinite;
+}
+@keyframes result-shine {
+  0%   { transform: translateX(-120%); }
+  40%, 100% { transform: translateX(120%); }
+}
+.result-item-qty {
+  position: absolute; right: 5px; bottom: 3px;
+  font: 400 15px/1 var(--num); color: #fff;
+  -webkit-text-stroke: .12em rgba(8, 10, 24, .9); paint-order: stroke fill;
+}
+.result-item-name {
+  font: 700 11px/1.15 var(--display);
+  text-align: center; text-wrap: balance;
+  color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, .9);
+}
+
+/* ---- las puertas ---- */
+.result-acts {
+  grid-area: acts;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 10px;
+  animation: result-rise .45s ease calc(var(--wait) + var(--t-acts)) both;
+}
+/* Mirar la mesa es texto, no una cinta: va abajo de las puertas, en su renglón. */
+.result-acts .result-peek { flex-basis: 100%; }
+.result-back {
+  position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom));
+  translate: -50% 0; z-index: 4;
+  visibility: hidden; pointer-events: none;
+}
+.result[data-peek="true"] .result-back {
+  visibility: visible; pointer-events: auto;
+  animation: result-rise .3s ease both;
+}
+
+/* Un teléfono acostado no tiene alto para una columna: el escenario va a la izquierda y
+   todo lo demás a la derecha. */
+@media (max-height: 540px) and (orientation: landscape) {
+  .result-box {
+    width: min(100%, 980px);
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+    grid-template-areas: "stage head" "stage stats" "stage loot" "stage acts";
+    align-items: center; column-gap: 12px;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .result-fighter { width: clamp(110px, 40vh, 200px); }
+  .result[data-outcome="lose"] .result-fighter[data-role="rival"] { width: clamp(80px, 28vh, 150px); }
+  .result-banner { width: min(calc(100% - 56px), 420px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-scene *, .result-scene *::before, .result-scene *::after {
+    animation: none !important;
+  }
+  .result .confetti, .result-rain, .result-sparks, .result-clash, .result-bolt { display: none; }
 }
 
 /* ---------- cartas ---------- */
@@ -2228,35 +2734,33 @@ body {
 /* Vuelve a su lugar caminando, no de un salto, cuando deja de ser su turno. */
 .board-axie .axie { transition: transform .35s ease; }
 
-/* Sin vida: se desploma hacia atrás y se apaga. `forwards` lo deja tirado —es un
-   estado, no un pulso: la partida ya terminó. */
+/* Sin vida: triste y gris, en su lugar. Se desinfla contra el piso —un poco más bajo y
+   más ancho, desde las patas— y se apaga; los ojos los cierra el clip del kit.
+
+   Antes se desplomaba hacia atrás girando sobre las patas, y el giro, sumado a lo que
+   el kit mueve adentro, se veía como un cabezazo para adelante que se trababa. Acá no
+   hay giro ni corrimiento: nada que se pueda leer como ir hacia el rival. `forwards` lo
+   deja así —es un estado, no un pulso: la partida ya terminó—. */
 .board-axie[data-stance="ko"] .axie-rig {
-  animation: axie-ko .9s ease-in forwards;
+  animation: axie-ko 1.1s ease-out forwards;
 }
 @keyframes axie-ko {
-  0%   { transform: none; }
-  25%  { transform: translateY(-4%) rotate(calc(-5deg * var(--fwd, 1))); }
-  100% { transform: translateY(5%) rotate(calc(16deg * var(--fwd, 1))); }
+  from { transform: none; }
+  to   { transform: translateY(2%) scale(1.04, .93); }
 }
-.board-axie[data-stance="ko"] .axie-body { filter: grayscale(.75) brightness(.55); }
+.board-axie[data-stance="ko"] .axie-body {
+  animation: axie-ko-gray 1.1s ease-out forwards;
+}
+@keyframes axie-ko-gray {
+  from { filter: none; }
+  to   { filter: grayscale(.85) brightness(.6); }
+}
 /* Tirado ocupa más piso del que ocupaba parado: la sombra se estira y se afloja. */
 .board-axie[data-stance="ko"]::after,
 .board-axie[data-stance="ko"]::before { animation: axie-ko-shadow .9s ease-in forwards; }
 @keyframes axie-ko-shadow {
   0%   { transform: translateX(-50%) scale(1); }
-  100% { transform: translateX(calc(-50% + 7px * var(--fwd, 1))) scale(1.22, .72); opacity: .7; }
-}
-
-/* El que gana festeja hasta que arranque la próxima: el salto mortal del kit. Lo
-   único que hace falta agregarle es la sombra, que el kit no dibuja — y los saltos
-   del festejo son los únicos que sí despegan, así que la sombra los acompaña
-   achicándose, que es lo que dice que hubo aire de por medio. */
-.board-axie[data-stance="win"]::after,
-.board-axie[data-stance="win"]::before { animation: axie-cheer-shadow 1s ease-in-out infinite; }
-@keyframes axie-cheer-shadow {
-  0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
-  25%      { transform: translateX(-50%) scale(.74); opacity: .62; }
-  55%      { transform: translateX(-50%) scale(1.06, 1); opacity: 1; }
+  100% { transform: translateX(-50%) scale(1.1, .85); opacity: .7; }
 }
 
 /* ---------- pegar y recibir ---------- */
@@ -2429,7 +2933,8 @@ body {
 .dmg {
   position: absolute; left: 0; right: 0; top: 4%; z-index: 4;
   text-align: center; pointer-events: none;
-  font-family: var(--mono); font-weight: 700; font-size: 38px; line-height: 1.1;
+  font-family: var(--num); font-size: 42px; line-height: 1.1;
+  -webkit-text-stroke: .12em rgba(8, 10, 24, .9); paint-order: stroke fill;
   --halo: 0 0 4px rgba(0, 0, 0, .95), 0 0 12px rgba(0, 0, 0, .9), 0 0 26px rgba(0, 0, 0, .75);
   color: #fff;
   text-shadow: var(--halo);
@@ -2446,10 +2951,32 @@ body {
   color: #ffd98a; font-size: 32px; line-height: 1;
   text-shadow: var(--halo), 0 0 14px rgba(255, 190, 90, .45);
 }
-.dmg[data-kind="feather"] {
-  color: #ffb8d0; font-size: 32px; line-height: 1;
-  text-shadow: var(--halo), 0 0 14px rgba(255, 139, 179, .45);
+/* Los carteles de los poderes (ver `power-fx.js`). Cada uno en el color de su amuleto.
+   Lo que el poder deja puesto va más chico y más arriba —donde después queda la marca
+   en la chapa—; lo que pega como un golpe —la pluma, la daga, el veneno que muerde—
+   va del tamaño de un golpe y con el nombre arriba, porque nadie cruzó la pantalla. */
+.dmg[data-kind^="power-"] {
+  top: 12%; font-size: 26px; line-height: 1;
+  color: var(--fx-tag, #fff);
+  text-shadow: var(--halo), 0 0 14px var(--fx-tag-glow, transparent);
 }
+.dmg[data-kind="power-feather-draw"],
+.dmg[data-kind="power-poison-tick"],
+.dmg[data-kind="power-leech-apply"] { top: 4%; font-size: 32px; }
+.dmg[data-kind^="power-"] > .power--sm { width: 26px; height: 26px; vertical-align: -4px; }
+.dmg[data-kind^="power-strength"]  { --fx-tag: #ff9a7a; --fx-tag-glow: rgba(255, 110, 70, .5); }
+.dmg[data-kind^="power-brutal"]    { --fx-tag: #ffb45a; --fx-tag-glow: rgba(255, 150, 40, .5); }
+.dmg[data-kind^="power-octopus"]   { --fx-tag: #7fe3e0; --fx-tag-glow: rgba(60, 210, 210, .5); }
+.dmg[data-kind^="power-bubble"]    { --fx-tag: #a9dcff; --fx-tag-glow: rgba(110, 190, 255, .5); }
+.dmg[data-kind^="power-egg"]       { --fx-tag: #ffd98a; --fx-tag-glow: rgba(255, 190, 90, .5); }
+.dmg[data-kind^="power-feather"]   { --fx-tag: #ffb8d0; --fx-tag-glow: rgba(255, 139, 179, .45); }
+.dmg[data-kind^="power-pot"]       { --fx-tag: #8ef0a0; --fx-tag-glow: rgba(70, 220, 110, .5); }
+.dmg[data-kind^="power-leaf"]      { --fx-tag: #b8f07a; --fx-tag-glow: rgba(140, 220, 60, .5); }
+.dmg[data-kind^="power-snail"]     { --fx-tag: #e6d27a; --fx-tag-glow: rgba(210, 190, 70, .5); }
+.dmg[data-kind^="power-leech"]     { --fx-tag: #ff8fa8; --fx-tag-glow: rgba(230, 60, 100, .5); }
+.dmg[data-kind="power-leech-back"] { --fx-tag: #8ef0a0; --fx-tag-glow: rgba(70, 220, 110, .5); }
+.dmg[data-kind^="power-poison"]    { --fx-tag: #a8ee8a; --fx-tag-glow: rgba(110, 220, 90, .5); }
+.dmg[data-kind^="power-steelskin"] { --fx-tag: #b9d4e6; --fx-tag-glow: rgba(140, 190, 230, .5); }
 .dmg-label {
   display: block; margin-bottom: 2px;
   font-size: 14px; letter-spacing: .08em; text-transform: uppercase;
@@ -2574,7 +3101,248 @@ body {
   font-size: 11px; font-variant-numeric: tabular-nums;
 }
 .pip-status img { width: 15px; height: 15px; display: block; }
-.pip-status b { font-weight: 600; }
+.pip-status b { font-weight: 400; font-size: 12px; }
+
+/* ---------- la animación de cada poder (ver `power-fx.js`) ---------- */
+
+/* El color de cada poder, que usan el amuleto que vuela, la carta que se enciende y la
+   marca de la chapa cuando aparece. */
+[data-power="strength"],  [data-fx="strength"],  [data-pip="strength"]  { --fx-glow: rgba(255, 110, 70, .9); }
+[data-power="brutal"],    [data-fx="brutal"],    [data-pip="brutal"]    { --fx-glow: rgba(255, 150, 40, .9); }
+[data-power="octopus"],   [data-fx="octopus"],   [data-pip="octopus"]   { --fx-glow: rgba(60, 210, 210, .9); }
+[data-power="bubble"],    [data-fx="bubble"],    [data-pip="bubble"]    { --fx-glow: rgba(110, 190, 255, .9); }
+[data-power="egg"],       [data-fx="egg"],       [data-pip="egg"]       { --fx-glow: rgba(255, 205, 100, .9); }
+[data-power="feather"],   [data-fx="feather"]                           { --fx-glow: rgba(255, 150, 190, .9); }
+[data-power="pot"],       [data-fx="pot"]                               { --fx-glow: rgba(70, 220, 110, .9); }
+[data-power="leaf"], [data-fx="leaf"], [data-pip="leaf"] { --fx-glow: rgba(140, 220, 60, .9); }
+[data-power="snail"],     [data-fx="snail"],     [data-pip="weak"]      { --fx-glow: rgba(210, 190, 70, .9); }
+[data-power="leech"],     [data-fx="leech"]                             { --fx-glow: rgba(230, 60, 100, .9); }
+[data-power="poison"],    [data-fx="poison"],    [data-pip="poison"]    { --fx-glow: rgba(120, 225, 95, .9); }
+[data-power="steelskin"], [data-fx="steelskin"], [data-pip="steelskin"] { --fx-glow: rgba(140, 190, 230, .9); }
+
+/* La marca de la chapa espera a que el amuleto llegue: la chapa se repinta en el mismo
+   instante en que se juega el poder, antes de que nadie haya tirado nada. Cuando llega,
+   aparece de un salto; y la que ya estaba y vuelve a actuar, late. */
+.plate[data-fx-wait~="strength"] .pip-status[data-pip="strength"],
+.plate[data-fx-wait~="octopus"] .pip-status[data-pip="octopus"],
+.plate[data-fx-wait~="bubble"] .pip-status[data-pip="bubble"],
+.plate[data-fx-wait~="egg"] .pip-status[data-pip="egg"],
+.plate[data-fx-wait~="leaf"] .pip-status[data-pip="leaf"],
+.plate[data-fx-wait~="weak"] .pip-status[data-pip="weak"],
+.plate[data-fx-wait~="poison"] .pip-status[data-pip="poison"],
+.plate[data-fx-wait~="steelskin"] .pip-status[data-pip="steelskin"],
+.plate[data-fx-wait~="shield"] .plate-shield[data-pip="shield"] { visibility: hidden; }
+.plate[data-fx-pop~="strength"] .pip-status[data-pip="strength"],
+.plate[data-fx-pop~="octopus"] .pip-status[data-pip="octopus"],
+.plate[data-fx-pop~="bubble"] .pip-status[data-pip="bubble"],
+.plate[data-fx-pop~="egg"] .pip-status[data-pip="egg"],
+.plate[data-fx-pop~="leaf"] .pip-status[data-pip="leaf"],
+.plate[data-fx-pop~="weak"] .pip-status[data-pip="weak"],
+.plate[data-fx-pop~="poison"] .pip-status[data-pip="poison"],
+.plate[data-fx-pop~="steelskin"] .pip-status[data-pip="steelskin"],
+.plate[data-fx-pop~="shield"] .plate-shield[data-pip="shield"] {
+  animation: fx-pip-pop .65s cubic-bezier(.2, .9, .3, 1.4);
+}
+@keyframes fx-pip-pop {
+  0%   { transform: scale(.3); opacity: 0; }
+  45%  { transform: scale(1.4); opacity: 1; box-shadow: 0 0 14px 3px var(--fx-glow); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+
+[data-pip="shield"] { --fx-glow: rgba(80, 180, 255, .9); }
+
+/* La vida que cambia por un poder: la barra se enciende del color de lo que pasa
+   mientras el número cuenta (ver `countOut` en `ui.js`). */
+.plate[data-fx-hp="heal"] .hpbar { animation: fx-hp-heal .8s ease-out; }
+.plate[data-fx-hp="hurt"] .hpbar { animation: fx-hp-hurt .8s ease-out; }
+.plate[data-fx-hp="heal"] .plate-hp > b { color: #8ef0a0; }
+@keyframes fx-hp-heal {
+  0%, 100% { box-shadow: none; }
+  30%      { box-shadow: 0 0 10px 2px rgba(70, 220, 110, .9), 0 0 22px 4px rgba(70, 220, 110, .45); }
+}
+@keyframes fx-hp-hurt {
+  0%, 100% { box-shadow: none; }
+  30%      { box-shadow: 0 0 10px 2px rgba(255, 90, 80, .9); }
+}
+
+/* El número de daño cuando la bebida se le vuelca encima: se prende naranja mientras
+   cuenta. */
+.swing[data-fx="brutal"] .swing-dmg { animation: fx-swing-brutal .8s ease-out; }
+@keyframes fx-swing-brutal {
+  0%, 100% { text-shadow: none; }
+  25%      { color: #ffcf8a; text-shadow: 0 0 18px rgba(255, 150, 40, .95), 0 0 36px rgba(255, 110, 20, .6); }
+}
+
+/* Los carteles que suben de la chapa: la cura desde el número de la vida, el escudo
+   desde su insignia. Van en coordenadas de la ventana (ver `hudTag` en `power-fx.js`). */
+.hud-tag {
+  position: fixed; z-index: 45; pointer-events: none;
+  transform: translate(-50%, -100%);
+  font-family: var(--num); font-size: 19px; line-height: 1; white-space: nowrap;
+  color: #fff;
+  /* Sube por encima de la chapa, que tiene su propio texto: sin fondo se leían los dos
+     encimados. */
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(5, 8, 20, .82);
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  text-shadow: 0 0 4px rgba(0, 0, 0, .95), 0 0 10px rgba(0, 0, 0, .8);
+  animation: hud-rise 1.2s ease-out forwards;
+}
+.hud-tag .power--sm { width: 18px; height: 18px; vertical-align: -3px; }
+.hud-tag[data-kind="heal"]   { color: #8ef0a0; text-shadow: 0 0 4px rgba(0, 0, 0, .95), 0 0 14px rgba(70, 220, 110, .7); }
+.hud-tag[data-kind="shield"] { color: #8fd6ff; text-shadow: 0 0 4px rgba(0, 0, 0, .95), 0 0 14px rgba(80, 180, 255, .7); }
+@keyframes hud-rise {
+  0%   { opacity: 0; transform: translate(-50%, -60%) scale(.6); }
+  18%  { opacity: 1; transform: translate(-50%, -110%) scale(1.2); }
+  35%  { transform: translate(-50%, -120%) scale(1); }
+  80%  { opacity: 1; transform: translate(-50%, -200%); }
+  100% { opacity: 0; transform: translate(-50%, -240%); }
+}
+
+/* El amuleto que viaja hasta el Axie. Vuela sobre toda la pantalla (va colgado del
+   `body`, en coordenadas de la ventana) y el recorrido lo dibuja el JS: cada poder tiene
+   el suyo. */
+.power-fly {
+  position: fixed; left: 0; top: 0; z-index: 40;
+  width: 46px; height: 46px; object-fit: contain;
+  pointer-events: none; will-change: transform, opacity;
+  filter: drop-shadow(0 0 5px var(--fx-glow)) drop-shadow(0 0 16px var(--fx-glow));
+}
+/* La vida que vuelve de la daga: orbes chicos de luz, no el amuleto. */
+.power-orb {
+  position: fixed; left: 0; top: 0; z-index: 40;
+  width: 14px; height: 14px; border-radius: 50%;
+  pointer-events: none; will-change: transform, opacity;
+  background: radial-gradient(circle, #fff 0 25%, #8ef0a0 45%, rgba(70, 220, 110, 0) 72%);
+  box-shadow: 0 0 12px 4px rgba(70, 220, 110, .6);
+}
+
+/* El centro, cuando el pulpo le cae encima con la carta extra. */
+.overlay[data-fx="octopus"] .overlay-head { animation: fx-market-octopus .9s ease-out; }
+@keyframes fx-market-octopus {
+  0%, 100% { transform: none; text-shadow: none; }
+  30%      { transform: scale(1.08); text-shadow: 0 0 18px rgba(60, 210, 210, .9); }
+  55%      { transform: scale(.97); }
+}
+
+/* La carta que trae el poder se enciende con su gesto justo antes de soltar el amuleto,
+   y el amuleto de la carta se apaga un momento: es el que salió. La pluma y la maceta no
+   salen de la carta —una cae del cielo y la otra brota del piso—: su amuleto se queda y
+   brilla. */
+.card[data-fx] { --fx-ring: var(--naipe-luz), 0 0 0 2px var(--fx-glow), 0 0 24px 4px var(--fx-glow); }
+.card[data-fx] .card-power .power { animation: fx-card-amulet .9s ease-out; }
+.card[data-fx="feather"] .card-power .power,
+.card[data-fx="pot"] .card-power .power { animation: fx-card-amulet-glow .9s ease-out; }
+@keyframes fx-card-amulet {
+  0%   { transform: scale(1); opacity: 1; }
+  25%  { transform: scale(1.45); opacity: 1; }
+  34%  { transform: scale(.6); opacity: .15; }
+  80%  { transform: scale(.9); opacity: .15; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes fx-card-amulet-glow {
+  0%, 100% { transform: scale(1); filter: none; }
+  35%      { transform: scale(1.35); filter: drop-shadow(0 0 6px var(--fx-glow)) drop-shadow(0 0 12px var(--fx-glow)); }
+}
+
+.card[data-fx="strength"]  { animation: fx-card-strength .9s ease-out; }
+.card[data-fx="brutal"]    { animation: fx-card-brutal .9s linear; }
+.card[data-fx="octopus"]   { animation: fx-card-octopus .9s ease-out; }
+.card[data-fx="bubble"]    { animation: fx-card-bubble .9s ease-in-out; }
+.card[data-fx="egg"]       { animation: fx-card-egg .9s cubic-bezier(.3, .7, .4, 1); }
+.card[data-fx="feather"]   { animation: fx-card-feather .9s cubic-bezier(.2, .8, .3, 1); }
+.card[data-fx="pot"]       { animation: fx-card-pot .9s cubic-bezier(.2, .9, .3, 1.3); }
+.card[data-fx="leaf"]      { animation: fx-card-leaf .9s ease-in-out; }
+.card[data-fx="snail"]     { animation: fx-card-snail .9s ease-in-out; }
+.card[data-fx="leech"]     { animation: fx-card-leech .9s ease-out; }
+.card[data-fx="poison"]    { animation: fx-card-poison .9s ease-out; }
+.card[data-fx="steelskin"] { animation: fx-card-steelskin .9s ease-in-out; }
+
+/* La fuerza late dos veces, como un corazón que se acelera. */
+@keyframes fx-card-strength {
+  0%, 100% { transform: none; }
+  12%  { transform: translateY(-6px) scale(1.12); box-shadow: var(--fx-ring); }
+  24%  { transform: translateY(-6px) scale(1.02); }
+  36%  { transform: translateY(-6px) scale(1.14); box-shadow: var(--fx-ring); }
+  60%  { transform: translateY(-3px) scale(1.03); }
+}
+/* La bebida burbujea: vibra fino y rápido, como una lata que se agita. */
+@keyframes fx-card-brutal {
+  0%, 100% { transform: none; }
+  5%, 15%, 25%, 35%, 45% { transform: translate(-2px, -6px) rotate(-3deg); box-shadow: var(--fx-ring); }
+  10%, 20%, 30%, 40%, 50% { transform: translate(2px, -6px) rotate(3deg); }
+  70%  { transform: translateY(-3px); }
+}
+/* El pulpo es gelatina: se aplasta y se estira hasta quedarse quieto. */
+@keyframes fx-card-octopus {
+  0%, 100% { transform: none; }
+  15%  { transform: translateY(-4px) scale(1.18, .84); box-shadow: var(--fx-ring); }
+  30%  { transform: translateY(-8px) scale(.88, 1.14); }
+  45%  { transform: translateY(-5px) scale(1.08, .94); }
+  60%  { transform: translateY(-3px) scale(.97, 1.04); }
+}
+/* La burbuja flota: sube despacio y se mece. */
+@keyframes fx-card-bubble {
+  0%, 100% { transform: none; }
+  30%  { transform: translate(-3px, -12px); box-shadow: var(--fx-ring); }
+  60%  { transform: translate(3px, -10px); }
+}
+/* El huevo se hamaca, como uno que está por abrirse. */
+@keyframes fx-card-egg {
+  0%, 100% { transform: none; }
+  12%  { transform: translateY(-7px) rotate(-6deg) scale(1.06); box-shadow: var(--fx-ring); }
+  24%  { transform: translateY(-7px) rotate(6deg) scale(1.06); }
+  36%  { transform: translateY(-6px) rotate(-4deg) scale(1.05); }
+  48%  { transform: translateY(-5px) rotate(2deg) scale(1.04); }
+}
+/* La pluma se eleva sola, liviana, y baja meciéndose. */
+@keyframes fx-card-feather {
+  0%, 100% { transform: none; }
+  20%  { transform: translateY(-12px) rotate(-3deg); box-shadow: var(--fx-ring); }
+  45%  { transform: translateY(-9px) rotate(3deg); }
+  70%  { transform: translateY(-4px) rotate(-1.5deg); }
+}
+/* La maceta crece: se estira para arriba desde la base. */
+@keyframes fx-card-pot {
+  0%, 100% { transform: none; transform-origin: 50% 100%; }
+  30%  { transform: scale(.96, 1.14); transform-origin: 50% 100%; box-shadow: var(--fx-ring); }
+  55%  { transform: scale(1.02, .97); transform-origin: 50% 100%; }
+}
+/* La hoja se sacude con el viento, de un lado al otro. */
+@keyframes fx-card-leaf {
+  0%, 100% { transform: none; }
+  20%  { transform: translateY(-6px) rotate(-7deg); box-shadow: var(--fx-ring); }
+  45%  { transform: translateY(-6px) rotate(6deg); }
+  70%  { transform: translateY(-3px) rotate(-3deg); }
+}
+/* El caracol se estira despacito hacia un costado y vuelve. */
+@keyframes fx-card-snail {
+  0%, 100% { transform: none; }
+  40%  { transform: translate(6px, -4px) scale(1.1, .94); box-shadow: var(--fx-ring); }
+  70%  { transform: translate(3px, -2px) scale(1.03, .99); }
+}
+/* La daga corta: la carta se tuerce de un tajo y vuelve. */
+@keyframes fx-card-leech {
+  0%, 100% { transform: none; }
+  15%  { transform: translateY(-6px) skewX(-14deg); box-shadow: var(--fx-ring); }
+  28%  { transform: translateY(-6px) skewX(10deg); }
+  45%  { transform: translateY(-4px) skewX(-3deg); }
+}
+/* El veneno burbujea: tiembla fino y el brillo verde late dos veces. */
+@keyframes fx-card-poison {
+  0%, 100% { transform: none; }
+  8%   { transform: translate(-2px, -6px) scale(1.05); box-shadow: var(--fx-ring); }
+  16%  { transform: translate(2px, -6px) scale(1.05); }
+  24%  { transform: translate(-2px, -6px) scale(1.05); box-shadow: var(--naipe-luz); }
+  32%  { transform: translate(2px, -6px) scale(1.05); }
+  40%  { transform: translate(0, -5px) scale(1.04); box-shadow: var(--fx-ring); }
+}
+/* La máscara se da vuelta entera, como quien se la prueba. */
+@keyframes fx-card-steelskin {
+  0%, 100% { transform: none; }
+  45%  { transform: translateY(-8px) perspective(400px) rotateY(180deg); box-shadow: var(--fx-ring); }
+  80%  { transform: translateY(-3px) perspective(400px) rotateY(360deg); }
+}
 
 .card--bust { border-color: var(--danger); background: linear-gradient(165deg, #5e2c26, #3e1c19); }
 .card--bust::after {
@@ -2592,7 +3360,7 @@ body {
 /* ---------- rachas ---------- */
 
 .runs { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(6px * var(--zoom, 1)); min-height: calc(var(--rachas) * var(--zoom, 1)); }
-.run, .runs-empty, .runs-zero { text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
+.run, .runs-empty { text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
 .run {
   display: flex; align-items: center; gap: calc(5px * var(--zoom, 1));
   padding: calc(3px * var(--zoom, 1)) calc(9px * var(--zoom, 1)); border-radius: 999px;
@@ -2605,7 +3373,30 @@ body {
 .run b { font-size: calc(13px * var(--zoom, 1)); }
 .run .crest--sm { width: calc(16px * var(--zoom, 1)); height: calc(16px * var(--zoom, 1)); }
 .runs-empty { color: var(--ink-faint); font-size: calc(12px * var(--zoom, 1)); }
-.runs-zero { color: var(--danger); font-size: calc(12px * var(--zoom, 1)); font-weight: 600; }
+
+/* La racha que mide la Energy Drink, mientras dura el turno (ver `brutalRunOf` en
+   `ui.js`): sus eslabones y su pastilla laten naranja, y la pastilla dice cuánto va a
+   sumar la bebida al plantarse. Va con `outline` y no con sombra para no pisar la luz
+   del recorrido de la cadena (`data-linked`), que se prende encima al plantarse. */
+.sym[data-brutal="true"] {
+  outline: 2px solid rgba(255, 150, 40, .85);
+  outline-offset: 1px;
+}
+.sym[data-brutal="true"]:not([data-linked="true"]),
+.run[data-brutal="true"] { animation: brutal-run 1.4s ease-in-out infinite; }
+.run[data-brutal="true"] { outline: 1px solid rgba(255, 150, 40, .85); }
+@keyframes brutal-run {
+  0%, 100% { outline-color: rgba(255, 150, 40, .4); }
+  50%      { outline-color: rgba(255, 195, 100, 1); }
+}
+.run-brutal {
+  display: inline-flex; align-items: center; gap: 1px;
+  color: #ffcf8a; font-size: calc(12px * var(--zoom, 1));
+}
+.run .run-brutal .power--sm { width: calc(15px * var(--zoom, 1)); height: calc(15px * var(--zoom, 1)); vertical-align: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .sym[data-brutal="true"]:not([data-linked="true"]), .run[data-brutal="true"] { animation: none; }
+}
 
 /* ---------- el centro ---------- */
 
@@ -2624,14 +3415,21 @@ body {
 }
 @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 
+/* El ancho lo dan las cartas y nada más: los botones del pie no lo empujan (ver
+   `.overlay-actions`). Si lo empujaban, el panel cambiaba de ancho al marcar una carta
+   o cuando aparecía "Renovar el centro", y quedaba más ancho que la fila. */
 .overlay-panel {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
   max-width: 100%;
   max-height: min(calc(100vh - 20px), calc(100dvh - 20px));
   pointer-events: auto;
   padding: 14px 20px 16px;
-  animation: overlay-rise .26s cubic-bezier(.2, .9, .3, 1.15);
   margin-bottom: 6px;
+}
+/* Sube solo al abrirse el centro (`data-rise`, ver `overlay` en `ui.js`): el panel se
+   reescribe durante el reparto y no tiene que volver a entrar cada vez. */
+.overlay[data-rise="true"] .overlay-panel {
+  animation: overlay-rise .26s cubic-bezier(.2, .9, .3, 1.15);
 }
 @keyframes overlay-rise {
   from { opacity: 0; transform: translateY(14px) scale(.97); }
@@ -2657,7 +3455,8 @@ body {
   to { opacity: 0; transform: translateY(10px) scale(.98); }
 }
 
-.overlay-head { text-align: center; flex: 0 0 auto; }
+/* Tampoco el cartel ensancha el panel: se parte en renglones al ancho de las cartas. */
+.overlay-head { text-align: center; flex: 0 0 auto; width: 0; min-width: 100%; }
 .overlay-title {
   display: block;
   font-family: var(--title);
@@ -2670,7 +3469,14 @@ body {
 }
 .overlay-note { margin: 4px 0 0; color: var(--tinta-dim); font-size: 14px; }
 .overlay-note b { color: var(--tinta); }
-.overlay-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; flex: 0 0 auto; }
+/* `width: 0` + `min-width: 100%`: el renglón no cuenta para el ancho del panel, pero
+   después ocupa todo lo que el panel mide. Si los botones no entran, se parten en dos
+   renglones que se estiran a lo ancho. */
+.overlay-actions {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; flex: 0 0 auto;
+  width: 0; min-width: 100%;
+}
+.overlay-actions .btn { flex: 1 1 auto; }
 
 /* Las seis cartas del centro cuelgan de **una** medida: `--mkt`, el ancho de la carta.
    Todo lo de adentro —el símbolo, el relleno, los huecos, el alto— es una fracción de
@@ -2736,6 +3542,139 @@ body {
 .market-card[disabled] { cursor: default; opacity: .3; filter: grayscale(.8); }
 /* Hueco vacío cuando la reserva se agotó. */
 .market-slot { border: 1px dashed var(--line); opacity: .4; }
+
+/* La carta marcada. Tocar ya no compra: marca, y la compra se confirma abajo. La
+   marcada tiene que ganarle a todo lo demás de la fila de un vistazo —sube, se enciende
+   en dorado y lleva un tilde— y las otras que se podían llevar dan un paso atrás sin
+   apagarse del todo, porque cambiar de idea es un toque. Lo que sube y lo que brilla
+   no pasa de los 18px de colchón de `.market-row`. */
+.market-card { position: relative; }
+.market-card.is-chosen,
+.market-card.is-chosen:hover:not([disabled]) {
+  transform: translateY(-9px);
+  border-color: #ffd66b;
+  box-shadow: 0 0 0 2px #ffd66b, 0 0 14px rgba(255, 196, 70, .55), 0 12px 18px -10px rgba(0, 0, 0, .7);
+}
+.market-card.is-chosen::after {
+  content: "✓";
+  position: absolute; top: calc(var(--mkt) * -.1); right: calc(var(--mkt) * -.1);
+  width: calc(var(--mkt) * .3); height: calc(var(--mkt) * .3); min-width: 18px; min-height: 18px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff1b8, #f2b53a 60%, #b87818);
+  border: 1px solid #fff4c8;
+  color: #4a2a06; font-weight: 900; font-size: max(11px, calc(var(--mkt) * .17)); line-height: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+}
+.market-card.just-chosen { animation: market-choose .26s cubic-bezier(.2, .9, .3, 1.35); }
+.market-card.just-chosen::after { animation: market-tick .3s cubic-bezier(.2, .9, .3, 1.6); }
+@keyframes market-choose {
+  from { transform: translateY(-3px) scale(.97); }
+  to   { transform: translateY(-9px); }
+}
+@keyframes market-tick {
+  from { transform: scale(0) rotate(-40deg); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.market-row[data-choosing="true"] .market-card:not(.is-chosen):not([disabled]) {
+  opacity: .62; filter: saturate(.7);
+  transition: opacity .15s ease, filter .15s ease, transform .12s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.market-row[data-choosing="true"] .market-card:not(.is-chosen):not([disabled]):hover { opacity: .9; filter: none; }
+
+/* Confirmar: el botón que manda en el pie del centro. Apagado dice qué falta; con una
+   carta marcada se enciende y lleva los símbolos de lo que se compra.
+
+   La base es fija y más larga que su versión más ancha ("Confirmar selección" con tres
+   escudos): medido por lo que tenía adentro, crecía al marcar una carta y cambiaba cómo
+   se partían los botones del pie. */
+.market-confirm {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.overlay-actions .market-confirm { flex: 1 0 300px; }
+.market-confirm:disabled { opacity: .45; filter: grayscale(.6); }
+.market-confirm:not(:disabled) { animation: confirm-ready .32s cubic-bezier(.2, .9, .3, 1.3); }
+@keyframes confirm-ready {
+  from { transform: scale(.94); filter: brightness(1.4); }
+  to   { transform: none; filter: none; }
+}
+.market-confirm-syms {
+  display: inline-flex; gap: 2px; padding: 2px 5px;
+  border-radius: 999px; background: rgba(0, 0, 0, .28);
+}
+.market-confirm-syms .crest--sm { vertical-align: 0; display: block; }
+
+/* El cartel del poder: al marcar una carta con poder, flota arriba del panel y dice en
+   un renglón qué hace. Va colgado afuera del panel (`bottom: 100%`) para no correr las
+   cartas ni los botones al aparecer; no se toca, así no tapa nada de lo que se elige. */
+.market-tip {
+  position: absolute; left: 50%; bottom: calc(100% + 12px);
+  transform: translateX(-50%);
+  width: max-content; max-width: min(460px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 9px 16px;
+  border-radius: 14px;
+  border: 2px solid var(--madera-borde);
+  background: rgba(34, 22, 12, .92);
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, .7);
+  color: #fff4e0; font-size: 14px; line-height: 1.3;
+  pointer-events: none;
+  animation: market-tip-in .2s cubic-bezier(.2, .9, .3, 1.2);
+}
+.market-tip[hidden] { display: none; }
+@keyframes market-tip-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to   { opacity: 1; transform: translateX(-50%); }
+}
+.market-tip-row { margin: 0; display: flex; align-items: center; gap: 10px; }
+.market-tip-row .power--sm {
+  flex: 0 0 auto; width: 30px; height: 30px;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c) 70%, transparent));
+}
+.market-tip-row b {
+  display: block;
+  font-family: var(--title); font-weight: 400; letter-spacing: .03em;
+  text-transform: uppercase; color: var(--c); font-size: 13px;
+}
+/* Con la ventana baja (teléfono acostado) el panel ocupa todo el alto y arriba no hay
+   dónde colgarlo: se apoya sobre el título del centro, que mientras hay una carta
+   marcada es lo que menos se necesita leer. */
+@media (max-height: 500px) {
+  .market-tip { bottom: auto; top: 8px; }
+}
+/* Cuando el mismo poder viene repetido (una carta gigante) va un renglón con cuántos. */
+.market-tip-times { font-style: normal; color: #fff4e0; margin-left: 4px; }
+
+/* El mismo cartel sobre una carta de la mesa o del mazo (ver `toggleCardTip`). Lo ubica
+   el JS con `left`/`top` en la pantalla, así que acá se le saca el centrado del panel
+   del centro; la colita apunta a la carta en `--arrow`. */
+.card-tip {
+  /* Va como `popover` (capa de arriba de todo): se le sacan el centrado, el marco y el
+     recorte que el navegador le pone, que se comerían la colita. */
+  position: fixed; inset: auto; left: 0; top: 0; margin: 0;
+  overflow: visible; transform: none; z-index: 60;
+  max-width: min(360px, calc(100vw - 16px));
+  animation: card-tip-in .18s cubic-bezier(.2, .9, .3, 1.2);
+}
+.card-tip::after {
+  content: ""; position: absolute; left: var(--arrow, 50%);
+  width: 12px; height: 12px; margin-left: -7px;
+  background: rgb(34, 22, 12);
+  border: 2px solid var(--madera-borde);
+  transform: rotate(45deg);
+}
+.card-tip[data-side="above"]::after { bottom: -8px; border-top: 0; border-left: 0; }
+.card-tip[data-side="below"]::after { top: -8px; border-bottom: 0; border-right: 0; }
+.card-tip[data-side="none"]::after { display: none; }
+@keyframes card-tip-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+/* Las cartas que traen poder se pueden tocar para leerlo. */
+#field .card:has(.card-power):not([data-stack-col]),
+#deck-sheet .card:has(.card-power) { cursor: help; }
 
 /* ---------- lo que se mira entre rondas ---------- */
 
@@ -2859,6 +3798,18 @@ body {
   from { opacity: 0; transform: translateY(12px) scale(.97); }
   to   { opacity: 1; transform: none; }
 }
+/* Y se van igual de suave: sin `[open]` el navegador les pone `display: none` en el
+   acto, así que `allow-discrete` lo demora hasta que terminó el apagado. */
+.modal {
+  transition:
+    opacity .18s ease-in, transform .18s ease-in,
+    display .18s allow-discrete, overlay .18s allow-discrete;
+}
+.modal:not([open]) { opacity: 0; transform: translateY(10px) scale(.98); }
+.modal::backdrop {
+  transition: opacity .18s ease-in, display .18s allow-discrete, overlay .18s allow-discrete;
+}
+.modal:not([open])::backdrop { opacity: 0; }
 
 /* La cruz de cierre arriba a la derecha, sticky para no perderse al scrollear y flotada
    a la derecha con altura 0 para no empujar el contenido. */
@@ -2966,9 +3917,9 @@ body {
   gap: 6px;
   padding: 6px 14px;
   border-radius: 11px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  font-family: var(--btn);
+  font-size: 14px;
+  letter-spacing: .02em;
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
   background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
@@ -3285,7 +4236,7 @@ body {
   .swing-mods { display: none; }
   .field { padding-right: 96px; }
   .plate { padding: 6px 9px; }
-  .plate-name { font-size: 14px; }
+  .plate-name { font-size: 16px; }
 }
 
 @media (max-width: 640px) {
@@ -3301,8 +4252,6 @@ body {
   :root { --barra: 112px; }
   .brand-logo { height: 32px; }
   .sb-round { font-size: 14px; letter-spacing: .16em; text-indent: .16em; }
-  .btn-burger { width: 46px; height: 44px; }
-  .btn-burger i { width: 20px; }
   .topbar { gap: 8px; padding: 8px 10px 10px; }
   .topbar .btn-ghost { padding: 6px 9px; font-size: 12px; }
   .btn-sound { padding: 6px 8px; font-size: 14px; }
@@ -3316,20 +4265,15 @@ body {
   /* El frente se aprieta todo lo que puede: en un teléfono cada píxel que le sobra a
      las cartas se lo está sacando a la pelea, que es lo que se vino a ver. */
   .field { margin-top: 12px; padding-right: 74px; }
-  /* El pie de un teléfono: los botones crecen (se aprieta con el dedo) y el aviso se
-     achica con la letra y con la cinta, que también son más chicas acá. */
-  :root { --aviso: 62px; --botones: 74px; --zocalo: 16px; }
-  .controls-msg { font-size: 13px; }
-  /* En un teléfono la letra grande tiene que caber en dos renglones, no en cinco. */
-  .finale-text { font-size: clamp(30px, 11vw, 52px); max-width: 8em; }
-  .btn-danger, .btn-primary { padding: 10px 15px; font-size: 14px; }
+  :root { --botones: 74px; --zocalo: 16px; }
+  .btn-danger, .btn-primary { padding: 10px 15px; font-size: 18px; }
   /* En un teléfono los dos botones se toman el ancho entero y crecen en vez de
      achicarse: es la única pantalla donde se juega con el dedo y no con el mouse, y
      apretar sin mirar necesita blanco alrededor, no menos relleno. Se salvan del
      renglón de arriba —que achica todas las cintas— porque lo pide una regla más
      específica, no porque venga después. */
   .controls-acts { max-width: none; gap: 10px; }
-  .controls-acts .btn { min-height: 70px; padding: 16px 12px; font-size: 18px; }
+  .controls-acts .btn { min-height: 70px; padding: 16px 12px; font-size: 21px; }
 
   .gauge { --dial: 66px; }
 
@@ -3387,7 +4331,7 @@ body {
      se aprieta con el dedo, y "No agarrar" es una decisión —cerrar el reparto sin nada—
      y no una salida de emergencia en letra chica. */
   .overlay-actions { gap: 8px; }
-  .overlay-actions .btn { min-height: 50px; padding: 14px 22px; font-size: 15px; }
+  .overlay-actions .btn { min-height: 50px; padding: 14px 22px; font-size: 18px; }
 }
 
 /* Con la ventana parada, el dibujo entra tan chico que agrandarlo no cuesta nitidez:
@@ -3412,14 +4356,6 @@ body {
     font-size: clamp(14px, 3.4vw, 18px);
     letter-spacing: .16em; text-indent: .16em;
   }
-  .btn-burger {
-    width: clamp(42px, 10vw, 54px); height: clamp(38px, 9vw, 48px);
-    border-radius: clamp(11px, 2.6vw, 14px);
-    /* El hueco entre rayas crece con las rayas: quietas en 5px, tres rayas más gordas
-       y más largas se juntan y el botón vuelve a leerse como una textura. */
-    gap: clamp(4px, 1vw, 6px);
-  }
-  .btn-burger i { width: clamp(20px, 4.8vw, 26px); height: clamp(2.5px, .6vw, 3.5px); }
 
   .overlay { padding: 10px; align-items: center; }
   .overlay-panel {
@@ -3442,6 +4378,10 @@ body {
     padding: 18px;
     margin: -18px;
   }
+  /* Parado no entran confirmar y "No agarrar" en un renglón, y partidos de a uno con
+     anchos distintos se leen desprolijos: van los dos a lo ancho, confirmar arriba. */
+  .overlay-actions:has(.market-confirm) .btn { flex: 1 1 100%; }
+  .market-confirm { order: -1; }
 }
 
 /* Apaisado.
@@ -3494,13 +4434,8 @@ body {
   .board-axie { min-height: 70px; }
   .fighter { --axie-w: min(100%, clamp(125px, 25vh, 190px)); }
   .arena::after { --air: 46px; --caida: .62; }
-  /* Una ventana baja es el único lugar donde el pie se resigna: acá cada píxel que se
-     lleva se lo saca a la pelea, que está apretada contra el borde de arriba. Los
-     botones siguen siendo del mismo tamaño entre sí y siguen en el medio —solo bajan un
-     escalón de alto— y el aviso se queda con lo justo para el renglón y la cinta, que
-     acá se pisan un poco: mejor eso que mover la mesa. */
-  :root { --aviso: 50px; --botones: 58px; --zocalo: 10px; }
-  .controls-acts .btn { min-height: 54px; padding: 11px 14px; font-size: 16px; }
+  :root { --botones: 58px; --zocalo: 10px; }
+  .controls-acts .btn { min-height: 54px; padding: 11px 14px; font-size: 19px; }
 }
 
 /* El teléfono parado, otra vez, y va acá abajo a propósito: después de los `@media` de
@@ -3526,8 +4461,7 @@ body {
   }
   .plate-top { gap: 4px; }
   .plate-top .crest { width: 14px; height: 14px; }
-  .plate-name { font-size: 13px; }
-  .plate-tag { font-size: 10px; padding: 1px 5px; }
+  .plate-name { font-size: 15px; }
   .plate-hp { gap: 5px; }
   .plate-hp > b { font-size: 12px; width: 24px; }
   .plate-shield b { width: auto; font-size: 10px; }
@@ -3546,13 +4480,11 @@ body {
 @media (max-height: 760px) and (min-width: 941px) {
   :root { --barra: 78px; }
   .brand-logo { height: 38px; }
-  .btn-burger { width: 48px; height: 44px; }
   .gauge { --dial: 96px; }
 }
 @media (max-height: 600px) and (min-width: 941px) {
   :root { --barra: 66px; }
   .brand-logo { height: 32px; }
-  .btn-burger { width: 46px; height: 40px; }
   .gauge { --dial: 76px; }
 }
 
@@ -3588,23 +4520,20 @@ body {
     padding: 3px 12px;
   }
   .brand-logo { height: 24px; }
-  .btn-burger { width: 36px; height: 30px; gap: 3px; }
-  .btn-burger i { width: 16px; height: 2px; }
+  .topbar-cfg-btn { height: 30px; min-width: 36px; padding: 0 6px; }
   .sb-round { font-size: 13px; letter-spacing: .12em; }
   :root { --mitad: 28vh; --patas: clamp(75px, 28vh, 120px); }
   .board-axie { min-height: 44px; }
   .fighter { --axie-w: min(100%, clamp(90px, 20vh, 130px)); gap: 4px; }
   .plate { padding: 3px 6px; gap: 2px; border-radius: 7px; }
-  .plate-name { font-size: 11px; }
+  .plate-name { font-size: 13px; }
   .plate-hp > b { font-size: 11px; }
   .hpbar { height: 8px; }
   :root { --carta: clamp(38px, 9vh, 50px); }
   .arena { --pad: 8px; gap: 4px 0; grid-template-rows: var(--escena) 1fr auto var(--pie); }
   .field { margin-top: 2px; gap: 4px; }
-  /* Y el pie compacto: mantiene la botonera siempre dentro de la pantalla y accesible */
-  :root { --aviso: 30px; --botones: 46px; --zocalo: 6px; }
-  .controls-acts .btn { min-height: 44px; padding: 6px 12px; font-size: 14px; }
-  .controls-msg { font-size: 12px; }
+  :root { --botones: 46px; --zocalo: 6px; }
+  .controls-acts .btn { min-height: 44px; padding: 6px 12px; font-size: 17px; }
 }
 
 /* Nada de movimiento para quien lo pidió: las cartas aparecen sin repartirse. */
@@ -3615,6 +4544,7 @@ body {
     transition-duration: .01ms !important;
   }
   .market-card:hover:not([disabled]) { transform: none; }
+  .market-card.is-chosen, .market-card.is-chosen:hover:not([disabled]) { transform: translateY(-9px); }
 }
 
 /* ---------- la sala en red ---------- */
@@ -3634,7 +4564,7 @@ body {
      el logo      la marca arriba, en la versión con contorno, como en la portada
      la tabla     `frame_back`, la plancha de madera clara con la que el Origins arma
                   el fondo de sus paneles
-     el cartel    `name_panel`, el cartel de madera colgado del borde de arriba
+     el cartel    la cinta de `.o-banner`, colgada del borde de arriba
      la madera    `player_name_bg`, la misma de las opciones del menú: cada sala y cada
                   asiento es un cartel con un nombre puesto
      las cintas   las de siempre para lo que se aprieta, y la gris (`slider-bg`) para
@@ -3721,8 +4651,7 @@ body {
    para que siga midiendo su lugar en la columna. */
 .netbox-banner {
   align-self: center; margin: -28px 0 2px;
-  min-width: min(300px, 82%); padding: 13px 32px 15px;
-  background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/name_panel.png") center / 100% 100% no-repeat;
+  min-width: min(260px, 70%); padding: 12px 30px 14px;
   font: 800 clamp(16px, 2.2vw, 23px)/1 var(--display);
   text-align: center; text-transform: uppercase; letter-spacing: .05em;
   color: #fff; text-shadow: 0 2px 4px rgba(0, 0, 0, .6);
@@ -3732,6 +4661,7 @@ body {
    del botón que arriesga. Un cartel de madera que dice "Se cortó la conexión" se lee
    como un título; en rojo se lee como lo que es. */
 .netbox[data-state="down"] .netbox-banner {
+  --tail: #8f0029; --tail-end: #6a001e; --fold: #3d0010;
   background-color: #bb0035;
   background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_red.png");
 }
@@ -3803,12 +4733,12 @@ body {
 .room-no {
   flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center;
   background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/avatar_frame.png") center / 100% 100% no-repeat;
-  font: 700 14px/1 var(--mono); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+  font: 400 15px/1 var(--num); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
 }
 .room-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .room-id b { font-size: 15px; font-weight: 700; }
 .netbox-code {
-  font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+  font-family: var(--num); font-size: 12px; letter-spacing: .09em;
   color: rgba(255, 240, 228, .7);
 }
 /* Los dos asientos de la sala, vistos desde afuera: dos huecos, y en el que está
@@ -3829,7 +4759,7 @@ body {
 }
 .room-seats .crest { width: 15px; height: 15px; }
 .netbox-count {
-  font: 700 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase;
+  font: 400 12px/1 var(--num); letter-spacing: .06em; text-transform: uppercase;
   color: rgba(255, 240, 228, .72);
 }
 /* Qué pasa si toco. Es una etiqueta y no un botón —el botón es el renglón entero—, así
@@ -3837,7 +4767,7 @@ body {
    gris si la sala está llena o ya jugando, que ahí se entra a mirar. */
 .room-go {
   flex: 0 0 auto; padding: 8px 14px; border-radius: 9px;
-  font: 700 13px/1 var(--display);
+  font: 400 14px/1 var(--btn); letter-spacing: .02em;
   background: #00766c url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-fill.png") center / 100% 100% no-repeat;
   box-shadow: 0 3px 0 -1px rgba(0, 0, 0, .4);
 }
@@ -3872,7 +4802,7 @@ body {
 .seat-empty {
   width: 44px; height: 44px; display: grid; place-items: center;
   background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/avatar_frame.png") center / 100% 100% no-repeat;
-  font: 700 17px/1 var(--mono); color: rgba(255, 240, 228, .85);
+  font: 400 19px/1 var(--num); color: rgba(255, 240, 228, .85);
   text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
 }
 .seat-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -4144,20 +5074,29 @@ body {
 }
 
 /* La firma. Va debajo del logo y dice una sola cosa —quién lo hizo—, así que no
-   necesita ancho: necesita leerse. Y tiene que leerse **sobre cualquiera de los seis
-   fondos**, que van del cielo blanco de la meseta al agua oscura de la laguna: un
-   texto claro con sombra se pierde contra el cielo y uno oscuro se pierde contra el
-   agua. Por eso no se apoya en el fondo que le toque sino que se trae el suyo — una
-   chapita oscura, apenas translúcida, con el vidrio esmerilado detrás. Sobre eso el
-   blanco tiene el mismo contraste siempre, se pare donde se pare la portada. */
+   necesita ancho: necesita leerse, sobre cualquiera de los seis fondos. No lleva chapa:
+   la letra blanca se trae su propio contorno oscuro.
+
+   Queda a 12px del dibujo del logo, lo mismo que el nombre del Axie de su botón. El PNG
+   trae abajo un margen transparente del 2,12% de su ancho, que se descuenta acá para
+   medir desde el contorno blanco y no desde el borde del archivo.
+
+   El `position: relative` la sube por encima de la sombra del logo: el `filter` del
+   logo lo pinta en una capa propia, encima del texto común que venga después, y su
+   sombra difusa le caía a la firma y la dejaba gris en vez de blanca. */
 .lobby-sub {
-  margin: 14px auto 0;
-  font: 700 clamp(12px, 1.5vw, 16px)/1 var(--display);
+  position: relative;
+  margin: calc(12px - clamp(300px, 44vw, 520px) * .0212) auto 0;
+  font: 400 clamp(14px, 1.7vw, 18px)/1 var(--num);
   letter-spacing: .04em; color: #fff;
-  padding: 8px 18px; border-radius: 10px;
-  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
-  box-shadow: 0 4px 0 -1px var(--madera-sombra), 0 10px 18px -8px rgba(0, 0, 0, .9);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+  /* Igual que el nombre del Axie de la portada: sin tabla, con la sombra en la letra. */
+  padding: 0;
+  /* El contorno es sombra: cuatro sombras duras de 1px rodean la letra y una
+     difuminada abre el contraste hacia afuera. */
+  text-shadow:
+    1px 0 0 rgba(8, 10, 24, .85), -1px 0 0 rgba(8, 10, 24, .85),
+    0 1px 0 rgba(8, 10, 24, .85), 0 -1px 0 rgba(8, 10, 24, .85),
+    0 2px 10px rgba(0, 0, 0, .75);
 }
 
 .lobby-panel {
@@ -4172,14 +5111,21 @@ body {
    abajo grueso lo hace un objeto con espesor —se hunde al apretarlo, como una tecla—
    y no un rectángulo de color. */
 .lobby-play {
-  font: 800 clamp(24px, 3.6vw, 42px)/1 var(--display);
-  text-transform: uppercase; letter-spacing: .06em;
-  padding: 18px clamp(34px, 6vw, 64px);
+  font: 400 clamp(28px, 4vw, 46px)/1 var(--btn);
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 14px clamp(30px, 5vw, 56px);
   border-radius: 18px; border: 0; cursor: pointer;
-  color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, .5), 0 1px 0 rgba(0, 0, 0, .35);
+  color: #fff; text-shadow: 0 4px 0 rgba(0, 0, 0, .28), 0 2px 10px rgba(0, 0, 0, .45);
+  -webkit-text-stroke: .05em rgba(0, 28, 40, .55); paint-order: stroke fill;
   background: #00766c url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-fill.png") center / 100% 100% no-repeat;
   box-shadow: 0 8px 0 -1px #00382f, 0 26px 40px -14px rgba(0, 0, 0, .85);
   transition: transform .1s ease, box-shadow .1s ease, filter .2s ease;
+}
+#lobby-play, #lobby-loadout {
+  min-height: clamp(68px, 8.5vh, 78px);
+  min-width: clamp(190px, 20vw, 260px);
+  box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 .lobby-play:hover { filter: brightness(1.12) saturate(1.05); }
 .lobby-play:active {
@@ -4203,14 +5149,11 @@ body {
 }
 .lobby:not([data-view="front"]) .lobby-aside { display: none; }
 
-/* Es el mismo botón que el de jugar con menos cuerpo: la misma cinta del kit, el mismo
-   espesor y el mismo hundirse al apretarlo, pero en la azul —la de todos los días— y no
-   en la verde. Jugar es lo que hay que apretar; esto es lo que se puede apretar antes.
-   Si los dos gritaran igual, la portada no tendría una respuesta obvia. */
+/* El botón de Axies iguala exactamente en tamaño y tipografía al de jugar, con la textura
+   azul del kit. El Axie seleccionado va montado sobre el botón como una insignia (badge)
+   para no sumar alto adentro del botón y mantener ambos botones idénticos. */
 .lobby-play--alt {
-  display: flex; flex-direction: column; align-items: center; gap: 7px;
-  font-size: clamp(15px, 1.9vw, 24px);
-  padding: 14px clamp(18px, 3vw, 36px);
+  position: relative;
   background-color: #00527c;
   background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_blue.png");
   box-shadow: 0 8px 0 -1px #002338, 0 26px 40px -14px rgba(0, 0, 0, .85);
@@ -4218,16 +5161,32 @@ body {
 .lobby-play--alt:active {
   box-shadow: 0 2px 0 -1px #002338, 0 12px 20px -12px rgba(0, 0, 0, .85);
 }
-.loadout-cta { line-height: 1.05; }
-/* Con cuál estás jugando ahora. Sin esto la elección se hunde apenas se cierra la
-   pantalla, y no queda dónde ver qué bicho tenés puesto hasta que empieza la partida.
-   Va en la letra del texto y no en la del cartel: es un dato, no un grito. */
+.loadout-cta { line-height: 1; }
+/* Con cuál estás jugando ahora. Montado sobre el botón (arriba) sin ocupar espacio interno,
+   acompañando el hundimiento al apretar el botón. */
 .loadout-now {
-  display: flex; align-items: center; gap: 6px;
-  font: 600 13px/1 var(--display); letter-spacing: 0; text-transform: none;
-  color: rgba(255, 255, 255, .82);
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Sin chapa: la letra sola sobre el paisaje. El contraste lo pone su propia sombra,
+     pegada al contorno de cada letra y difuminada hacia afuera. */
+  padding: 0;
+  font: 400 16px/1 var(--num);
+  letter-spacing: .03em;
+  text-transform: none;
+  color: #fff;
+  text-shadow:
+    1px 0 0 rgba(8, 10, 24, .85), -1px 0 0 rgba(8, 10, 24, .85),
+    0 1px 0 rgba(8, 10, 24, .85), 0 -1px 0 rgba(8, 10, 24, .85),
+    0 2px 10px rgba(0, 0, 0, .75);
+  white-space: nowrap;
+  pointer-events: none;
 }
-.loadout-now .crest { width: 17px; height: 17px; vertical-align: 0; }
+.loadout-now .crest { width: 19px; height: 19px; vertical-align: 0; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5)); }
 
 /* ---------- la letra chica, abajo en el medio ---------- */
 
@@ -4247,7 +5206,7 @@ body {
   bottom: clamp(10px, 1.8vh, 18px);
   display: flex;
   gap: clamp(4px, 1.2vw, 8px);
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: center;
   max-width: 98vw;
@@ -4258,7 +5217,7 @@ body {
    se lee como algo que se pueda apretar. Apenas el suficiente, que es la diferencia
    entre esto y una cinta del kit. */
 .lobby-help {
-  font-size: clamp(10px, 2.4vw, 12px);
+  font-size: clamp(11px, 2.8vw, 14px);
   padding: 6px clamp(8px, 1.6vw, 14px);
   border-radius: 9px;
   background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
@@ -4288,10 +5247,9 @@ body {
   background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
   box-shadow: 0 3px 0 -1px var(--madera-sombra), 0 8px 16px -6px rgba(0, 0, 0, .8);
   color: #fff;
-  font-family: var(--display);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: .08em;
+  font-family: var(--btn);
+  font-size: 14px;
+  letter-spacing: .05em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
   cursor: pointer;
   transition: filter .15s ease, transform .08s ease, box-shadow .08s ease;
@@ -4307,13 +5265,23 @@ body {
 }
 #lobby-settings-btn[aria-expanded="true"],
 .lobby-cfg-btn[aria-expanded="true"] {
-  filter: brightness(1.2) saturate(1.1);
-  outline: 2px solid #ffd15c;
-  outline-offset: 1px;
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 -1px var(--madera-sombra), inset 0 2px 5px rgba(0, 0, 0, .35);
 }
 .lobby:not([data-view="front"]):not([data-view="menu"]) #lobby-settings-btn,
 .lobby:not([data-view="front"]):not([data-view="menu"]) .lobby-cfg-btn {
   display: none;
+}
+
+/* En la barra superior el botón de configuración hereda el estilo pero va en el flujo del renglón */
+.topbar-cfg-btn {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: auto;
+}
+body .topbar-actions .topbar-cfg-btn {
+  display: inline-flex;
 }
 
 /* En la portada el historial no tiene combate que mostrar */
@@ -4345,57 +5313,75 @@ body {
   to   { opacity: 1; translate: 0 0; }
 }
 
-/* Cruz de cierre Origins en la esquina superior */
+/* Y la salida, que antes no existía: la pantalla se escondía de golpe. Lo que se va es
+   una copia quieta (`ghostOut` en `lobby.js`) que se apaga encima de lo que entra, sin
+   moverse ni cambiar de tamaño. Adentro de la copia no se repite ninguna entrada. */
+[data-leaving="true"] {
+  pointer-events: none;
+  animation: lobby-out .22s ease-out forwards !important;
+}
+[data-leaving="true"] * { animation: none !important; transition: none !important; }
+/* La copia va colgada de la portada y clavada donde estaba (ver `ghostOut`): por encima
+   de "Tu Axie", la fila de ayudas y las pantallas completas, que vuelven en el acto. */
+.lobby > [data-leaving="true"] { z-index: 5; }
+@keyframes lobby-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* Lo que vuelve a aparecer al salir de una pantalla completa (el logo y los que se
+   pasean se guardan con la elección y la Aventura) entra apagándose, no de golpe. */
+.lobby-front { animation: lobby-menu-in .22s cubic-bezier(.2, .9, .3, 1) backwards; }
+.lobby-head, .lobby-cast, .lobby-aside, .lobby-foot { animation: lobby-in .3s ease backwards; }
+
+/* Cruz de cierre Origins en la esquina superior. Es la única salida del menú: el
+   "Volver" de abajo hacía lo mismo y se fue. */
 .lobby-menu-x {
-  position: absolute; z-index: 3; top: -14px; right: -10px;
-  width: 44px; height: 44px; padding: 0; border: 0; border-radius: 13px;
+  position: absolute; z-index: 3; top: -12px; right: -10px;
+  width: 36px; height: 36px; padding: 0; border: 0; border-radius: 10px;
   display: grid; place-items: center; cursor: pointer;
   background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
-  box-shadow: 0 5px 0 -1px var(--madera-sombra), 0 14px 22px -12px rgba(0, 0, 0, .9);
+  box-shadow: 0 3px 0 -1px var(--madera-sombra), 0 8px 14px -8px rgba(0, 0, 0, .85);
   transition: filter .15s ease, transform .08s ease, box-shadow .08s ease;
 }
 .lobby-menu-x::before {
-  content: ""; width: 22px; height: 22px;
+  content: ""; width: 16px; height: 16px;
   background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/icon_close.png") center / contain no-repeat;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5));
 }
 .lobby-menu-x:hover { filter: brightness(1.14) saturate(1.05); }
 .lobby-menu-x:active {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 -1px var(--madera-sombra), 0 6px 12px -10px rgba(0, 0, 0, .9);
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 -1px var(--madera-sombra), 0 4px 8px -6px rgba(0, 0, 0, .9);
 }
 
 .lobby-menu .o-banner,
 .lobby-menu-label {
   display: block; align-self: center; margin: -38px auto 6px;
-  width: fit-content; min-width: min(290px, 84%); padding: 12px 32px 14px;
-  background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/name_panel.png") center / 100% 100% no-repeat;
+  width: fit-content; min-width: min(260px, 70%); padding: 11px 30px 13px;
   font: 400 clamp(18px, 2.4vw, 24px)/1 var(--title);
   text-align: center; text-transform: uppercase; letter-spacing: .05em;
   color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .5);
   filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55));
 }
-.lobby-modes { display: flex; flex-direction: column; gap: 8px; }
-.lobby-mode { display: flex; flex-direction: column; gap: 6px; }
+.lobby-modes { display: flex; flex-direction: column; gap: 10px; }
+.lobby-mode { display: flex; flex-direction: column; }
 
-/* Cada opción es un cartel de madera del kit con aro decorativo, textos jerárquicos
-   y chevron interactivo. */
+/* Cada opción es un cartel de madera del kit: aro con el icono, nombre, una bajada y
+   el chevron. Al pasar por encima se aclara y sube un pelo; nada de aro dorado, que se
+   lee como "ya está elegido". */
 .lobby-pick {
-  position: relative;
+  position: relative; z-index: 1;
   display: flex; flex-direction: row; align-items: center; gap: 12px;
-  width: 100%; padding: 10px 14px; text-align: left;
+  width: 100%; padding: 11px 14px; text-align: left;
   border-radius: 14px;
-  border: 2px solid rgba(140, 88, 50, .45);
+  border: 0;
   background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
   color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
   box-shadow: 0 3px 0 -1px var(--madera-sombra), 0 8px 16px -8px rgba(0, 0, 0, .75);
   font: inherit; cursor: pointer;
-  transition: filter .15s ease, transform .1s ease, border-color .15s ease, box-shadow .15s ease;
+  transition: filter .15s ease, transform .1s ease, box-shadow .15s ease;
 }
 .lobby-pick:hover:not(:disabled) {
-  filter: brightness(1.12) saturate(1.05);
-  border-color: #ffd15c;
-  box-shadow: 0 0 0 1px #ffd15c, 0 4px 0 -1px var(--madera-sombra), 0 12px 20px -8px rgba(0, 0, 0, .85);
+  filter: brightness(1.1) saturate(1.05);
+  transform: translateY(-1px);
 }
 .lobby-pick:active:not(:disabled) {
   transform: translateY(2px);
@@ -4421,51 +5407,22 @@ body {
 
 .mode-content {
   flex: 1; min-width: 0;
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 3px;
 }
-.mode-header {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-}
-.mode-header b {
-  font-family: var(--title); font-size: 16px; font-weight: 400;
-  line-height: 1.15; letter-spacing: .02em;
+.mode-content b {
+  font-family: var(--title); font-size: 17px; font-weight: 400;
+  line-height: 1.1; letter-spacing: .02em;
   color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
 }
 .mode-desc {
   font-family: var(--display); font-size: 12px; line-height: 1.3;
-  color: rgba(255, 244, 235, .88); text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
-}
-
-/* Insignias de cada modo */
-.mode-tag {
-  display: inline-block;
-  font-family: var(--display); font-size: 10px; font-weight: 700; line-height: 1;
-  letter-spacing: .06em; text-transform: uppercase;
-  padding: 3px 7px; border-radius: 10px;
-  background: rgba(0, 0, 0, .35);
-  border: 1px solid rgba(255, 255, 255, .25);
-  color: #fff;
-}
-.mode-tag--adv {
-  background: rgba(30, 80, 40, .65);
-  border-color: rgba(144, 238, 144, .45);
-  color: #a8f5a8;
-}
-.mode-tag--cpu {
-  background: rgba(140, 50, 16, .65);
-  border-color: rgba(255, 170, 100, .45);
-  color: #ffd2a6;
-}
-.mode-tag--net {
-  background: rgba(0, 70, 110, .65);
-  border-color: rgba(75, 184, 240, .45);
-  color: #8adeff;
+  color: rgba(255, 244, 235, .85); text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
 }
 
 .mode-arrow {
   flex: 0 0 auto;
-  font-family: var(--title); font-size: 20px; line-height: 1;
-  color: #ffd15c; text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+  font-family: var(--title); font-size: 22px; line-height: 1;
+  color: rgba(255, 244, 235, .7); text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
   transition: transform .15s ease, color .15s ease;
 }
 .lobby-pick:hover:not(:disabled) .mode-arrow {
@@ -4473,81 +5430,44 @@ body {
   color: #fff;
 }
 
-/* La botonera de dificultad integrada */
+/* La dificultad cuelga debajo del cartel de la CPU, como una bandeja hundida que sale
+   de abajo de la madera: se lee como parte de ese modo y no como una opción más. */
 .difficulty-shelf {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 5px 10px;
-  margin-top: -2px;
-  background: rgba(58, 32, 14, .32);
-  border: 1px solid rgba(94, 58, 34, .4);
-  border-radius: 12px;
-  box-shadow: inset 0 2px 6px rgba(45, 24, 10, .45);
-}
-.difficulty-shelf .select {
-  padding-left: 2px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: -10px 10px 0; padding: 16px 8px 6px 14px;
+  background: rgba(58, 32, 14, .22);
+  border-radius: 0 0 12px 12px;
+  box-shadow: inset 0 2px 6px rgba(45, 24, 10, .35);
 }
 .difficulty-title {
-  font-size: 11px; font-weight: 700; letter-spacing: .08em;
-  text-transform: uppercase; color: var(--tinta);
+  font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--tinta-dim);
 }
+/* Un solo control segmentado: los tres tramos del mismo ancho y el elegido relleno de
+   madera, sin aro. */
 .diff-pills {
-  display: flex; gap: 4px; align-items: center;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px;
+  padding: 2px; border-radius: 9px;
+  background: rgba(43, 24, 9, .18);
 }
 .diff-pill {
-  border: 1.5px solid rgba(94, 58, 34, .55);
-  border-radius: 8px;
-  padding: 4px 10px;
-  font-family: var(--display); font-size: 12px; font-weight: 700;
-  background: rgba(43, 24, 9, .4);
-  color: rgba(255, 255, 255, .75);
+  min-width: 64px; padding: 5px 10px;
+  border: 0; border-radius: 7px;
+  font-family: var(--btn); font-size: 13px; letter-spacing: .02em;
+  background: transparent;
+  color: var(--tinta-dim);
   cursor: pointer;
-  transition: background .12s ease, color .12s ease, border-color .12s ease, transform .08s ease;
+  transition: background .12s ease, color .12s ease;
 }
-.diff-pill:hover {
-  background: rgba(43, 24, 9, .7);
-  color: #fff;
-  border-color: #ffd15c;
+.diff-pill:hover:not(.is-active) {
+  background: rgba(43, 24, 9, .14);
+  color: var(--tinta);
 }
 .diff-pill.is-active {
-  background: #8e4b33;
+  background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
   color: #fff;
-  border-color: #ffd15c;
-  box-shadow: 0 0 0 1px #ffd15c, inset 0 1px 0 rgba(255, 255, 255, .25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
   text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
-}
-.diff-pill:active {
-  transform: translateY(1px);
-}
-
-.lobby-menu-foot {
-  display: flex; justify-content: center;
-  margin-top: 4px;
-}
-.lobby-back-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 18px;
-  border-radius: 12px;
-  border: 1.5px solid rgba(94, 58, 34, .4);
-  background: rgba(58, 32, 14, .2);
-  color: var(--tinta);
-  font-family: var(--display); font-size: 13px; font-weight: 700;
-  box-shadow: inset 0 1px 4px rgba(45, 24, 10, .2);
-  cursor: pointer;
-  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .08s ease;
-}
-.lobby-back-btn:hover:not(:disabled) {
-  background: rgba(58, 32, 14, .38);
-  color: #1a0f05;
-  border-color: var(--madera-borde);
-}
-.lobby-back-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-#lobby-back {
-  color: var(--tinta-dim);
-}
-#lobby-back:hover:not(:disabled) {
-  color: var(--tinta);
 }
 
 /* ---------- la elección de Axie ---------- */
@@ -4588,7 +5508,7 @@ body {
   padding: 8px 18px; border-radius: 12px; border: 0;
   background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
   color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
-  font-family: inherit; font-size: 14px; font-weight: 700;
+  font-family: var(--btn); font-size: 15px; letter-spacing: .02em;
   box-shadow: 0 4px 0 -1px var(--madera-sombra), 0 10px 18px -8px rgba(0, 0, 0, .8);
   cursor: pointer;
   transition: filter .15s ease, transform .08s ease, box-shadow .08s ease;
@@ -4653,7 +5573,7 @@ body {
   border: 1px solid color-mix(in srgb, var(--c) 60%, transparent);
 }
 .choose-class .crest { width: 20px; height: 20px; }
-.choose-of { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+.choose-of { font-family: var(--num); font-size: 13px; color: var(--ink-dim); }
 
 /* ---- el mazo inicial ---- */
 
@@ -4733,7 +5653,7 @@ body {
   pointer-events: none;
 }
 .boost-btn .crest { width: 15px; height: 15px; }
-.boost-sign { font: 700 14px/1 var(--mono); color: #cdb08c; }
+.boost-sign { font: 400 15px/1 var(--num); color: #cdb08c; }
 
 /* Puesta. El aro es del color del símbolo que se sumó, así que la carta mejorada se
    reconoce de lejos y sin leer nada. */
@@ -4754,7 +5674,7 @@ body {
   color: var(--tinta);
 }
 .tally .crest { width: 19px; height: 19px; }
-.tally b { font-family: var(--mono); font-size: 13px; color: var(--tinta); }
+.tally b { font-family: var(--num); font-size: 14px; font-weight: 400; color: var(--tinta); }
 
 /* ---- el botón ---- */
 
@@ -4828,10 +5748,6 @@ body {
      media pantalla. */
   .lobby[data-view="menu"] .lobby-panel { left: clamp(18px, 4vw, 44px); }
   .lobby-menu { width: auto; }
-  /* En media pantalla "Elegí tu Axie" no entra en un renglón: que corte, centrado. Y
-     que ocupe su mitad entera, como el de jugar la suya: si uno llena su lado y el
-     otro se encoge hasta el texto, el renglón de abajo queda desparejo. */
-  .lobby-play--alt { padding: 12px 14px; width: 100%; }
   .loadout-cta { text-align: center; }
   /* Las dos puertas ocupan las dos mitades del renglón de abajo, así que el medio ya no
      está libre: el pie se queda con el renglón de abajo de todo y las dos suben lo que
@@ -4841,33 +5757,16 @@ body {
 }
 
 /* La portada en vertical: las dos puertas, el mismo cajón.
-
-   En una ventana parada los dos botones se reparten el renglón de abajo, y ahí la
-   diferencia de tamaño que en apaisado ordena la portada —jugar grita, tu Axie
-   habla— dejaba de ordenar nada: dos cosas apoyadas en el mismo renglón y a la misma
-   altura se leen como un par, y un par desparejo se lee como un par mal armado.
-
-   Igualar la letra no alcanzaba: con la misma letra "Elegí tu Axie" son tres palabras
-   y "Jugar" es una, así que el cajón de la izquierda salía del doble de largo. Lo que
-   se iguala es **el cajón** —cada uno su mitad del renglón, los dos del mismo alto— y
-   lo que se acomoda adentro es la letra: el verde en grande, porque es lo que hay que
-   apretar, y el azul un punto más chico, que es todo lo que necesita para entrar en un
-   renglón sin empujar su lado. El que manda sigue siendo el verde; ahora lo dicen el
-   color y la letra, no el tamaño de la chapa.
-
-   Y el par sube del piso: apoyados contra el borde de abajo quedaban colgando de la
-   ventana. Levantados, el renglón de abajo tiene aire por debajo y "Cómo se juega"
-   —que no se mueve— queda en su propio renglón, más abajo y en el medio. */
+   Los dos botones comparten el mismo tamaño exacto de cajón y de tipografía,
+   con la insignia del Axie seleccionado montada arriba del botón. */
 @media (orientation: portrait) {
-  .lobby-play, .lobby-play--alt {
-    font-size: clamp(20px, 5.4vw, 30px);
+  #lobby-play, #lobby-loadout {
+    font-size: clamp(22px, 5.6vw, 32px);
     padding: 14px 10px;
-    min-height: clamp(92px, 22vw, 116px);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 7px;
+    min-height: clamp(68px, 8.5vh, 78px);
+    display: inline-flex;
+    align-items: center; justify-content: center;
   }
-  /* La letra del azul, un punto más chica: es la que tiene que entrar en un renglón. */
-  .lobby-play--alt { font-size: clamp(15px, 3.4vw, 22px); }
   .loadout-cta { text-align: center; }
   /* Un escalón más arriba que el pie, que se queda donde estaba. */
   .lobby[data-view="front"] .lobby-panel,
@@ -4972,7 +5871,7 @@ body:has(#tutorial-overlay) .topbar,
   position: absolute;
   left: 0; top: 0;
   z-index: 2;
-  width: clamp(44px, 6vmin, 60px);
+  width: clamp(30px, 4vmin, 40px);
   aspect-ratio: 1;
   filter: drop-shadow(0 0 1.5px rgba(70, 30, 0, .9)) drop-shadow(0 5px 6px rgba(20, 10, 4, .6));
   animation: tuto-pop .22s ease-out both;
@@ -4990,7 +5889,7 @@ body:has(#tutorial-overlay) .topbar,
   animation: tuto-bob 1s ease-in-out infinite;
 }
 @keyframes tuto-bob {
-  0%, 100% { transform: translateX(9px); }
+  0%, 100% { transform: translateX(6px); }
   50%      { transform: translateX(0); }
 }
 
@@ -5432,6 +6331,9 @@ body:has(#tutorial-overlay) .topbar,
    modal el foco cae en la cruz, y un aro celeste sobre un botón marrón se lee como un
    error. Dorado y más grueso, para que se vea sobre la veta. */
 .o-panel :focus-visible { outline: 3px solid #ffd15c; outline-offset: 2px; }
+/* En el panel de configuración el foco cae en la cruz al abrir, y un aro dorado parece
+   una selección: acá el anillo es de tinta y fino. */
+.hud-menu.o-panel :focus-visible { outline: 2px solid rgba(43, 24, 9, .5); outline-offset: 1px; }
 
 /* El cartel de un modal con cruz deja libre esa esquina y le da aire abajo: la cruz
    cuelga un poco más abajo que el cartel, y sin el margen tapaba el primer renglón.

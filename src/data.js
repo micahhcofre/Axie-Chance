@@ -45,7 +45,7 @@ export function crest(symbol, size = '') {
  * los lee en cada uso, así que un cambio acá vale desde la partida siguiente.
  *
  *   strengthStep   cuánto suma cada carta de fuerza, para siempre
- *   poisonShare    divisor del golpe con que se envenena (2 = la mitad)
+ *   poisonDose     veneno que pone cada Poison Vial al plantarse, sin importar el golpe
  *   poisonHalve    en cuánto se parte el veneno al finalizar el turno, después de morder
  *   poisonFloor    con esto o menos encima, el veneno se va: la cola de un veneno
  *                  partiéndose al medio es infinita y no decide nada
@@ -53,7 +53,7 @@ export function crest(symbol, size = '') {
  *   snailShare     en cuánto se parte el ataque del debilitado (2 = la mitad).
  *                  Redondea para arriba: un caracol nunca deja un ataque en cero
  *   snailAttacks   cuántos ataques debilita cada caracol. Se suman
- *   eggShare       divisor del golpe con que se arma el escudo
+ *   eggShare       divisor del golpe con que se arma el escudo (3 = un tercio)
  *   eggBreak       daño fijo que le vuelve al que rompió el huevo (acumulable por cada huevo). 0 lo apaga: el
  *                  huevo solo tapa
  *   octopusPowers  si la carta que paga el pulpo puede llevar poder
@@ -76,29 +76,33 @@ export function crest(symbol, size = '') {
  */
 export const TUNING = {
   strengthStep: 1,
-  poisonShare: 2,
+  poisonDose: 6,
   poisonHalve: 2,
   poisonFloor: 2,
   poisonStacks: true,
   snailShare: 2,
   snailAttacks: 1,
-  eggShare: 2,
+  eggShare: 3,
   eggBreak: 8,
   octopusPowers: true,
   octopusStacks: true,
   octopusOnStand: true,
   powerBias: 1,
-  brutalStep: 2,
+  brutalStep: 3,
   featherDamage: 5,
   leafHeal: 4,
   leafGain: 2,
   leafMax: 5,
-  leechDrain: 6,
+  leechDrain: 5,
   leechBonusThreshold: 4,
   leechBonusDrain: 12,
   steelskinBaseCap: 12,
   steelskinStep: 2,
   steelskinFloor: 6,
+  // Escudo que suma cada Gecko Mask, apilado con el del huevo.
+  steelskinShield: 2,
+  // Daño de más, pasado el cero, que se lleva puesta la última chance (ver `lastChance`).
+  overkill: 30,
 };
 
 // Cada `note` es la definición entera del poder: cuándo salta y qué hace. "Al pegar"
@@ -106,70 +110,85 @@ export const TUNING = {
 // otra forma lo dicen. Es el texto que ve el jugador en la aventura y en el `title`
 // de cada ícono, así que los números salen de `TUNING` y no se escriben a mano.
 const LEAF_NOTE = tr(
-  'al pegar, +{gain} hojas (hasta {max}); al final de cada turno tuyo, cada hoja te cura {heal} y se gasta 1',
+  'al pegar, +{gain} hojas (hasta {max}); al inicio de cada turno tuyo, cada hoja te cura {heal} y se gasta 1',
   { gain: TUNING.leafGain, max: TUNING.leafMax, heal: TUNING.leafHeal },
 );
+// Y cada `tip` es la misma definición en un renglón, para el cartel del centro al
+// marcar una carta: lo que hace y nada más.
+const LEAF_TIP = tr('+{gain} hojas: cada una te cura {heal} por turno', { gain: TUNING.leafGain, heal: TUNING.leafHeal });
 
 // Todos los símbolos especiales se obtienen EXCLUSIVAMENTE de la carpeta amuletos
 // (`simbolos especiales/amuletos/`).
 export const POWERS = {
   egg: {
     id: 'egg', symbol: 'bird', name: 'Secret Egg', amuleto: 'ecard_bird_5003.png',
-    note: tr('al pegar, ganás un escudo de la mitad del golpe; si el rival lo rompe, recibe {dmg} de daño', { dmg: TUNING.eggBreak }),
+    note: tr('al pegar, sumás un escudo de un tercio del golpe (mínimo 1); si el rival lo rompe, recibe {dmg} de daño por cada huevo', { dmg: TUNING.eggBreak }),
+    tip: tr('Escudo de un tercio del golpe (mínimo 1); al romperse devuelve {dmg}', { dmg: TUNING.eggBreak }),
   },
   feather: {
     id: 'feather', symbol: 'bird', name: 'Feather Earring', amuleto: 'ecard_bird_momo_1.png',
     note: tr('apenas la robás, {dmg} de daño directo al rival, aunque después te cortes', { dmg: TUNING.featherDamage }),
+    tip: tr('{dmg} de daño directo apenas la robás', { dmg: TUNING.featherDamage }),
   },
   octopus: {
     id: 'octopus', symbol: 'aquatic', name: 'Sticky Octopus', amuleto: 'ecard_aquatic_5004.png',
     note: tr('al plantarte (aunque pegues 0), elegís 1 carta extra del mercado para tu mazo'),
+    tip: tr('Una carta de más del centro'),
   },
   pot: {
     id: 'pot', symbol: 'plant', name: 'Leafy Pot', amuleto: 'ecard_plant_4003.png',
     note: tr('al pegar, te curás lo mismo que pegaste'),
+    tip: tr('Te curás lo que pegás'),
   },
   poison: {
     id: 'poison', symbol: 'reptile', name: 'Poison Vial', amuleto: 'ecard_reptile_venoki_1.png',
-    note: tr('al pegar, envenenás al rival con la mitad del golpe; al final de cada turno suyo le saca eso ' +
-      'y se reduce a la mitad'),
+    note: tr('al plantarte, le ponés {dose} de veneno al rival (se suma); al final de cada turno suyo le saca eso sin importar su escudo, y se reduce a la mitad', {
+      dose: TUNING.poisonDose,
+    }),
+    tip: tr('{dose} de veneno que atraviesa el escudo', { dose: TUNING.poisonDose }),
   },
   snail: {
     id: 'snail', symbol: 'bug', name: 'Lazy Snail', amuleto: 'ecard_bug_5005.png',
     note: tr('al pegar, el próximo ataque del rival hace la mitad de daño'),
+    tip: tr('El próximo ataque rival pega la mitad'),
   },
   strength: {
     id: 'strength', symbol: 'beast', name: 'Charm of Power', amuleto: 'ecard_beast_4001.png',
-    note: tr('al pegar, +{step} de daño en ese ataque y en todos los que siguen', { step: TUNING.strengthStep }),
+    note: tr('al aparecer, +{step} permanente de daño', { step: TUNING.strengthStep }),
+    tip: tr('+{step} de daño para siempre', { step: TUNING.strengthStep }),
   },
   brutal: {
     id: 'brutal', symbol: 'beast', name: 'Energy Drink M', amuleto: 'ecard_beast_5003.png',
     note: tr('al pegar, +{step} de daño por cada símbolo de tu racha más larga', { step: TUNING.brutalStep }),
+    tip: tr('+{step} de daño por símbolo de tu mejor racha', { step: TUNING.brutalStep }),
   },
   bubble: {
     id: 'bubble', symbol: 'aquatic', name: 'Bubble Paste', amuleto: 'ecard_aquatic_4003.png',
     note: tr('al plantarte, la carta que elijas del mercado abre tu próxima ronda'),
+    tip: tr('Tu carta del centro abre la próxima ronda'),
   },
   freegame: {
     id: 'freegame', symbol: null, name: 'Rocket Stamp', amuleto: 'ecard_neutral_5001.png',
     note: tr('si comparte un símbolo con tu cadena, tu próximo robo se monta sobre una carta de la mesa ' +
       'y le suma sus símbolos'),
+    tip: tr('Tu próximo robo se apila sobre una carta'),
   },
-  leaf: { id: 'leaf', symbol: 'plant', name: 'Spring Leaf', amuleto: 'ecard_plant_ena_1.png', note: LEAF_NOTE },
-  // Alias viejo de la hoja: mismo poder con otro id.
-  oak: { id: 'oak', symbol: 'plant', name: 'Spring Leaf', amuleto: 'ecard_plant_ena_1.png', note: LEAF_NOTE },
+  leaf: { id: 'leaf', symbol: 'plant', name: 'Spring Leaf', amuleto: 'ecard_plant_ena_1.png', note: LEAF_NOTE, tip: LEAF_TIP },
   leech: {
     id: 'leech', symbol: 'bug', name: 'Mantis Dagger', amuleto: 'ecard_mantis_dagger.png',
-    note: tr('al pegar, le sacás {drain} de vida al rival y te los curás ' +
-      '({bonus} con {thresh} o más columnas en mesa)', {
+    note: tr('en un ataque exitoso, robás {drain} de vida por cada Mantis Dagger en tu cadena', {
       drain: TUNING.leechDrain,
-      bonus: TUNING.leechBonusDrain,
-      thresh: TUNING.leechBonusThreshold,
     }),
+    tip: tr('Robás {drain} de vida al pegar', { drain: TUNING.leechDrain }),
   },
   steelskin: {
     id: 'steelskin', symbol: 'reptile', name: 'Gecko Mask', amuleto: 'ecard_reptile_4003.png',
-    note: tr('al pegar, el próximo golpe del rival te hace {cap} de daño como máximo', { cap: TUNING.steelskinBaseCap }),
+    note: tr('al pegar, sumás {shield} de escudo y el próximo golpe del rival te saca {cap} de vida como máximo', {
+      shield: TUNING.steelskinShield, cap: TUNING.steelskinBaseCap,
+    }),
+    tip: tr('+{shield} de escudo; el próximo golpe rival te saca {cap} de vida como máximo', {
+      shield: TUNING.steelskinShield, cap: TUNING.steelskinBaseCap,
+    }),
   },
 };
 

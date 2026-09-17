@@ -1,7 +1,7 @@
 import { buildPool, shuffle, makeRng, cardLabel, crest, powerIcon, POWERS, TUNING, chooseActivePowers, makeCard } from './data.js';
 import { AXIES, AXIE_IDS, axie, deckFor } from './axies.js';
 import { emptyChain, playCard, scoreChain, stackOnCard } from './rules.js';
-import { decideDraw, planDraft, pickBest, pickBonus } from './ai.js';
+import { decideDraw, planDraft, pickBest, pickBonus, sloppyDraft, renewsMarket } from './ai.js';
 import { getAdventureLevel } from './adventure.js';
 import { tr } from './i18n.js';
 
@@ -15,7 +15,7 @@ export const PLAYERS = ['p1', 'p2'];
  * Vida con la que arranca cada Axie. Los puntos de una cadena son el daño que le
  * hace al rival, así que `totals[p]` es "daño repartido por p" y la vida que le
  * queda a alguien es TARGET menos el daño del otro (ver `hpOf`). Cuando uno llega
- * a cero la partida termina, pero el rival igual cierra el intercambio.
+ * a cero le queda un golpe más, salvo overkill (ver `lastChance`).
  */
 export const TARGET = 100;
 /** Cartas boca arriba en el centro. Se repone en el acto al llevarse una. */
@@ -26,7 +26,7 @@ export const MARKET_SIZE = 6;
  * se hubiera cortado la cadena, y el reparto se cierra sin llevarse nada más—, así
  * nadie deja la mesa esperando. La máquina no lleva reloj: no tarda.
  */
-export const CLOCK = { turn: 30000, draft: 10000 };
+export const CLOCK = { turn: 30000, draft: 20000 };
 
 /**
  * El compás que hay entre soltar el ataque y el golpe: la cadena se recorre sola,
@@ -41,9 +41,43 @@ export const CLOCK = { turn: 30000, draft: 10000 };
 export const aimMs = (cards) => (cards > 0 ? Math.min(1500, 380 + 210 * (cards - 1)) : 0);
 
 /**
+ * Lo que tarda en verse cada poder que tiene animación propia, en ms, según el momento:
+ * `apply` es cuando entra en juego al plantarse, `stand` cuando actúa antes del golpe
+ * (la bebida, que se vuelca sobre el daño al plantarse) y `tick` cuando vuelve a actuar al
+ * finalizar un turno (las hojas, al empezarlo). La pantalla los muestra de a uno y completos, después del golpe
+ * (ver `power-fx.js`), y el turno espera a que termine el último antes de seguir.
+ *
+ * Como `aimMs`, es puro tiempo: el motor no sabe qué se dibuja, pero es él quien
+ * decide cuándo se abre el centro. Un poder que no está acá no agrega espera.
+ */
+export const POWER_BEAT = {
+  strength: { draw: 1300 },
+  brutal: { stand: 1500 },
+  octopus: { apply: 1500, pick: 1100 },
+  bubble: { apply: 1700, trap: 1300, open: 1300 },
+  egg: { apply: 1500 },
+  feather: { draw: 2000 },
+  pot: { apply: 1600 },
+  leaf: { apply: 1600, tick: 1500 },
+  snail: { apply: 1900, slow: 900 },
+  leech: { apply: 2100 },
+  poison: { apply: 1900, tick: 1900 },
+  steelskin: { apply: 1700, block: 1000 },
+};
+
+/** Del golpe al primer poder: lo que tarda en conectar el golpe (hasta 700) y un respiro. */
+export const POWER_LEAD = 1000;
+
+/** Lo que pide un efecto de poder (`{ power, moment }`) antes de dejar pasar al siguiente. */
+export const powerBeat = (fx) => POWER_BEAT[fx.power]?.[fx.moment] ?? 0;
+
+/**
  * Lo que le queda puesto a un jugador de una ronda a la otra:
- *   `egg`      vida del escudo; aguanta golpes hasta gastarse
- *   `eggBreak` daño acumulado que devuelve al romperse el escudo
+ *   `egg`      vida del escudo; aguanta golpes hasta gastarse. Se llama así por el
+ *              huevo, pero es el escudo entero: lo suman el huevo y la máscara
+ *   `eggBreak` daño acumulado que devuelve al romperse el escudo; solo lo cargan
+ *              los huevos
+ *   `steelskin` tope del daño que llega a la vida en el próximo golpe (máscara)
  *   `poison`   cuánto muerde al finalizar el turno, partiéndose al medio después
  *   `weak`     cuántos de sus próximos ataques salen partidos al medio. Los
  *              caracoles se suman: dos caracoles, los dos próximos ataques
@@ -120,7 +154,7 @@ export const isBotSeat = (state, player) => state.mode !== 'net' && player === '
 export const hpOf = (state, player) =>
   Math.max(TARGET - state.totals[other(player)] + state.healed[player], 0);
 
-/** Bono de daño por Garra Brutal: +2 de daño por cada símbolo de la cadena más larga. Se activa siempre. */
+/** Bono de daño de la Energy Drink: `TUNING.brutalStep` por cada símbolo de la cadena más larga, por carta. Se activa siempre. */
 export function brutalBonusOf(chain) {
   if (!chain || chain.busted) return 0;
   const claws = unstack(chain.cards).filter((c) => c.power === 'brutal').length;
@@ -144,14 +178,44 @@ export function brutalBonusOf(chain) {
  *
  * Vive acá y no en la UI porque es la cuenta con la que se reparte el daño: el
  * número grande de la pantalla tiene que ser exactamente el que se va a aplicar.
+ *
+ * Con `brutal: false` es el mismo golpe sin la bebida: lo que muestra la pantalla
+ * mientras la bebida todavía no se volcó (ver `poured`).
  */
-export function swingOf(state, player) {
+export function swingOf(state, player, { brutal = true } = {}) {
   const chain = state.chains[player];
   const points = chain.busted ? 0 : scoreChain(chain).total;
   if (points <= 0) return 0;
   const st = state.status[player];
-  const hit = points + st.strength + brutalBonusOf(chain);
+  const hit = points + st.strength + (brutal ? brutalBonusOf(chain) : 0);
   return st.weak > 0 ? Math.ceil(hit / TUNING.snailShare) : hit;
+}
+
+/**
+ * La mesa vista desde el asiento de `player`, con lo que la CPU "duro" necesita para
+ * medir un ataque contra la partida y no solo contra sus puntos (ver `decideDraw`):
+ * su fuerza y su caracol, las dos vidas, lo que protege a cada uno y si este es el
+ * golpe de su última chance.
+ */
+export function attackViewOf(state, player) {
+  const foe = other(player);
+  const mine = state.status[player];
+  const theirs = state.status[foe];
+  return {
+    strength: mine.strength,
+    weak: mine.weak > 0,
+    myHp: hpOf(state, player),
+    myShield: mine.egg,
+    myCap: mine.steelskin,
+    myPoison: mine.poison,
+    foeHp: hpOf(state, foe),
+    foeShield: theirs.egg,
+    foeThorns: theirs.eggBreak || 0,
+    foeCap: theirs.steelskin,
+    foeStrength: theirs.strength,
+    foeWeak: theirs.weak > 0,
+    lastChance: lastChance(state) === player,
+  };
 }
 
 /**
@@ -196,13 +260,30 @@ export function matchResult(state) {
 }
 
 /**
- * El que está jugando su última chance: lo dejaron sin vida y todavía no atacó en
- * este intercambio. Le queda un turno normal —roba, encadena, se planta— y si en ese
- * golpe deja sin vida al otro también, la partida termina empatada.
+ * Daño que recibió `player` de más, pasado el cero: lo que el golpe que lo dejó sin
+ * vida —y lo que le siguió cayendo después— se pasó de la vida que tenía.
+ */
+export const overkillOf = (state, player) =>
+  Math.max(state.totals[other(player)] - state.healed[player] - TARGET, 0);
+
+/**
+ * El que está jugando su última chance, o esperándola: lo dejaron sin vida y todavía
+ * no soltó el golpe que le queda. Le toca un turno normal —roba, encadena, se planta—
+ * y si en ese golpe deja sin vida al otro también, la partida termina empatada.
  *
- * Solo le puede tocar al que juega segundo, y por eso importa quién abrió: al que
- * abre, cuando lo matan, ya le pasó el turno. Como el orden es fijo (ver
- * `startRound`), el que cobra la última chance es siempre el segundo asiento.
+ * Le toca a cualquiera de los dos. Al que cierra, si lo matan antes de atacar, la
+ * juega en el mismo intercambio; al que abre —que cuando cae ya tiró su golpe— se la
+ * juega abriendo la ronda siguiente, y la partida se cierra con ese golpe sin que el
+ * otro vuelva a jugar.
+ *
+ * No hay última chance:
+ * - con overkill: si le pegaron más de `TUNING.overkill` pasado el cero, no se levanta.
+ *   Cuenta todo lo que le cae mientras espera, no solo el golpe que lo tumbó.
+ * - si ya la jugó (`lastChanceUsed`).
+ * - con los dos sin vida: eso ya es el empate.
+ *
+ * En el tutorial el remate está guionado con la última chance del rival: ahí no hay
+ * overkill que la borre.
  *
  * Vive acá y no en la UI porque es una regla y no un adorno: el halo que la marca en
  * pantalla y el número que persigue la máquina (`needsOf`) tienen que salir de la
@@ -210,7 +291,12 @@ export function matchResult(state) {
  */
 export function lastChance(state) {
   if (!state || state.phase === 'matchEnd') return null;
-  return PLAYERS.find((p) => state.roundScores[p] === null && hpOf(state, p) <= 0) ?? null;
+  const down = PLAYERS.filter((p) => hpOf(state, p) <= 0);
+  if (down.length !== 1) return null;
+  const [player] = down;
+  if (state.lastChanceUsed?.[player]) return null;
+  if (!state.tutorial && overkillOf(state, player) > TUNING.overkill) return null;
+  return player;
 }
 
 // ---- las vistas del estado --------------------------------------------------
@@ -321,7 +407,24 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   // cambia y las corrutinas viejas se cortan en vez de escribir sobre el estado nuevo.
   let epoch = 0;
   const listeners = new Set();
-  const emit = () => listeners.forEach((fn) => fn(state));
+  // Si los efectos de poder anotados todavía no salieron en un `emit` (ver `stageFx`).
+  let fxOpen = false;
+  const emit = () => {
+    fxOpen = false;
+    listeners.forEach((fn) => fn(state));
+  };
+
+  /**
+   * Anota un poder que acaba de actuar para que la pantalla lo anime (ver `powerFx`).
+   * Lo que se anota antes del mismo `emit` sale junto y en orden: plantarse pone varios
+   * de una, y en el centro la burbuja puede atrapar la carta en el mismo instante en
+   * que se abre la carta extra del pulpo.
+   */
+  function stageFx(fx) {
+    if (fxOpen && state.powerFx) state.powerFx.fx.push(fx);
+    else state.powerFx = { id: ++state.powerFxId, player: fx.by, fx: [fx] };
+    fxOpen = true;
+  }
 
   /** Espera `ms` y devuelve false si esta corrutina quedó obsoleta. */
   async function tick(ms, era) {
@@ -524,10 +627,17 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // Vida recuperada con la maceta. Va aparte de `totals` porque `totals` es
       // "daño repartido" y se usa para juzgar el intercambio, no para la vida.
       healed: { p1: 0, p2: 0 },
+      // Las marcas de la partida: el ataque más fuerte que soltó cada uno y la cadena más
+      // larga con la que atacó. La partida no las usa; son para la pantalla del final
+      // (ver `result.js`), y se anotan acá porque después del golpe ya no se pueden
+      // reconstruir: la cadena vuelve al mazo.
+      records: { p1: { hit: 0, chain: 0 }, p2: { hit: 0, chain: 0 } },
       // Huevo, veneno, caracol y fuerza: lo que dejan puesto las cartas con poder.
       status: { p1: emptyStatus(), p2: emptyStatus() },
       chains: { p1: emptyChain(), p2: emptyChain() },
       roundScores: { p1: null, p2: null },
+      // Si cada uno ya soltó el golpe de su última chance (ver `lastChance`).
+      lastChanceUsed: { p1: false, p2: false },
       // Quién abre, para toda la partida. Contra la CPU es fijo a propósito (abajo);
       // entre dos personas se sortea.
       order: mode === 'net' && rng() < 0.5 ? ['p2', 'p1'] : ['p1', 'p2'],
@@ -549,6 +659,15 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // recorrerse. La UI compara `id` con el que ya dibujó, igual que con `lastHit`.
       aiming: null,
       aimId: 0,
+      // Los poderes que acaban de actuar y tienen animación propia (ver `POWER_BEAT`):
+      // `{ id, player, fx: [{ power, moment, on, amount }] }`, en el orden en que se
+      // muestran. `on` es el asiento sobre el que cae. Como `lastHit`, la UI compara `id`.
+      powerFx: null,
+      powerFxId: 0,
+      // Si la bebida (Energy Drink) ya se volcó sobre el daño de la cadena de cada uno. La
+      // bebida cuenta en el golpe desde que entra a la cadena, pero se ve recién al
+      // plantarse: hasta entonces el número grande la deja afuera (ver `finishTurn`).
+      poured: { p1: false, p2: false },
       freeGame: { p1: false, p2: false },
       pendingStack: null,
       lastStacked: null,
@@ -606,6 +725,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     state.recycled = { p1: 0, p2: 0 };
     state.returned = { p1: false, p2: false };
     state.chains = { p1: emptyChain(), p2: emptyChain() };
+    state.poured = { p1: false, p2: false };
     state.roundScores = { p1: null, p2: null };
     state.roundWinner = null;
     state.draft = null;
@@ -626,7 +746,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     log(tr('Ronda {round}', { round: state.round }), 'round');
     emit();
     if (!(await tick(350, era))) return;
-    await beginTurn(state.order[0], era);
+    // Con alguien en su última chance la ronda es solo de él: al que abre lo mataron
+    // cerrando el intercambio anterior, y su golpe es lo último de la partida.
+    await beginTurn((!state.tutorial && lastChance(state)) || state.order[0], era);
   }
 
   /**
@@ -715,7 +837,29 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     log(`${powerIcon('feather', 'sm')} ${featherMsg}`, player);
   }
 
+  /** Charm of Power suma fuerza permanente apenas aparece en mesa. */
+  function applyStrength(player, card) {
+    const count = unstack([card]).filter((c) => c.power === 'strength').length;
+    if (count === 0) return;
+    const mine = state.status[player];
+    mine.strength += count * TUNING.strengthStep;
+    stageFx({ power: 'strength', moment: 'draw', by: player, on: player, amount: count * TUNING.strengthStep });
+    const strMsg = voice(player).you
+      ? tr('Vos afilás: +{str} de daño de acá en más.', { str: mine.strength })
+      : tr('{who} afila: +{str} de daño de acá en más.', { who: who(player), str: mine.strength });
+    log(`${powerIcon('strength', 'sm')} ${strMsg}`, player);
+  }
+
   async function beginTurn(player, era) {
+    // Las hojas curan antes de robar: la cura se ve sola, con la mesa quieta, y no
+    // encimada con el golpe y los poderes del final del turno. `turn` sigue vacío
+    // mientras tanto, así que nadie puede robar ni plantarse en el medio.
+    // Sin vida no hay cura: las hojas esperan (ver `heal`).
+    if (state.status[player].leaf > 0 && hpOf(state, player) > 0) {
+      tickLeaf(player);
+      emit();
+      if (!(await tick(Math.max(1000, POWER_BEAT.leaf.tick), era))) return;
+    }
     if (lastChance(state) === player) {
       const lcMsg = voice(player).you
         ? tr('Última chance: a vos no le queda vida, pero sí este golpe. Si deja sin vida {foe}, empatan.', { foe: toWhom(other(player)) })
@@ -749,6 +893,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
             ? tr('Vos abrís con {card} de la burbuja', { card: cardLabel(bubble.card) })
             : tr('{who} abre con {card} de la burbuja', { who: who(player), card: cardLabel(bubble.card) }));
       log(`${powerIcon('bubble', 'sm')} ${bubbleMsg}`, player);
+      stageFx({ power: 'bubble', moment: 'open', by: player, on: player, amount: bubble.count });
     } else {
       card = draw(player);
       const openMsg = voice(player).you
@@ -758,6 +903,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     }
     state.chains[player] = playCard(state.chains[player], card);
     applyFeathers(player, card);
+    applyStrength(player, card);
     armFreeGame(player, card);
     emit();
     if (isBot(player)) {
@@ -832,7 +978,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         // hasta cortarse (ver `BOT_STAND_AT` en `tutorial.js`).
         willStand = chain.cards.length >= (state.tutorialBotStandAt ?? 2);
       } else {
-        willStand = !isFree && !decideDraw(chain, unseenPool(player), { needs, difficulty: state.difficulty });
+        willStand = !isFree && !decideDraw(chain, unseenPool(player), {
+          needs, difficulty: state.difficulty, view: attackViewOf(state, player),
+        });
       }
 
       if (willStand) {
@@ -847,6 +995,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
 
       const card = draw(player);
       applyFeathers(player, card);
+      applyStrength(player, card);
       if (isFree) stackCard(player, pickStackColumn(chain, card), card);
       else if (!(await extend(player, card, 600, era))) return;
     }
@@ -871,6 +1020,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
    * que entrar.
    */
   function heal(player, amount) {
+    // En la última chance no hay cura: sin esto la maceta o la daga levantaban del cero
+    // al que solo tenía que devolver un golpe.
+    if (hpOf(state, player) <= 0) return 0;
     const room = TARGET - hpOf(state, player);
     const got = Math.min(amount, room);
     state.healed[player] += got;
@@ -883,6 +1035,8 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
    * fuerza salen de él—, así que un ataque en cero no deja nada puesto. El pulpo es
    * el único que cobra igual, porque no se mide contra el daño sino contra haberse
    * plantado.
+   *
+   * Cada uno queda anotado para la pantalla (ver `stageFx`).
    */
   function applyPowers(player, swing) {
     const foe = other(player);
@@ -894,6 +1048,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     for (const power of powersPlayed(player)) {
       if (power === 'octopus' && (!TUNING.octopusOnStand || !state.chains[player].busted)) {
         mine.stacked++;
+        stageFx({ power: 'octopus', moment: 'apply', by: player, on: player, amount: mine.stacked });
         const octMsg = mine.stacked === 1
           ? (voice(player).you
               ? tr('Vos vas a elegir una carta extra para tu mazo.')
@@ -904,26 +1059,34 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         log(`${mark('octopus')} ${octMsg}`, kind);
       } else if (power === 'bubble' && !state.chains[player].busted) {
         mine.bubbles = (mine.bubbles || 0) + 1;
+        stageFx({ power: 'bubble', moment: 'apply', by: player, on: player, amount: mine.bubbles });
         const bubMsg = voice(player).you
           ? tr('Vos atrapás la apertura en una burbuja: la carta que elijas del centro abrirá tu próxima ronda.')
           : tr('{who} atrapa la apertura en una burbuja: la carta que elijas del centro abrirá tu próxima ronda.', { who: who(player) });
         log(`${mark('bubble')} ${bubMsg}`, kind);
       } else if (power === 'freegame') {
         // Free Game actúa al robar/apilar; no tiene efecto de ataque al cerrar el turno.
-      } else if (swing <= 0) {
-        // Sin daño no hay poder. Ninguno: un ataque que no salió no afila, no
-        // envenena, no debilita, no cura y no pone huevo. La fuerza era la excepción
-        // —no sale del golpe, decía— y ese era justo el problema: cobraba igual con
-        // la cadena rota, así que la carta que menos te costaba jugar era la que
-        // pagaba sola. El pulpo sigue afuera de esta regla porque no se mide contra
-        // el daño sino contra plantarse, que es una decisión y no un resultado.
-        log(`${mark(power)} ${tr('{name} sin efecto: el ataque hizo 0.', { name: tr(POWERS[power].name) })}`, 'muted');
+      } else if (power === 'feather') {
+        // La pluma ya pegó directo al salir del mazo.
       } else if (power === 'strength') {
-        mine.strength += TUNING.strengthStep;
-        const strMsg = voice(player).you
-          ? tr('Vos afilás: +{str} de daño de acá en más.', { str: mine.strength })
-          : tr('{who} afila: +{str} de daño de acá en más.', { who: who(player), str: mine.strength });
-        log(`${mark('strength')} ${strMsg}`, kind);
+        // Charm of Power ya sumó fuerza directo al aparecer en mesa.
+      } else if (power === 'poison' && !state.chains[player].busted) {
+        // El veneno no se mide contra el golpe: cada frasco pone una dosis fija, alcanza
+        // con plantarse. Sumar o quedarse con el mayor es la diferencia entre un veneno
+        // que se acumula con cada frasco y uno que respeta la regla del caracol.
+        const dose = TUNING.poisonDose;
+        theirs.poison = TUNING.poisonStacks ? theirs.poison + dose : Math.max(theirs.poison, dose);
+        stageFx({ power: 'poison', moment: 'apply', by: player, on: foe, amount: dose });
+        const poiMsg = voice(foe).you
+          ? tr('Vos quedás con {poison} de veneno.', { poison: theirs.poison })
+          : tr('{who} queda con {poison} de veneno.', { who: who(foe), poison: theirs.poison });
+        log(`${mark('poison')} ${poiMsg}`, kind);
+      } else if (swing <= 0) {
+        // Sin daño no hay poder. Ninguno: un ataque que no salió no envenena,
+        // no debilita, no cura y no pone huevo.
+        // El pulpo sigue afuera de esta regla porque no se mide contra el daño
+        // sino contra plantarse, que es una decisión y no un resultado.
+        log(`${mark(power)} ${tr('{name} sin efecto: el ataque hizo 0.', { name: tr(POWERS[power].name) })}`, 'muted');
       } else if (power === 'snail') {
         // Los caracoles se suman y no hay nada más que guardar: cuántos ataques, y
         // listo. El golpe con que se lo pusieron ya no entra en la cuenta —era lo que
@@ -931,6 +1094,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         // pegando fuerte—, así que este poder es el único de los seis que se mide
         // contra el daño para salir pero no para cuánto pega.
         theirs.weak += TUNING.snailAttacks;
+        stageFx({ power: 'snail', moment: 'apply', by: player, on: foe, amount: theirs.weak });
         const snailMsg = theirs.weak === 1
           ? (voice(foe).you
               ? tr('Vos quedás debilitado: su próximo ataque pega la mitad.')
@@ -940,31 +1104,32 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
               : tr('{who} queda debilitado: sus próximos {weak} ataques pegan la mitad.', { who: who(foe), weak: theirs.weak }));
         log(`${mark('snail')} ${snailMsg}`, kind);
       } else if (power === 'egg') {
-        mine.egg = Math.floor(swing / TUNING.eggShare);
+        // El escudo se suma al que ya había —otro huevo, la máscara—, y la cáscara
+        // también. Siempre al menos 1: un huevo sin escudo cargaría una cáscara que no
+        // tiene qué romper.
+        const gain = Math.max(1, Math.floor(swing / TUNING.eggShare));
+        mine.egg += gain;
         mine.eggBreak = (mine.eggBreak || 0) + TUNING.eggBreak;
+        stageFx({ power: 'egg', moment: 'apply', by: player, on: player, amount: gain });
         const eggMsg = voice(player).you
           ? tr('Vos quedás con un huevo de {egg}.', { egg: mine.egg })
           : tr('{who} queda con un huevo de {egg}.', { who: who(player), egg: mine.egg });
         log(`${mark('egg')} ${eggMsg}`, kind);
       } else if (power === 'pot') {
         const got = heal(player, swing);
+        stageFx({ power: 'pot', moment: 'apply', by: player, on: player, amount: got });
         const potMsg = got > 0
           ? (voice(player).you
               ? tr('Vos te curás {got} y quedás en {hp}.', { got, hp: hpOf(state, player) })
               : tr('{who} se cura {got} y queda en {hp}.', { who: who(player), got, hp: hpOf(state, player) }))
-          : (voice(player).you
-              ? tr('Vos ya estás entero: la maceta no cura nada.')
-              : tr('{who} ya está entero: la maceta no cura nada.', { who: who(player) }));
+          : hpOf(state, player) <= 0
+            ? (voice(player).you
+                ? tr('Vos no te podés curar en la última chance: la maceta no cura nada.')
+                : tr('{who} no se puede curar en la última chance: la maceta no cura nada.', { who: who(player) }))
+            : (voice(player).you
+                ? tr('Vos ya estás entero: la maceta no cura nada.')
+                : tr('{who} ya está entero: la maceta no cura nada.', { who: who(player) }));
         log(`${mark('pot')} ${potMsg}`, got > 0 ? kind : 'muted');
-      } else if (power === 'poison') {
-        // Sumar o quedarse con el mayor: es la diferencia entre un veneno que se
-        // dispara sin techo y uno que respeta la regla del caracol.
-        const dose = Math.floor(swing / TUNING.poisonShare);
-        theirs.poison = TUNING.poisonStacks ? theirs.poison + dose : Math.max(theirs.poison, dose);
-        const poiMsg = voice(foe).you
-          ? tr('Vos quedás con {poison} de veneno.', { poison: theirs.poison })
-          : tr('{who} queda con {poison} de veneno.', { who: who(foe), poison: theirs.poison });
-        log(`${mark('poison')} ${poiMsg}`, kind);
       } else if (power === 'brutal') {
         const longest = longestRun(state.chains[player]);
         if (longest > 0) {
@@ -974,32 +1139,29 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
             : tr('{who} desgarra: +{dmg} de daño (+{step} × {longest} de tu cadena más larga).', { who: who(player), dmg: step * longest, step, longest });
           log(`${mark('brutal')} ${brutMsg}`, kind);
         }
-      } else if (power === 'feather') {
-        // La pluma ya pegó directo al salir del mazo.
-      } else if (power === 'leaf' || power === 'oak') {
+      } else if (power === 'leaf') {
         mine.leaf = Math.min(TUNING.leafMax, mine.leaf + TUNING.leafGain);
+        stageFx({ power: 'leaf', moment: 'apply', by: player, on: player, amount: TUNING.leafGain });
         const leafMsg = voice(player).you
-          ? tr('Vos sumás +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al final del turno.', {
+          ? tr('Vos sumás +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al inicio de tu próximo turno.', {
               gain: TUNING.leafGain,
               leaf: mine.leaf,
               max: TUNING.leafMax,
               heal: mine.leaf * TUNING.leafHeal,
             })
-          : tr('{who} suma +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al final del turno.', {
+          : tr('{who} suma +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al inicio de su próximo turno.', {
               who: who(player),
               gain: TUNING.leafGain,
               leaf: mine.leaf,
               max: TUNING.leafMax,
               heal: mine.leaf * TUNING.leafHeal,
             });
-        log(`${mark(power)} ${leafMsg}`, kind);
+        log(`${mark('leaf')} ${leafMsg}`, kind);
       } else if (power === 'leech') {
-        const columnsCount = state.chains[player].cards.length;
-        const isBonus = columnsCount >= TUNING.leechBonusThreshold;
-        const drain = isBonus ? TUNING.leechBonusDrain : TUNING.leechDrain;
+        const drain = TUNING.leechDrain;
         state.totals[player] += drain;
         const got = heal(player, drain);
-        const bonusStr = isBonus ? tr(' (¡duplicado por tener {count} columnas en mesa!)', { count: columnsCount }) : '';
+        stageFx({ power: 'leech', moment: 'apply', by: player, on: foe, amount: drain, heal: got });
         const healStr = got > 0
           ? (voice(player).you ? tr(' y te curás {got}', { got }) : tr(' y se cura {got}', { got }))
           : '';
@@ -1010,7 +1172,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
           ? tr('Vos drenás {drain} de vida {target}{bonus}{heal}: {foeEnd}', {
               drain,
               target: toWhom(foe),
-              bonus: bonusStr,
+              bonus: '',
               heal: healStr,
               foeEnd: foeEndStr,
             })
@@ -1018,19 +1180,22 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
               who: who(player),
               drain,
               target: toWhom(foe),
-              bonus: bonusStr,
+              bonus: '',
               heal: healStr,
               foeEnd: foeEndStr,
             });
         log(`${mark('leech')} ${drainMsg}`, kind);
       } else if (power === 'steelskin') {
-        // La primera pone el tope; cada una más lo baja, hasta el piso.
+        // La primera pone el tope; cada una más lo baja, hasta el piso. Y cada una suma
+        // escudo, que se apila con el del huevo.
         mine.steelskin = mine.steelskin > 0
           ? Math.max(TUNING.steelskinFloor, mine.steelskin - TUNING.steelskinStep)
           : TUNING.steelskinBaseCap;
+        mine.egg += TUNING.steelskinShield;
+        stageFx({ power: 'steelskin', moment: 'apply', by: player, on: player, amount: mine.steelskin, shield: TUNING.steelskinShield });
         const steelMsg = voice(player).you
-          ? tr('Vos endurecés su Piel de Escamas: limitará el próximo golpe rival a un máximo de {cap} de daño.', { cap: mine.steelskin })
-          : tr('{who} endurece su Piel de Escamas: limitará el próximo golpe rival a un máximo de {cap} de daño.', { who: who(player), cap: mine.steelskin });
+          ? tr('Vos te ponés la Gecko Mask: +{shield} de escudo, y el próximo golpe rival te saca {cap} de vida como máximo.', { cap: mine.steelskin, shield: TUNING.steelskinShield })
+          : tr('{who} se pone la Gecko Mask: +{shield} de escudo, y el próximo golpe rival le saca {cap} de vida como máximo.', { who: who(player), cap: mine.steelskin, shield: TUNING.steelskinShield });
         log(`${mark('steelskin')} ${steelMsg}`, kind);
       }
     }
@@ -1049,6 +1214,18 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // quedó sin tiempo— no tiene cadena que mostrar, ya se vio caer la carta que lo
     // rompió, y meterle una pausa acá sería hacerlo esperar por nada.
     stopClock();
+    // La bebida se activa al plantarse, antes que nada: se vuelca sobre el número de
+    // daño, que sube contando lo que suma, y recién después la cadena se recorre. Cuenta
+    // en el golpe desde que entró a la cadena (ver `brutalBonusOf`), pero hasta acá la
+    // pantalla la dejaba afuera y marcaba la racha más larga, que es la que la mide.
+    const drink = swingOf(state, player) - swingOf(state, player, { brutal: false });
+    state.poured[player] = true;
+    if (drink > 0) {
+      const fx = { power: 'brutal', moment: 'stand', by: player, on: player, amount: drink };
+      stageFx(fx);
+      emit();
+      if (!(await tick(powerBeat(fx), era))) return;
+    }
     const aimed = state.chains[player];
     if (!aimed.busted && aimed.cards.length > 0) {
       const ms = aimMs(aimed.cards.length);
@@ -1060,6 +1237,11 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
 
     const swing = swingOf(state, player);
     const brutal = brutalBonusOf(state.chains[player]);
+    if (swing > 0) {
+      const record = state.records[player];
+      record.hit = Math.max(record.hit, swing);
+      record.chain = Math.max(record.chain, state.chains[player].cards.length);
+    }
     // El caracol se gasta con un ataque que haya hecho daño, y no con el turno: una
     // cadena cortada no le paga el caracol a nadie. Si se gastara igual, el debilitado
     // se lo sacaría de encima justo con el turno que ya venía perdido.
@@ -1068,6 +1250,10 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // le tocaba abrir o cerrar el intercambio.
     const weakened = mine.weak > 0 && swing > 0;
     if (weakened) mine.weak--;
+    // Lo que se anote de acá hasta el `emit` del golpe es de este ataque.
+    const fxBefore = state.powerFxId;
+    fxOpen = false;
+    if (weakened) stageFx({ power: 'snail', moment: 'slow', by: foe, on: player, amount: swing });
     if (swing !== points) {
       const mods = [
         mine.strength ? tr('+{str} de fuerza', { str: mine.strength }) : '',
@@ -1080,36 +1266,19 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       log(swingMsg, 'muted');
     }
 
-    let effectiveSwing = swing;
-    if (theirs.steelskin > 0 && swing > 0) {
-      if (swing > theirs.steelskin) {
-        const mitigated = swing - theirs.steelskin;
-        effectiveSwing = theirs.steelskin;
-        const steelMsg = voice(foe).you
-          ? tr('Piel de Escamas tuya frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).', { mitigated, cap: theirs.steelskin })
-          : tr('Piel de Escamas {owner} frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).', { owner: ofWhom(foe), mitigated, cap: theirs.steelskin });
-        log(
-          `${powerIcon('steelskin', 'sm')} ${steelMsg}`,
-          foe,
-        );
-      }
-      theirs.steelskin = 0;
-    }
-
-    // El huevo del rival se come lo que puede y solo se rompe cuando se gasta: si le
-    // sobra vida, sigue puesto para el próximo golpe.
-    const blocked = Math.min(theirs.egg, effectiveSwing);
+    // Primero el escudo del rival —huevos y máscaras, todo junto—, que se come lo que
+    // puede y solo se rompe cuando se gasta: si le sobra, sigue puesto para el próximo
+    // golpe.
+    const blocked = Math.min(theirs.egg, swing);
     // La cáscara: daño fijo acumulable que devuelve al romperse (8 por cada huevo
-    // acumulado). Aguanta hasta que el escudo se gasta del todo.
+    // acumulado). Solo la cargan los huevos: el escudo de la máscara no devuelve nada.
     let thorns = 0;
     let broke = false;
     if (blocked > 0) {
       theirs.egg -= blocked;
       broke = theirs.egg === 0;
-      if (broke && TUNING.eggBreak > 0) {
-        thorns = theirs.eggBreak || TUNING.eggBreak;
-      }
       if (broke) {
+        thorns = theirs.eggBreak || 0;
         theirs.eggBreak = 0;
       }
       const rest = broke
@@ -1119,14 +1288,36 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
                 : tr(' y se rompe: la cáscara le devuelve {thorns} {target}', { thorns, target: toWhom(player) }))
             : tr(' y se rompe'))
         : tr(' y le quedan {egg}', { egg: theirs.egg });
-      const eggMsg = voice(foe).you
-        ? tr('El huevo tuyo aguanta {blocked}{rest}.', { blocked, rest })
-        : tr('El huevo {owner} aguanta {blocked}{rest}.', { owner: ofWhom(foe), blocked, rest });
-      log(`${powerIcon('egg', 'sm')} ${eggMsg}`, 'muted');
+      const shieldMsg = voice(foe).you
+        ? tr('Tu escudo aguanta {blocked}{rest}.', { blocked, rest })
+        : tr('El escudo {owner} aguanta {blocked}{rest}.', { owner: ofWhom(foe), blocked, rest });
+      log(`${powerIcon('egg', 'sm')} ${shieldMsg}`, 'muted');
     }
-    const landed = effectiveSwing - blocked;
+
+    // Después el tope de la máscara, sobre lo que pasó el escudo: es un tope a la vida,
+    // no al golpe. Se gasta cuando algo le llega a la vida; un golpe que se come
+    // entero el escudo no la toca.
+    let landed = swing - blocked;
+    let mitigated = 0;
+    if (theirs.steelskin > 0 && landed > 0) {
+      if (landed > theirs.steelskin) {
+        mitigated = landed - theirs.steelskin;
+        landed = theirs.steelskin;
+        stageFx({ power: 'steelskin', moment: 'block', by: foe, on: foe, amount: theirs.steelskin, mitigated });
+        const steelMsg = voice(foe).you
+          ? tr('Tu Gecko Mask frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).', { mitigated, cap: theirs.steelskin })
+          : tr('La Gecko Mask {owner} frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).', { owner: ofWhom(foe), mitigated, cap: theirs.steelskin });
+        log(`${powerIcon('steelskin', 'sm')} ${steelMsg}`, foe);
+      }
+      theirs.steelskin = 0;
+    }
+    // Lo que vale el ataque para los poderes del que pegó: lo que frenó la máscara no
+    // cuenta, lo que se comió el escudo sí (como siempre con el huevo).
+    const effectiveSwing = swing - mitigated;
 
     state.roundScores[player] = effectiveSwing;
+    // Si era su última chance, este es el golpe: el halo se apaga cuando cae.
+    if (lastChance(state) === player) state.lastChanceUsed[player] = true;
     // El turno se cierra acá mismo. Si no, entre el golpe y el turno del otro queda
     // una ventana con `turn` todavía puesto y los botones vivos: alcanzaba para
     // plantarse dos veces y aplicar el daño dos veces.
@@ -1155,6 +1346,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       log(hitMsg, player);
     }
     applyPowers(player, effectiveSwing);
+    const staged = state.powerFxId !== fxBefore ? state.powerFx.fx : [];
     emit();
 
     // Sus cartas vuelven al mazo antes de repartirle: lo que se lleve del centro entra
@@ -1177,7 +1369,11 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // dura 1600 ms, y el fallo flotante 900 ms. Con 1000 ms para bust (sumado a los 700 ms
     // de caída) o 1700 ms para fallo por plantarse, la animación termina por completo
     // antes de que se abra el centro.
-    const shown = swing > 0 ? 1800 : state.chains[player].busted ? 1000 : 1700;
+    //
+    // Los poderes con animación propia salen después del golpe, de a uno y completos:
+    // con alguno en juego la espera es la que ellos pidan, si es más larga.
+    const powersMs = staged.length ? POWER_LEAD + staged.reduce((ms, fx) => ms + powerBeat(fx), 0) : 0;
+    const shown = Math.max(swing > 0 ? 1800 : state.chains[player].busted ? 1000 : 1700, powersMs);
     if (!(await tick(shown, era))) return;
 
     // Y recién ahí contesta la cáscara, con su propio golpe en sentido contrario. Va
@@ -1204,21 +1400,16 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       if (!(await tick(1300, era))) return;
     }
 
-    if (state.status[player].leaf > 0) {
-      tickLeaf(player);
-      emit();
-      if (!(await tick(1000, era))) return;
-    }
-
     if (state.status[player].poison > 0) {
       tickPoison(player);
       emit();
-      if (!(await tick(1000, era))) return;
+      if (!(await tick(Math.max(1000, POWER_BEAT.poison.tick), era))) return;
     }
 
-    // Con alguien sin vida la partida ya está resuelta: no hay mazo que armar, solo
-    // queda que el otro devuelva el golpe.
-    if (matchOver()) return afterDraft(era);
+    // Con alguien sin vida no hay mazo que armar: o la partida ya está resuelta, o
+    // solo queda el golpe de la última chance.
+    if (matchOver()) return endRound(era);
+    if (lastChance(state)) return afterDraft(era);
     await startDraft(player, era);
   }
 
@@ -1226,9 +1417,12 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   // daño" ya no equivale a "lo dejó sin vida": la partida se cierra por vida.
   // En el tutorial la partida nunca termina antes de la ronda 5, garantizando que
   // el jugador complete todas las etapas guiadas.
+  //
+  // Alguien sin vida no la cierra mientras le quede la última chance (ver `lastChance`).
   const matchOver = () => {
-    if (state.tutorial) return state.round >= 5 && hpOf(state, 'p2') <= 0;
-    return PLAYERS.some((p) => hpOf(state, p) <= 0);
+    const down = PLAYERS.filter((p) => hpOf(state, p) <= 0);
+    if (state.tutorial) return state.round >= 5 && down.includes('p2') && lastChance(state) !== 'p2';
+    return down.length > 0 && !lastChance(state);
   };
 
   /** Terminado el reparto de un jugador: juega el que falta, o cierra el intercambio. */
@@ -1245,7 +1439,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   }
 
   /**
-   * Las hojas (Leaf) curan al finalizar el turno de quien las tiene:
+   * Las hojas (Leaf) curan al empezar el turno de quien las tiene, antes de robar:
    * curan 4 de vida por cada hoja activa y luego se consume una hoja.
    */
   function tickLeaf(player) {
@@ -1253,6 +1447,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     const leaves = st.leaf;
     const got = heal(player, leaves * TUNING.leafHeal);
     const left = --st.leaf;
+    stageFx({ power: 'leaf', moment: 'tick', by: player, on: player, amount: got });
     const leftMsg = left > 0
       ? (left === 1 ? tr(' (le queda 1 hoja)') : tr(' (le quedan {left} hojas)', { left }))
       : tr(' (se consumió la última hoja)');
@@ -1277,6 +1472,8 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
    * rondas y se apaga, en vez de arrastrarse media partida sacando 2. Y como esa
    * mitad nunca llega sola a cero, `poisonFloor` la corta: con 2 o menos encima el
    * veneno ya mordió lo que tenía para morder y se va.
+   *
+   * No pasa por el escudo ni por el tope de la máscara: el veneno va directo a la vida.
    */
   function tickPoison(player) {
     const st = state.status[player];
@@ -1293,32 +1490,43 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       : tr('El veneno le saca {bite} {target}: queda en {hp}{poisonEnd}.', { bite, target: toWhom(player), hp: hpOf(state, player), poisonEnd });
     log(`${powerIcon('poison', 'sm')} ${poisonMsg}`, other(player));
     st.poison = left;
+    stageFx({ power: 'poison', moment: 'tick', by: other(player), on: player, amount: bite });
   }
 
   async function endRound(era) {
     const { p1, p2 } = state.roundScores;
-    // El daño ya está aplicado (ver `finishTurn`); acá solo se juzga el intercambio.
-    state.roundWinner = p1 === p2 ? 'tie' : p1 > p2 ? 'p1' : 'p2';
     state.turn = null;
+    // El daño ya está aplicado (ver `finishTurn`); acá solo se juzga el intercambio. Si
+    // uno no llegó a atacar —la partida se cerró antes, o la ronda era solo de una
+    // última chance— no hay intercambio que juzgar.
+    state.roundWinner = null;
+    if (p1 !== null && p2 !== null) {
+      state.roundWinner = p1 === p2 ? 'tie' : p1 > p2 ? 'p1' : 'p2';
+      const verdict =
+        state.roundWinner === 'tie'
+          ? tr('Pegaron igual')
+          : tr('Pegó más fuerte {winner}', { winner: whom(state.roundWinner) });
+      log(
+        tr('Fin del intercambio {round}: {p1} vs {p2} de daño. {verdict}. Vida {hp1} — {hp2}.', {
+          round: state.round,
+          p1,
+          p2,
+          verdict,
+          hp1: hpOf(state, 'p1'),
+          hp2: hpOf(state, 'p2'),
+        }),
+        'round',
+      );
+    }
 
-    const verdict =
-      state.roundWinner === 'tie'
-        ? tr('Pegaron igual')
-        : tr('Pegó más fuerte {winner}', { winner: whom(state.roundWinner) });
-    log(
-      tr('Fin del intercambio {round}: {p1} vs {p2} de daño. {verdict}. Vida {hp1} — {hp2}.', {
-        round: state.round,
-        p1,
-        p2,
-        verdict,
-        hp1: hpOf(state, 'p1'),
-        hp2: hpOf(state, 'p2'),
-      }),
-      'round',
-    );
+    const down = PLAYERS.filter((p) => hpOf(state, p) <= 0);
+    if (!state.tutorial && down.length === 1 && !state.lastChanceUsed[down[0]] && matchOver()) {
+      const extra = overkillOf(state, down[0]);
+      log(voice(down[0]).you
+        ? tr('Overkill: te pegaron {extra} de más y no tenés última chance.', { extra })
+        : tr('Overkill: {who} recibió {extra} de más y no tiene última chance.', { who: who(down[0]), extra }), 'bad');
+    }
 
-    // Alguien quedó sin vida, pero los dos llegaron hasta acá jugando el intercambio
-    // completo: el que caía primero alcanzó a devolver el golpe.
     state.phase = matchOver() ? 'matchEnd' : 'roundEnd';
     emit();
     if (state.phase !== 'roundEnd') return;
@@ -1369,6 +1577,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (count > 0) {
       state.status[player].bubbles = 0;
       state.bubbleCard[player] = { card, count };
+      stageFx({ power: 'bubble', moment: 'trap', by: player, on: player, amount: count });
       const bubbleMore = count > 1
         ? (count - 1 === 1
             ? tr(' junto a 1 carta más en una carta gigante')
@@ -1446,6 +1655,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (state.draft.bonus === 0) { nextDrafter(); return false; }
     if (!TUNING.octopusStacks) state.status[player].stacked = state.draft.bonus;
     state.draft.step = 'bonus';
+    stageFx({ power: 'octopus', moment: 'pick', by: player, on: player, amount: state.draft.bonus });
     return true;
   }
 
@@ -1454,6 +1664,18 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     state.status[player].stacked--;
     state.draft.bonus--;
     takeFromMarket(player, card, false);
+  }
+
+  /**
+   * El reparto de una CPU distraída: una carta cualquiera de las que puede llevarse, y
+   * si le salió una con poder, esa sola. Tiene la misma forma que `planDraft`.
+   */
+  function carelessPlan(player, kind) {
+    const options = draftableFor(state, player);
+    if (!options.length) return { mode: null, cards: [] };
+    const card = options[Math.floor(rng() * options.length)];
+    if (card.power) return { mode: 'power', cards: [card] };
+    return { mode: 'plain', cards: kind === 'bust' ? [card] : [card, card] };
   }
 
   async function runDraft(era) {
@@ -1478,7 +1700,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         }
         emit();
         if (!(await tick(700, era))) return;
-        if (canRenew(player)) {
+        if (canRenew(player) && renewsMarket(state.difficulty)) {
           renew(player);
           emit();
           if (!(await tick(700, era))) return;
@@ -1486,13 +1708,17 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         // Decide la rama una vez —poder, o cartas sin poder— y después vuelve a
         // mirar el centro entre carta y carta: la reposición puede ofrecerle algo
         // mejor que lo que había al empezar.
-        const plan = planDraft(state.market, cardsOf(player), { kind });
+        //
+        // "Fácil" a veces no piensa: agarra cualquier carta que pueda (ver `sloppyDraft`).
+        const careless = sloppyDraft(state.difficulty) > 0 && sloppyDraft(state.difficulty) > rng();
+        const plan = careless ? carelessPlan(player, kind) : planDraft(state.market, cardsOf(player), { kind });
         state.draft.mode = plan.mode;
         if (plan.mode === 'power') {
           takeFromMarket(player, plan.cards[0]);
         } else {
           for (let n = 0; n < plan.cards.length && plainCards().length; n++) {
-            takeFromMarket(player, pickBest(plainCards(), cardsOf(player)));
+            const plain = plainCards();
+            takeFromMarket(player, careless ? plain[Math.floor(rng() * plain.length)] : pickBest(plain, cardsOf(player)));
           }
         }
         // Y las cartas que le deben los pulpos, de a una y a la vista.
@@ -1551,6 +1777,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (!allowed(player, as) || !canRenew(player)) return;
     if (state.tutorial && !state.tutorialAllowRenew) return;
     renew(player);
+    armClock(player, 'draft');
     emit();
   }
 
@@ -1678,6 +1905,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     emit();
     const card = draw(player);
     applyFeathers(player, card);
+    applyStrength(player, card);
 
     // Con Free Game activo la carta no se encadena: se monta sobre una columna. Si no
     // vino una elegida, queda esperando a que el jugador la elija.

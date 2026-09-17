@@ -13,7 +13,7 @@
 // Lo único que no se deduce acá es el golpe, porque no se oye cuando el estado cambia
 // sino cuando el efecto llega —hasta 700 ms después—: eso lo larga `playHit`, que es
 // quien sabe de ese instante.
-import { PLAYERS, TARGET, TUNING, hpOf, matchResult, ownedBy } from './game.js';
+import { PLAYERS, TARGET, hpOf, ownedBy } from './game.js';
 import { hitDelay } from './vfx.js';
 
 /**
@@ -28,13 +28,9 @@ const TOP_RATE = 1.55;
 /** Con menos de esto de vida, el combate cambia de música. */
 const LOW_HP = 0.3;
 
-/**
- * Los poderes se aplican en el mismo instante en que se suelta el ataque, o sea todos
- * juntos y antes de que el golpe llegue a verse. Sonando así serían un acorde: se
- * espera a que pase el impacto y salen de a uno.
- */
-const AFTER_HIT = 300;
-const APART = 260;
+// Los poderes no suenan acá: cada uno tiene su animación y suena con ella, cuando su
+// amuleto llega (ver `power-fx.js`). Sonando también acá se oirían dos veces, y la
+// primera antes de verse.
 
 /** El estado de un jugador, reducido a lo que puede hacer ruido. */
 function snapPlayer(state, player) {
@@ -44,11 +40,7 @@ function snapPlayer(state, player) {
     cards: chain.cards.length + (chain.bustCard ? 1 : 0),
     busted: chain.busted,
     egg: st.egg,
-    poison: st.poison,
-    weak: st.weak,
-    strength: st.strength,
-    stacked: st.stacked,
-    healed: state.healed[player],
+    eggBreak: st.eggBreak,
     // Todas sus cartas. Se cuenta con `ownedBy` y no con el mazo pelado porque el
     // mazo sube solo al cerrar el turno, cuando la cadena vuelve adentro, y eso no es
     // haber agarrado nada: `ownedBy` incluye lo que está en la mesa, así que la
@@ -69,12 +61,8 @@ const snapshot = (state) => ({
 /**
  * El que escucha la partida. `watch` se llama en cada repintado con el estado nuevo;
  * la primera vez —y cada vez que arranca una partida— solo toma la foto.
- *
- * `seat` es el asiento de esta pantalla, que hace falta para una sola cosa: el remate
- * del final. En una sala la misma partida suena en dos aparatos y el que ganó no es el
- * mismo para los dos. Sin asiento —contra la CPU— el que escucha es `p1`.
  */
-export function createCues(audio, { seat = null } = {}) {
+export function createCues(audio) {
   let last = null;
 
   function watch(state) {
@@ -92,10 +80,6 @@ export function createCues(audio, { seat = null } = {}) {
     const impact = swung
       ? hitDelay(state.lastHit.amount === 0 ? 'bust' : state.symbols[state.lastHit.by])
       : 0;
-    // Los poderes de los dos lados van a una misma fila: el ataque le pone cosas
-    // encima al que pega y al que recibe, y contando cada uno por su cuenta el suyo,
-    // los dos saldrían en el mismo instante.
-    const powers = [];
 
     for (const player of PLAYERS) {
       const now = last[player];
@@ -113,21 +97,10 @@ export function createCues(audio, { seat = null } = {}) {
         else audio.sfx('draw', { rate: Math.min(1 + STEP * (now.cards - 1), TOP_RATE) });
       }
 
-      // El huevo que se gasta del todo devuelve la cáscara, justo después del golpe.
-      if (was.egg > 0 && now.egg === 0 && TUNING.eggBreak > 0) {
+      // El escudo que se gasta del todo devuelve la cáscara, justo después del golpe,
+      // si había huevos cargándola: el escudo de la máscara solo no devuelve nada.
+      if (was.egg > 0 && now.egg === 0 && was.eggBreak > 0 && now.eggBreak === 0) {
         audio.sfx('thorns', { delay: impact + 200 });
-      }
-
-      if (now.strength > was.strength) powers.push('strength');
-      if (now.egg > was.egg) powers.push('egg');
-      if (now.poison > was.poison) powers.push('poison');
-      if (now.weak > was.weak) powers.push('snail');
-      if (now.stacked > was.stacked) powers.push('octopus');
-      if (now.healed > was.healed) powers.push('pot');
-
-      // El veneno muerde al finalizar el turno de quien lo tiene, no cuando se puso.
-      if (was.poison > 0 && now.poison < was.poison) {
-        audio.sfx('poison', { rate: 0.85, delay: 200 });
       }
 
       // Una carta más en el mazo es una carta que se llevó del centro.
@@ -135,23 +108,10 @@ export function createCues(audio, { seat = null } = {}) {
       if (now.renewed && !was.renewed) audio.sfx('renew');
     }
 
-    const wait = swung ? impact + AFTER_HIT : 0;
-    powers.forEach((key, i) => audio.sfx(key, { delay: wait + i * APART }));
-
     if (state.phase === 'draft' && before.phase !== 'draft') audio.sfx('open');
 
-    if (state.phase === 'matchEnd' && before.phase !== 'matchEnd') {
-      // El último golpe todavía está en el aire: el resultado entra después de él.
-      //
-      // El remate es del que está escuchando: gana o pierde. En una sala eso es distinto
-      // en cada aparato —el mismo estado, dos remates opuestos—, y por eso hace falta
-      // saber de quién es esta pantalla. El doble KO no es de nadie: suena el otro.
-      //
-      // La partida anulada no tiene remate: no se ganó ni se perdió nada, y el de
-      // perder sería decirle al que se quedó que perdió él.
-      const result = matchResult(state);
-      if (result !== 'void') audio.sfx(result === (seat ?? 'p1') ? 'win' : 'lose', { delay: 900 });
-    }
+    // El remate del final no sale de acá: lo larga la pantalla del final (ver
+    // `result.js`), que sabe cuándo aparece y hace coincidir el pico con su efecto.
 
     music(state);
   }

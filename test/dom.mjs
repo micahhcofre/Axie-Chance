@@ -5,7 +5,7 @@
 // cuanto alguien agrega un nodo.
 export const IDS = [
   'scoreboard', 'clock', 'arena', 'fighter-p1', 'fighter-p2', 'plate-p1', 'plate-p2',
-  'axie-p1', 'axie-p2', 'field', 'controls', 'swing', 'odds', 'finale',
+  'axie-p1', 'axie-p2', 'field', 'controls', 'swing', 'odds', 'result',
   // Los dos paneles que se abren desde la mesa: el mazo, tocando un Axie, y el
   // historial, desde el menú de las tres rayitas.
   'peek-p1', 'peek-p2', 'deck-modal', 'deck', 'deck-label', 'deck-sheet',

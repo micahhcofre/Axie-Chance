@@ -62,6 +62,9 @@ const CUT = { draw: 0.5, take: 0.25 };
  */
 const RATE = { bust: 0.9 };
 
+/** Cuánto se mueve el tono del toque de un botón de una vez a otra (±4%). */
+const PRESS_DETUNE = 0.08;
+
 /** Cuánto tarda un tema en entrar y en irse, en segundos. */
 const FADE = 1.5;
 /**
@@ -154,6 +157,37 @@ export function createAudio() {
     param.cancelScheduledValues(from);
     param.setValueAtTime(param.value, from);
     param.linearRampToValueAtTime(to, from + secs);
+  }
+
+  // ---- sintetizados -----------------------------------------------------------
+
+  /** Cuándo largar un sonido sintetizado, o `null` si no hay con qué (o no se quiere). */
+  function synthAt(delay) {
+    if (!ctx || !prefs.sfx || typeof ctx.createOscillator !== 'function') return null;
+    return ctx.currentTime + delay / 1000;
+  }
+
+  /**
+   * Una voz sintetizada: el tono va de `f0` a `f1`, el volumen pega en `peak` a los
+   * `rise` segundos y se apaga a los `fall`. Todo contado desde `at`.
+   */
+  function tone(at, type, [f0, t0, f1, t1], [peak, rise, fall], [start, stop]) {
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(f0, at + t0);
+      osc.frequency.exponentialRampToValueAtTime(f1, at + t1);
+      gain.gain.setValueAtTime(0.001, at);
+      gain.gain.linearRampToValueAtTime(peak, at + rise);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + fall);
+      osc.connect(gain);
+      gain.connect(sfxBus);
+      osc.start(at + start);
+      osc.stop(at + stop);
+    } catch {
+      // Un navegador a medias con osciladores: el toque es decorado, no se rompe nada.
+    }
   }
 
   // ---- música -----------------------------------------------------------------
@@ -315,30 +349,29 @@ export function createAudio() {
      * Sintetiza una curva sinusoidal suave y armónico brillante conectado al bus de efectos.
      */
     liquidDrop(delay = 0) {
-      if (!ctx || !prefs.sfx || typeof ctx.createOscillator !== 'function') return;
-      try {
-        const at = ctx.currentTime + delay / 1000;
-        // Una voz: el tono sube de `f0` a `f1`, el volumen pega en `peak` y se apaga.
-        const voice = (type, [f0, t0, f1, t1], [peak, rise, fall], [start, stop]) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = type;
-          osc.frequency.setValueAtTime(f0, at + t0);
-          osc.frequency.exponentialRampToValueAtTime(f1, at + t1);
-          gain.gain.setValueAtTime(0.001, at);
-          gain.gain.linearRampToValueAtTime(peak, at + rise);
-          gain.gain.exponentialRampToValueAtTime(0.0001, at + fall);
-          osc.connect(gain);
-          gain.connect(sfxBus);
-          osc.start(at + start);
-          osc.stop(at + stop);
-        };
-        // El cuerpo de la gota, y un armónico brillante encima.
-        voice('sine', [380, 0, 780, 0.09], [0.42, 0.015, 0.16], [0, 0.18]);
-        voice('triangle', [1180, 0.02, 1420, 0.1], [0.18, 0.025, 0.14], [0.01, 0.16]);
-      } catch {
-        // En navegadores sin osciladores o mocks, ignora en silencio
-      }
+      const at = synthAt(delay);
+      if (at === null) return;
+      // El cuerpo de la gota, y un armónico brillante encima.
+      tone(at, 'sine', [380, 0, 780, 0.09], [0.42, 0.015, 0.16], [0, 0.18]);
+      tone(at, 'triangle', [1180, 0.02, 1420, 0.1], [0.18, 0.025, 0.14], [0.01, 0.16]);
+    },
+
+    /**
+     * El toque de un botón. El kit no trae sonidos de interfaz —son todos golpes y
+     * estados—, así que se sintetiza: sale en el acto, sin esperar ninguna descarga, y
+     * un botón que suena tarde se siente roto. Es un "toc" de madera de 70 ms: un
+     * chasquido agudo que cae y un cuerpo grave debajo. Va bien bajo porque se oye
+     * encima de todo lo demás —robar ya tiene su tic, atacar su golpe—.
+     *
+     * Cada toque sale un pelo más agudo o más grave que el anterior: el mismo sonido
+     * clavado diez veces seguidas suena a máquina.
+     */
+    press() {
+      const at = synthAt(0);
+      if (at === null) return;
+      const k = 1 + (Math.random() - 0.5) * PRESS_DETUNE;
+      tone(at, 'sine', [1500 * k, 0, 950 * k, 0.04], [0.16, 0.004, 0.07], [0, 0.08]);
+      tone(at, 'triangle', [520 * k, 0, 360 * k, 0.05], [0.12, 0.003, 0.06], [0, 0.07]);
     },
 
     /**

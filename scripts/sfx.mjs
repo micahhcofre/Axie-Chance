@@ -90,6 +90,15 @@ const PICKS = {
   pot: `${WEB}heal.wav`,
   snail: `${WEB}weak.wav`,
   octopus: `${WEB}bubble.wav`,
+  // Los que llegaron con las animaciones de cada poder (ver `power-fx.js`): cada uno con
+  // su sonido, que suena cuando el poder llega a su Axie.
+  brutal: `${UNITY}morph_aura_burst.wav`,
+  bubble: `${UNITY}secret.wav`,
+  bubblePop: `${WEB}bubble_bomb.wav`,
+  feather: `${WEB}feather.wav`,
+  leaf: `${WEB}leaf.wav`,
+  leafHeal: `${WEB}cure.wav`,
+  leech: `${WEB}drain.wav`,
   // El centro: cuando se abre, cuando agarrás una carta y cuando lo renovás.
   open: `${UNITY}summon_on.wav`,
   // La carta que entra al mazo. El primero que se probó acá fue `feather` —una pluma,
@@ -104,6 +113,8 @@ const PICKS = {
   // El final.
   win: `${WEB}power_awaken.wav`,
   lose: `${UNITY}death_mark.wav`,
+  // El doble KO: los dos quedan mareados.
+  tie: `${WEB}stunned.wav`,
 };
 
 /**

@@ -1,7 +1,7 @@
 // Smoke test del flujo completo: rondas, reparto de la reserva y final a 100 puntos.
 import assert from 'node:assert/strict';
 import {
-  aimMs, createGame, TARGET, PLAYERS, MARKET_SIZE, hpOf, lastChance, matchResult, ownedBy,
+  aimMs, createGame, TARGET, TUNING, PLAYERS, MARKET_SIZE, CLOCK, hpOf, lastChance, matchResult, overkillOf, ownedBy,
 } from '../src/game.js';
 import { scoreChain } from '../src/rules.js';
 
@@ -189,7 +189,9 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   const s = game.state;
   assert.ok(PLAYERS.some((p) => hpOf(s, p) <= 0), 'alguien se quedó sin vida');
   assert.ok(Math.max(s.totals.p1, s.totals.p2) >= TARGET, 'hizo falta el daño de una vida');
-  assert.ok(s.roundScores.p1 !== null && s.roundScores.p2 !== null, 'los dos jugaron la ronda');
+  // La última ronda puede quedar a medias: un overkill la cierra en el acto, y la
+  // última chance del que abre se juega sola en una ronda propia.
+  assert.ok(s.roundScores.p1 !== null || s.roundScores.p2 !== null, 'alguien jugó la última ronda');
   // Uno y uno: abre siempre el jugador y contesta la CPU, así ningún lado juega dos
   // turnos seguidos al cambiar de ronda.
   assert.deepEqual(openers, openers.map(() => 'p1'), 'abre siempre el jugador');
@@ -340,6 +342,45 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.ok(!game.canRenew('p1'), 'con una carta del símbolo propio no se renueva');
 }
 
+// Reloj del draft: 20 segundos por defecto, y al renovar el centro se reinicia a 20.
+{
+  assert.equal(CLOCK.draft, 20000, 'el reloj del draft por defecto dura 20 segundos');
+
+  const game = createGame({ pace: 0, seed: 10, clock: CLOCK });
+  game.newMatch({ difficulty: 'normal', axie: 'plant' });
+  let guard = 0;
+  while (!(game.state.phase === 'draft' && game.drafting() === 'p1')) {
+    assert.ok(guard++ < 4000, 'no se llegó al reparto del jugador');
+    const s = game.state;
+    if (s.phase === 'draft' || s.busy || s.turn !== 'p1') await idle();
+    else await game.stand();
+  }
+
+  const s = game.state;
+  assert.equal(s.clock?.kind, 'draft');
+  assert.equal(s.clock?.ms, 20000);
+  const initialEnds = s.clock.ends;
+
+  // Forzar que no haya plant en el centro para poder renovar
+  for (let i = 0; i < s.market.length; i++) {
+    if (!s.market[i].symbols.includes('plant')) continue;
+    const at = s.pool.findIndex((c) => !c.symbols.includes('plant'));
+    if (at >= 0) {
+      const [swap] = s.pool.splice(at, 1);
+      s.pool.push(s.market[i]);
+      s.market[i] = swap;
+    }
+  }
+
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(game.canRenew('p1'));
+  game.renewMarket();
+
+  assert.equal(s.clock?.kind, 'draft');
+  assert.equal(s.clock?.ms, 20000);
+  assert.ok(s.clock.ends > initialEnds, 'el reloj se reinicia al renovar el centro');
+}
+
 // Con semilla la partida es reproducible. Es lo que hace comparables dos corridas
 // del banco de pruebas: mismo reparto, y la diferencia que se mida es del cambio y
 // no del sorteo.
@@ -382,8 +423,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
 }
 
 // La última chance: al que dejan sin vida antes de haber atacado le queda su turno
-// entero, y si en ese golpe se lleva puesto al otro, empatan. Solo le puede tocar al
-// que juega segundo, que con el orden fijo es siempre la CPU.
+// entero, y si en ese golpe se lleva puesto al otro, empatan.
 {
   const game = createGame({ pace: 0, seed: 7 });
   game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
@@ -421,38 +461,81 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   console.log('  última chance: empate por doble KO');
 }
 
-// El que abre nunca cobra la última chance: cuando lo dejan sin vida ya tiró su golpe.
-// Es la contracara del orden fijo, y se mide sobre una partida entera.
+// El que abre también cobra la última chance: cuando lo matan ya tiró su golpe, así que
+// la juega abriendo la ronda siguiente, sola, y la partida se cierra con ese golpe.
 {
   const game = createGame({ pace: 0, seed: 11 });
   const halo = new Set();
   game.subscribe((s) => halo.add(lastChance(s)));
   game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+  await idle();
 
+  let fell = null;
   let guard = 0;
   while (game.state.phase !== 'matchEnd') {
     assert.ok(guard++ < 4000, 'la partida no termina');
     const s = game.state;
     if (s.phase === 'draft') {
-      if (game.drafting() !== 'p1') { await idle(); continue; }
-      const options = game.pickable();
-      if (!options.length) await game.skipDraft();
-      else await game.takeCard(options[0].uid);
+      if (game.drafting() === 'p1') await game.skipDraft();
+      else await idle();
       continue;
     }
-    if (s.phase === 'turn' && s.turn === 'p1' && !s.busy) await game.stand();
-    else await idle();
+    if (s.phase === 'turn' && s.turn === 'p1' && !s.busy) {
+      if (hpOf(s, 'p1') <= 0) {
+        // Su última chance: abre una ronda nueva y la CPU no jugó en ella.
+        fell = { round: s.round, cpu: s.roundScores.p2 };
+      } else {
+        // A un punto de morir y la CPU entera: el golpe de la CPU lo tumba sin overkill.
+        s.totals.p2 = TARGET - 1;
+        s.totals.p1 = 0;
+      }
+      await game.stand();
+    } else {
+      await idle();
+    }
   }
 
-  assert.ok(!halo.has('p1'), 'al que abre nunca se le prende el halo');
   const s = game.state;
-  const r = matchResult(s);
-  assert.equal(r, hpOf(s, 'p1') <= 0 ? (hpOf(s, 'p2') <= 0 ? 'tie' : 'p2') : 'p1',
-    'el resultado sale de la vida, no del daño repartido');
-  // Si al jugador lo mataron, fue la CPU cerrando el intercambio: no quedó turno suyo
-  // pendiente que devolver.
-  if (r === 'p2') assert.ok(s.roundScores.p1 !== null, 'ya había atacado cuando cayó');
-  console.log(`  última chance: el que abre no la cobra (${r})`);
+  assert.ok(fell, 'le tocó jugar sin vida');
+  assert.equal(fell.cpu, null, 'la ronda de su última chance es solo suya');
+  assert.equal(s.round, fell.round, 'y la partida se cierra con ese golpe');
+  assert.equal(s.roundScores.p2, null, 'sin que la CPU vuelva a jugar');
+  assert.ok(halo.has('p1'), 'al que abre también se le prende el halo');
+  assert.equal(matchResult(s), 'p2', 'no alcanzó: pierde');
+  console.log('  última chance: el que abre también la cobra');
+}
+
+// Overkill: si el golpe se pasa por más de `TUNING.overkill` del cero, no hay última
+// chance y la partida se cierra en el acto.
+{
+  const game = createGame({ pace: 0, seed: 7 });
+  const halo = new Set();
+  game.subscribe((s) => halo.add(lastChance(s)));
+  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+  await idle();
+  game.state.totals.p1 = TARGET - 1;
+  game.state.status.p1.strength = TUNING.overkill + 5;
+  await game.stand();
+  let guard = 0;
+  while (game.state.phase !== 'matchEnd') {
+    assert.ok(guard++ < 400, 'la partida no termina');
+    await idle();
+  }
+  const s = game.state;
+  assert.ok(overkillOf(s, 'p2') > TUNING.overkill, 'se pasó del cero por más del tope');
+  assert.equal(s.roundScores.p2, null, 'la CPU no devuelve el golpe');
+  assert.ok(!halo.has('p2'), 'ni se le prende el halo');
+  assert.equal(matchResult(s), 'p1');
+  assert.ok(s.log.some((l) => /Overkill/.test(l.text)), 'el registro dice por qué');
+
+  // Justo en el tope todavía se levanta.
+  const edge = createGame({ pace: 0, seed: 7 });
+  edge.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+  await idle();
+  edge.state.totals.p1 = TARGET + TUNING.overkill;
+  assert.equal(overkillOf(edge.state, 'p2'), TUNING.overkill);
+  assert.equal(lastChance(edge.state), 'p2', 'con overkill igual al tope, sí hay última chance');
+  console.log('  última chance: overkill la borra');
 }
 
 // El recorrido de la cadena: el compás que hay entre soltar el ataque y el golpe, para

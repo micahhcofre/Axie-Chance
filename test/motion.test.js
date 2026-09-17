@@ -107,6 +107,19 @@ for (const stance of ['win', 'ko']) {
   assert.equal(emotes.length, 0, `en \`${stance}\` no se aburre`);
 }
 
+// Festejando se queda en su lugar y lo único que hace es el saltito contento: nada de
+// los gestos de aburrirse (un tarascón o un pisotón se leen como atacar al rival).
+{
+  const axie = fakeAxie('beast');
+  const motion = createMotion(axie.node, 0);
+  motion.mount('beast');
+  motion.stance('celebrate');
+  const emotes = emotesIn(axie, motion, MINUTE);
+  assert.ok(emotes.length >= 15, `festejando salieron ${emotes.length} saltitos en un minuto`);
+  assert.deepEqual([...new Set(emotes)], ['cheer'], 'y son todos contentos');
+  assert.ok(!axie.played.includes('win'), 'el clip de la voltereta no se usa');
+}
+
 // Y los emotes están horneados para las seis clases, no solo para la que se probó.
 const EMOTES = ['scratch', 'peek', 'snarl', 'cheer', 'chew', 'snap', 'stomp'];
 for (const [id, clips] of Object.entries(POSES)) {

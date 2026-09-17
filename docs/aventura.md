@@ -54,8 +54,9 @@ src/lobby.js   src/game.js       src/ui.js
 4. **Finalización y Registro**:
    Al terminar la partida (`state.phase === 'matchEnd'`) y habiendo ganado el jugador:
    - `ui.js` ejecuta `markLevelCompleted(state.adventure.level)`.
-   - Si `isFinalLevel(state.adventure.level)` es verdadero, el cartel central muestra: `¡Aventura Completada!` y el botón principal dice `Ver Aventura`.
-   - Si no es el nivel final, el cartel muestra `¡[Nombre de nivel] Superado!` y ofrece el botón `Siguiente Nivel`, que invoca `nextLevelId(state.adventure.level)`.
+   - Sale la pantalla del final (`src/result.js`) con el nombre del nivel arriba de la tela.
+   - Si `isFinalLevel(state.adventure.level)` es verdadero, la tela dice `¡Aventura Completada!` y el botón principal dice `Ver Aventura`.
+   - Si no es el nivel final, dice `¡Nivel superado!` y ofrece el botón `Siguiente Nivel`, que invoca `nextLevelId(state.adventure.level)`.
 
 ---
 
@@ -66,7 +67,7 @@ Cada elemento del array `ADVENTURE_CAMPAIGN` en `src/adventure-levels.js` es un 
 ```javascript
 {
   name: 'Nivel 1: Primeros Pasos',
-  description: 'Aprende los fundamentos del combate, aprovecha la fuerza y la curación, y usá el comodín apilable Free Game.',
+  description: 'Aprendé lo básico: sumá fuerza, curate con la maceta y montá cartas con Free Game. Si te dejan en 0, te queda un último golpe, pero ahí ya no te podés curar.',
   rival: 'olek',
   difficulty: 'facil',
   newPowers: ['strength', 'pot'],

@@ -104,10 +104,12 @@ $$\text{vida} = \max(100 - \text{daño recibido total} + \text{curación total},
 1. **Base** = puntaje de la cadena (0 si se cortó).
 2. Si base = 0, el ataque hace 0 (no se aplican modificadores).
 3. **+ fuerza** acumulada (`state.strength`).
-4. **+ bonus brutal** (ver poder Garra Brutal).
+4. **+ bonus de la Energy Drink** (ver poder Energy Drink M).
 5. Si el rival tiene **caracol**: se divide por 2, redondeando arriba.
-6. Si el rival tiene **huevo** (escudo): el escudo absorbe primero; si se rompe, le
-   devuelve 5 fijos al atacante.
+6. Si el rival tiene **escudo** (huevo y Gecko Mask, sumados): el escudo absorbe
+   primero; si se rompe y lo cargaban huevos, le devuelve 8 fijos por huevo al atacante.
+7. Si el rival tiene **Gecko Mask**: lo que pasó el escudo llega a la vida con tope
+   (12, 10, 8… piso 6).
 
 ---
 
@@ -133,7 +135,7 @@ draft por jugador.
 
 Si la reserva se agota, se sigue jugando con el mazo armado.
 
-**Reloj del draft**: 10 segundos por pick. Si se agota, se saltea automáticamente.
+**Reloj del draft**: 20 segundos por pick. Si se agota, se saltea automáticamente. Si se renueva el centro, el reloj vuelve a 20 segundos.
 
 ---
 
@@ -150,35 +152,36 @@ Al principio de cada partida se sortea **un poder activo por clase**:
 
 | clase | poderes posibles |
 |---|---|
-| Bestia | Fuerza, Garra Brutal |
+| Bestia | Charm of Power, Energy Drink M |
 | Pez | Pulpo, Burbuja de Retorno |
-| Pájaro | Huevo, Pluma Sagrada |
+| Pájaro | Secret Egg, Feather Earring |
 | Planta | Maceta, Hoja (Leaf) |
-| Bicho | Caracol, Greedy Leech |
-| Reptil | Veneno, Piel de Escamas |
+| Bicho | Caracol, Mantis Dagger |
+| Reptil | Veneno, Gecko Mask |
 
-**Regla general**: todos los poderes (salvo Pluma y Pulpo/Burbuja) requieren que el
-ataque haya hecho daño (`swing > 0`) para activarse. Si se corta la cadena, no se
-activa nada.
-
----
-
-### ⚔️ Fuerza (Bestia)
-
-**+1 de daño en este ataque y en todos los que siguen.** Permanente y acumulable.
-
-- Cada carta de Fuerza en la cadena suma `+1` a `state.strength`.
-- Se aplica en cada ataque futuro como parte de `swingOf`.
-- **Requiere** `swing > 0`. Si se corta la cadena o el daño es 0, no se gana
-  fuerza. La fuerza acumulada de turnos anteriores se conserva.
+**Regla general**: la mayoría de los poderes requieren que el
+ataque haya hecho daño (`swing > 0`) para activarse. Excepciones: Charm of Power
+y Pluma Sagrada (se activan apenas aparecen en mesa), y Pulpo/Burbuja de Retorno
+(solo requieren que la cadena no se corte).
 
 ---
 
-### 🐻 Garra Brutal (Bestia)
+### ⚔️ Fuerza — Charm of Power (Bestia)
 
-**+2 de daño por cada símbolo de tu cadena más larga.** Se activa siempre que conectes el ataque.
+**+1 de daño permanente otorgado instantáneamente al aparecer la carta.**
 
-- Fórmula: $\text{brutalCount} \times 2 \times \text{maxRun.length}$
+- Cada carta de Charm of Power que aparece en mesa suma de inmediato `+1` permanente a `state.strength`.
+- No requiere que el ataque conecte ni que la cadena no se corte: se gana en el acto al salir la carta.
+- Se aplica de inmediato al daño actual del turno y a todos los ataques futuros como parte de `swingOf`.
+- Acumulable: cada aparición de Charm of Power incrementa +1 permanente.
+
+---
+
+### 🐻 Energy Drink M (Bestia)
+
+**+3 de daño por cada símbolo de tu cadena más larga.** Se activa siempre que conectes el ataque.
+
+- Fórmula: $\text{brutalCount} \times 3 \times \text{maxRun.length}$
 - Cuenta los símbolos de tu racha más extendida (de cualquier clase).
 - Se suma encima del score + fuerza, antes del caracol.
 - **Si se corta**: bonus = 0.
@@ -187,19 +190,19 @@ activa nada.
 
 ### 🥚 Huevo (Pájaro)
 
-**Escudo de medio golpe.** Aguanta hasta que lo rompan; al romperse el efecto pasa
+**Escudo de un tercio del golpe.** Aguanta hasta que lo rompan; al romperse el efecto pasa
 a ser 8 de daño fijo acumulable de vuelta al atacante.
 
-- Escudo = $\lfloor\text{swing} / 2\rfloor$ (mitad del golpe infligido, redondeando abajo).
+- Escudo = $\lfloor\text{swing} / 3\rfloor$ (un tercio del golpe infligido, redondeando abajo, **mínimo 1**).
 - El escudo dura hasta que se rompa (absorbe daño entrante; el sobrante pasa).
-- **El escudo NO se acumula**: se reemplaza cuando se gana nuevamente.
+- **El escudo se acumula**: cada huevo suma su escudo al que ya tenés, incluido el de la Gecko Mask.
 - El efecto del huevo pasa a ser daño cuando se te rompe el escudo: 8 de daño fijo de vuelta al atacante (`eggBreak`).
-- **Daño acumulable**: cada huevo obtenido acumula +8 de daño fijo para cuando se rompa el escudo.
+- **Daño acumulable**: cada huevo obtenido acumula +8 de daño fijo para cuando se rompa el escudo. Un escudo que es solo de máscara no devuelve nada.
 - **Requiere** `swing > 0`.
 
 ---
 
-### 🪶 Pluma Sagrada (Pájaro)
+### 🪶 Feather Earring (Pájaro)
 
 **5 de daño inmediato al rival apenas sale la carta.**
 
@@ -256,12 +259,12 @@ tu pick normal para que abra tu próxima ronda.
 
 ### 🍃 Hoja / Leaf (Planta)
 
-**+2 hojas por carta (acumulables hasta 5). Al final de tu turno, cada hoja cura 4 de vida y luego se consume una hoja.**
+**+2 hojas por carta (acumulables hasta 5). Al inicio de tu próximo turno, antes de robar, cada hoja cura 4 de vida y luego se consume una hoja.**
 
 - Aplica el efecto canónico de Axie Origins: al plantarte con éxito (`swing > 0`), la carta te otorga 2 hojas.
 - Las hojas se acumulan hasta un máximo de 5.
-- Al final de cada uno de tus turnos, te curas 4 de vida por cada hoja activa (`hojas × 4`) y luego se consume 1 hoja (`hojas - 1`).
-- La curación y consumo de hojas suceden al final del turno, incluso si ese turno luego se corta.
+- Al inicio de cada uno de tus turnos (antes de robar la primera carta), te curas 4 de vida por cada hoja activa (`hojas × 4`) y luego se consume 1 hoja (`hojas - 1`).
+- La curación y consumo de hojas suceden al inicio del turno, así que valen aunque ese turno después se corte. Las hojas ganadas al plantarte recién curan en tu turno siguiente.
 - **Requiere** `swing > 0` para obtener nuevas hojas.
 
 ---
@@ -278,39 +281,39 @@ tu pick normal para que abra tu próxima ronda.
 
 ---
 
-### 🩸 Greedy Leech (Bicho)
+### 🩸 Mantis Dagger (Bicho)
 
-**Roba 6 de vida al rival (se duplica a 12 con 4+ columnas en mesa).**
+**Roba 5 de vida al rival por cada Mantis Dagger en tu cadena en un ataque exitoso.**
 
-- Al plantarte con daño, le resta 6 de vida al oponente y te los cura a vos.
-- Con 4 o más columnas de cartas jugadas en tu mesa, el drenaje se duplica a 12 HP.
-- Las cartas Free Game apiladas sobre una columna existente no suman como columna nueva.
-- **Requiere** `swing > 0`.
+- En un ataque exitoso (`swing > 0`), le resta 5 de vida al oponente y te los cura a vos por cada Mantis Dagger en la cadena.
+- Acumulable: si hay 2 Mantis Dagger en la cadena, roba 10 HP (5 por cada una).
+- **Requiere** `swing > 0`. Si la cadena se corta o el ataque hace 0 de daño, no roba vida.
 
 ---
 
 ### ☠️ Veneno (Reptil)
 
-**Daño continuo: la mitad de tu golpe.** Muerde al finalizar el turno del rival y se parte
+**Daño continuo: 6 por frasco.** Muerde al finalizar el turno del rival y se parte
 al medio.
 
-- Al plantarte: envenenás al rival con $\lfloor\text{swing} / 2\rfloor$.
+- Al plantarte: le ponés 6 de veneno al rival por cada Poison Vial de tu cadena (`poisonDose`), pegues lo que pegues.
 - Acumulable: nuevo veneno se suma al existente (`poisonStacks: true`).
 - **Al finalizar su turno** (el turno de quien lo tiene encima):
-  1. El veneno muerde (resta vida).
+  1. El veneno muerde (resta vida). **Ignora el escudo y la Gecko Mask.**
   2. Se parte al medio: $\lfloor\text{veneno} / 2\rfloor$.
   3. Si queda ≤ 2, se va del todo.
-- **Requiere** `swing > 0`.
+- **Requiere** plantarse: si la cadena se corta, no envenena.
 
 ---
 
-### 🛡️ Piel de Escamas (Reptil)
+### 🛡️ Gecko Mask (Reptil)
 
-**Tope defensivo: limita el próximo ataque rival a máximo 12 de daño.**
+**+2 de escudo y tope a la vida: el próximo ataque rival te saca 12 de vida como máximo.**
 
-- Blindaje que mitiga todo el daño de un golpe rival por encima de 12 puntos.
-- Acumulable: cada piel adicional reduce el tope en -2 (12 → 10 → 8), hasta un piso mínimo inquebrantable de 6.
-- Se gasta solo cuando el rival conecta un ataque con daño.
+- Suma 2 de escudo (`steelskinShield`), que se apila con el del huevo.
+- El tope se aplica sobre la vida: primero el escudo absorbe, y lo que pasa llega con un máximo de 12.
+- Acumulable: cada máscara adicional suma 2 de escudo y reduce el tope en -2 (12 → 10 → 8), hasta un piso mínimo de 6.
+- El tope se gasta cuando un ataque rival pasa el escudo; si el escudo se come el golpe entero, la máscara sigue puesta.
 - **Requiere** `swing > 0`.
 
 ---
@@ -334,7 +337,7 @@ y activas desde el **Nivel 1 del Modo Aventura**). Tienen 2 símbolos y funciona
 2. **Turno del primer jugador**: roba, encadena, se planta o se corta.
 3. **Resolución del turno**: daño, poderes aplicados, espinas de cáscara y mordisco de veneno si el jugador actual estaba envenenado.
 4. **Draft del primer jugador**: elige del centro. Bonus del pulpo si lo tiene.
-5. **Si el rival sigue vivo** (o tiene última chance): turno del segundo jugador (con la misma resolución y veneno propio si estaba envenenado).
+5. **Si el rival sigue vivo** (o tiene última chance y no hubo overkill): turno del segundo jugador (con la misma resolución y veneno propio si estaba envenenado).
 6. **Draft del segundo jugador**.
 7. **Cierre de ronda**: se determina ganador de la ronda y se chequea si alguien murió.
 8. Si no terminó, empieza la ronda siguiente.
@@ -343,15 +346,21 @@ y activas desde el **Nivel 1 del Modo Aventura**). Tienen 2 símbolos y funciona
 
 ## La última chance
 
-Si te quedás sin vida **antes de haber atacado** en este intercambio, no morís
-todavía: jugás tu turno igual (robás, encadenás, te plantás) con un halo de luz.
+Si te quedás sin vida, no morís todavía: te queda **un golpe más**. Jugás tu turno
+igual (robás, encadenás, te plantás) con un halo de fuego.
 
 - Si tu golpe deja sin vida al otro también → **empate**.
 - Si no alcanzás → perdés.
-- Solo le puede tocar al **segundo** en el orden de turnos (el que todavía no
-  puntuó esta ronda: `roundScores[p] === null && hpOf(state, p) <= 0`).
-- Contra la CPU: la CPU siempre cierra, así que siempre tiene última chance.
-- En red: el orden se sortea, así que la última chance es aleatoria.
+- **Le toca a los dos jugadores**:
+  - Al que cierra, si lo matan antes de atacar, la juega en el mismo intercambio.
+  - Al que abre (o a quien cae después de haber atacado: cáscara, veneno) la juega
+    abriendo la ronda siguiente, solo: el otro no vuelve a jugar.
+- **Overkill**: si el daño que recibís pasado el cero supera **30** (`TUNING.overkill`),
+  no hay última chance y la partida termina en el acto. Cuenta todo lo que te cae
+  mientras esperás tu golpe, no solo el que te tumbó.
+- **Sin cura**: en la última chance no te podés curar (maceta, hojas y la vida de la
+  daga no hacen nada; las hojas esperan).
+- Si los dos quedan sin vida a la vez → empate, sin más turnos.
 
 La CPU en última chance calcula cuánto necesita para empatar y si la cadena le
 alcanza, se planta y lo asegura.
@@ -363,8 +372,7 @@ alcanza, se planta y lo asegura.
 - **Contra la CPU**: siempre vos (p1). El orden es fijo toda la partida.
 - **En red**: se sortea al empezar (`rng() < 0.5`). Fijo toda la partida (no alterna
   entre rondas, porque eso causaba que el mismo jugador jugara dos veces seguidas).
-- Abrir es desventaja: el que cierra ve el daño del otro antes de decidir, y es el
-  único que puede cobrar la última chance.
+- Abrir es desventaja: el que cierra ve el daño del otro antes de decidir.
 
 ---
 
@@ -373,7 +381,7 @@ alcanza, se planta y lo asegura.
 | fase | tiempo |
 |---|---|
 | Turno | 30 segundos |
-| Draft (cada pick) | 10 segundos |
+| Draft (cada pick) | 20 segundos |
 
 - Si se agota en el turno: se corta la cadena (bust), ataque = 0.
 - Si se agota en el draft: se saltea el pick.
@@ -423,18 +431,30 @@ Las mejoras se guardan **por Axie** y viajan a la partida como
 Usa *expectimax* con lookahead sobre las cartas no vistas de su propio mazo. Tres
 niveles de dificultad:
 
-| | profundidad | margen | juega el final |
-|---|---|---|---|
-| Fácil | 1 | 1.35× (tímida) | no |
-| Normal | 2 | 1.0× | sí |
-| Duro | 3 | 1.0× | sí |
+| | profundidad | margen | juega el final | mide el ataque por | elige del centro |
+|---|---|---|---|---|---|
+| Fácil | 1 | 1.35× (tímida) | no | puntos | al azar la mitad de las veces, sin renovar |
+| Normal | 1 | 1.0× | sí | puntos | conectividad |
+| Duro | 3 | — | sí | la partida | conectividad |
+
+**Duro** no maximiza puntos sino la partida:
+- Pega contra la vida que hay: el escudo del rival se come la punta, la Gecko Mask la
+  topea y lo que se pase de la vida no suma, salvo que le borre la última chance.
+- Dejar al rival sin vida vale mucho más que el daño: si plantarse ya lo tumba, se planta.
+- Cortarse cuesta más que el golpe: pierde los poderes de la mesa (un veneno, un huevo,
+  una maceta) y medio centro. Con un poder en la mesa se planta antes.
+- Si el próximo golpe del rival lo deja sin vida, lo que rinde después no importa: va a todo.
+- En su última chance solo cuenta empatar: si con lo que tiene no alcanza, sigue robando.
+
+Contra un mismo jugador simulado (`npm run balance -- --difficulties`) la CPU gana
+~39% en Fácil, ~55% en Normal y ~63% en Duro.
 
 Para elegir del centro usa **conectividad**: por cada símbolo de la carta, cuántas
 cartas de su mazo lo llevan. Compara las dos ramas (2 sin poder vs. 1 con poder)
 convirtiendo el valor del efecto a la misma unidad con `POWER_WORTH`.
 
-"Juega el final" = cuando el golpe del humano la dejó sin vida, sigue robando en vez
-de plantarse con poco, porque plantarse por debajo pierde igual.
+"Juega el final" = en su última chance, si con lo que ya tiene alcanza para empatar,
+se planta y lo asegura.
 
 ---
 
@@ -446,12 +466,12 @@ El Modo Aventura es una campaña de progresión individual a través de **6 nive
 
 | Nivel | Nombre | Rival (Clase) | Dificultad | Nuevos poderes | Poderes activos |
 |---|---|---|---|---|---|
-| **1** | **Primeros Pasos** | Brote (Planta) | Fácil | Fuerza + Maceta *(¡y Free Game!)* | 2 poderes (Fuerza, Maceta) + Free Game |
-| **2** | Defensa y Estrategia | Racha (Pájaro) | Fácil | Huevo + Caracol | 4 poderes (Fuerza, Maceta, Huevo, Caracol) + Free Game |
-| **3** | El Arte del Mercado | Marea (Pez) | Normal | Pulpo + Veneno | 6 poderes clásicos (1 por clase) + Free Game |
-| **4** | Furia de la Naturaleza | Colmillo (Bestia) | Normal | Garra Brutal + Hoja | 6 poderes (Garra Brutal y Hoja sustituyen a Fuerza y Maceta) + Free Game |
-| **5** | Sombras y Vuelo | Aguijón (Bicho) | Duro | Greedy Leech + Pluma Sagrada | 6 poderes (Greedy Leech y Pluma sustituyen a Caracol y Huevo) + Free Game |
-| **6** | Duelo de Maestros | Escama (Reptil) | Duro | Burbuja + Piel de Escamas | 6 poderes avanzados (Burbuja y Piel de Escamas sustituyen a Pulpo y Veneno) + Free Game |
+| **1** | **Primeros Pasos** | Olek (Planta) | Fácil | Charm of Power + Leafy Pot *(¡y Free Game!)* | 2 poderes (Charm of Power, Leafy Pot) + Free Game |
+| **2** | Defensa y Estrategia | Momo (Pájaro) | Fácil | Secret Egg + Lazy Snail | 4 poderes (Charm of Power, Leafy Pot, Secret Egg, Lazy Snail) + Free Game |
+| **3** | El Arte del Mercado | Puffy (Pez) | Normal | Sticky Octopus + Poison Vial | 6 poderes clásicos (1 por clase) + Free Game |
+| **4** | Furia de la Naturaleza | Buba (Bestia) | Normal | Energy Drink M + Spring Leaf | 6 poderes (Energy Drink y Spring Leaf sustituyen a Charm of Power y Leafy Pot) + Free Game |
+| **5** | Sombras y Vuelo | Pomodoro (Bicho) | Duro | Mantis Dagger + Feather Earring | 6 poderes (Mantis Dagger y Feather Earring sustituyen a Lazy Snail y Secret Egg) + Free Game |
+| **6** | Duelo de Maestros | Venoki (Reptil) | Duro | Bubble Paste + Gecko Mask | 6 poderes avanzados (Bubble Paste y Gecko Mask sustituyen a Sticky Octopus y Poison Vial) + Free Game |
 
 ### Free Game en el Nivel 1
 

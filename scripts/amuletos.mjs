@@ -25,7 +25,6 @@ export const AMULETO_PICKS = {
   feather: 'ecard_bird_momo_1.png',
   pot: 'ecard_plant_4003.png',
   leaf: 'ecard_plant_ena_1.png',
-  oak: 'ecard_plant_ena_1.png',
   snail: 'ecard_bug_5005.png',
   leech: 'ecard_mantis_dagger.png',
   poison: 'ecard_reptile_venoki_1.png',

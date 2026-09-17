@@ -1,4 +1,5 @@
-// Genera `src/vfx-clips.js`: la geometría de los efectos de golpe, uno por clase.
+// Genera `src/vfx-clips.js`: la geometría de los efectos de golpe, uno por clase, y la
+// de los efectos de los poderes.
 //
 // Los efectos salen del Axie Origins Asset Kit (`web-vfx/public/vfx/`), que publica
 // cada uno como un `atlas.png` —una grilla de cuadros— más un `clip.json` con la
@@ -37,6 +38,29 @@ const PICKS = {
   plant: 'plant_slash',
   reptile: 'reptile_slash',
   bust: 'disarmed',
+  // Los poderes (ver `power-fx.js`). No son golpes sino *buffs* del kit: caen centrados
+  // sobre el Axie que recibe el poder, sin atacante. Cada atlas pesa entre 1 y 3 MB y se
+  // pide solo si ese poder está en juego en la partida.
+  eggShield: 'shield',
+  eggBreak: 'shield_break',
+  eggThorns: 'reflect_damage',
+  poison: 'poison_apply',
+  feather: 'feather',
+  strength: 'dmg_boost',
+  brutal: 'power_gain',
+  octopus: 'buff_apply',
+  bubble: 'bubble',
+  pot: 'heal',
+  leaf: 'leaf',
+  snail: 'weak',
+  leech: 'drain',
+  steelskin: 'shield_boost',
+  // La pantalla del final (ver `result.js`): el despertar dorado sobre el que ganó, la
+  // marca de la muerte sobre el que cayó y el mareo sobre los dos del doble KO. Son los
+  // mismos del sonido de cada remate (`win`, `lose`, `tie` en `scripts/sfx.mjs`).
+  win: 'power_awaken',
+  lose: 'death_mark_apply',
+  tie: 'stunned',
 };
 
 async function clipJson(id) {
@@ -91,9 +115,9 @@ writeFileSync(
   OUT,
   `// GENERADO por \`npm run vfx\` desde ${REPO}@${REF} — no editar a mano.
 //
-// Un efecto por clase más el de cadena cortada. Cada uno es una grilla de \`cols\`
-// columnas de cuadros de \`frameW\`×\`frameH\` dentro de su \`atlas.png\`, que se pide
-// al CDN recién cuando esa clase golpea por primera vez. \`anchor\` es el punto del
+// Un efecto por clase, el de cadena cortada y los de los poderes. Cada uno es una
+// grilla de \`cols\` columnas de cuadros de \`frameW\`×\`frameH\` dentro de su
+// \`atlas.png\`, que se pide al CDN recién cuando hace falta. \`anchor\` es el punto del
 // cuadro que se apoya sobre el Axie que recibe; \`hitAt\` es el segundo en que pega.
 export const VFX_BASE = '${CDN}';
 

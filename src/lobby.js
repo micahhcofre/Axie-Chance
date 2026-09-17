@@ -51,7 +51,7 @@ import {
   ADVENTURE_LEVELS, getAdventureProgress, getAdventureLevel, isLevelUnlocked,
   DIFFICULTY_LABELS,
 } from './adventure.js';
-import { openSymbols, openHud } from './ui.js';
+import { openSymbols, openHud, ghostOut } from './ui.js';
 import { tr, currentLang, setLang } from './i18n.js';
 
 // `el` y no `$` como en `ui.js` ni `byId` como en `net.js`: el build de un solo
@@ -376,6 +376,11 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
 
   /** Qué pantalla de la portada se ve: el botón grande, el menú o la elección. */
   function view(which) {
+    // La que se va sale con la misma suavidad con la que entró: se deja una copia
+    // quieta que se apaga encima, y la de verdad se guarda en el acto.
+    for (const [name, node] of [['front', front], ['menu', menu], ['choose', choose], ['adventure', adv]]) {
+      if (name !== which && node && !node.hidden) ghostOut(node, lobby);
+    }
     lobby.dataset.view = which;
     front.hidden = which !== 'front';
     menu.hidden = which !== 'menu';
@@ -622,7 +627,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   function play() {
     ui.restart({
       mode: 'cpu',
-      difficulty: el('difficulty').value,
+      difficulty: el('difficulty').dataset.value ?? 'normal',
       axie: pick,
       // Las mejoras viajan al lado de su Axie: son de él, no del asiento. El de la
       // máquina se sortea en el momento y no lleva ninguna.
@@ -673,11 +678,16 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     else if (which === 'adventure') toAdventure();
     else view(which);
     lobby.hidden = false;
+    // En la portada no hay partida que abandonar: la salida del menú se guarda y vuelve
+    // a aparecer cuando la portada se va y empieza una. En una sala la maneja `net.js`.
+    if (!net) el('menu-btn').hidden = true;
     for (const s of strollers ?? []) s.wake();
   }
 
   function close() {
+    if (!lobby.hidden) ghostOut(lobby, document.body);
     lobby.hidden = true;
+    if (!net) el('menu-btn').hidden = false;
     heroMotion.stop();
     rivalMotion?.stop();
     for (const s of strollers ?? []) s.sleep();
@@ -685,8 +695,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
 
   el('lobby-play').addEventListener('click', () => view('menu'));
   el('lobby-loadout').addEventListener('click', toChoose);
-  el('lobby-back').addEventListener('click', () => view('front'));
-  el('lobby-menu-close')?.addEventListener('click', () => view('front'));
+  el('lobby-menu-close').addEventListener('click', () => view('front'));
   el('lobby-choose-back').addEventListener('click', () => (net ? close() : view('front')));
   advBack.addEventListener('click', () => view('menu'));
   adv.addEventListener('click', (e) => {
@@ -705,6 +714,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   el('lobby-next').addEventListener('click', () => browse(1));
   el('lobby-rules').addEventListener('click', () => el('rules-modal').showModal());
   el('lobby-symbols')?.addEventListener('click', openSymbols);
+  el('lobby-vision')?.addEventListener('click', () => el('vision-modal').showModal());
 
   // El tutorial: una partida guionada con tooltips. Arranca un game propio y lo
   // monta en la misma mesa. Al terminar vuelve a la portada.
@@ -717,13 +727,15 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     close();
   });
 
-  const diffSelect = el('difficulty');
-  const syncDiffPills = (val) => {
+  /** La dificultad elegida: queda en el grupo y cada botón dice si es el puesto. */
+  const pickDifficulty = (val) => {
+    el('difficulty').dataset.value = val;
     menu.querySelectorAll?.('.diff-pill')?.forEach((b) => {
-      b.classList?.toggle('is-active', b.dataset?.diff === val);
+      const on = b.dataset?.diff === val;
+      b.classList?.toggle('is-active', on);
+      b.setAttribute?.('aria-checked', String(on));
     });
   };
-  diffSelect?.addEventListener('change', () => syncDiffPills(diffSelect.value));
 
   menu.addEventListener('click', (e) => {
     const mode = e.target.closest?.('[data-play]:not([disabled])')?.dataset?.play;
@@ -743,15 +755,8 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
       play();
       return;
     }
-    const diffPill = e.target.closest?.('.diff-pill');
-    if (diffPill?.dataset?.diff) {
-      const val = diffPill.dataset.diff;
-      if (diffSelect) {
-        diffSelect.value = val;
-        syncDiffPills(val);
-      }
-      return;
-    }
+    const val = e.target.closest?.('.diff-pill')?.dataset?.diff;
+    if (val) pickDifficulty(val);
   });
 
   el('lobby-start').addEventListener('click', chooseGo);
@@ -790,23 +795,24 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   }
 
   // Abandonar la partida: la puerta de vuelta, adentro del menú de las tres rayitas.
-  // La prende la portada porque es suya —con la partida en red no hay portada a la que
-  // volver y el botón se queda guardado—, y vuelve al menú y no al botón grande: el que
+  // La prende la portada al irse (ver `close`) —con la partida en red no hay portada a
+  // la que volver y el botón se queda guardado—, y vuelve al menú y no al botón grande: el que
   // abandona en el medio de una partida ya sabe a qué vino.
-  const back = el('menu-btn');
-  back.hidden = false;
-  back.addEventListener('click', () => open('menu'));
+  el('menu-btn').addEventListener('click', () => open('menu'));
 
-  // La otra puerta de vuelta: la que aparece al pie cuando la partida termina (ver
-  // `controlsHtml` en `ui.js`). Terminada la partida hay dos cosas que se pueden
+  // La otra puerta de vuelta: la que aparece en la pantalla del final (ver
+  // `endActionsHtml` en `ui.js`). Terminada la partida hay dos cosas que se pueden
   // querer —otra igual, o cambiar de idea— y las dos tienen que estar ahí, sin ir a
   // buscar la de las tres rayitas. La engancha la portada por el mismo motivo que la
   // otra: el botón lo dibuja la mesa, pero volver es asunto de la portada, y en la
   // partida en red no hay portada a la que volver.
-  el('controls').addEventListener('click', (e) => {
+  const doors = (e) => {
     if (e.target.closest('[data-action="menu"]')) open('menu');
     if (e.target.closest('[data-action="adv-map"]')) open('adventure');
-  });
+  };
+  el('controls').addEventListener('click', doors);
+  // Las puertas del final viven en la pantalla del final (ver `result.js`).
+  el('result')?.addEventListener('click', doors);
 
   // Botón de configuración en la portada (arriba a la derecha).
   // Abre el mismo panel que hay en el juego (#hud-menu), donde vive el sonido y el idioma.

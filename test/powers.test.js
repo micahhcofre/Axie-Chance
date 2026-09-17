@@ -4,7 +4,7 @@
 // suelta el ataque, que es el momento en que todos resuelven. Se mira el estado que
 // queda puesto, no el registro: lo que importa es que el próximo golpe cuente bien.
 import assert from 'node:assert/strict';
-import { createGame, TARGET, TUNING, hpOf, swingOf } from '../src/game.js';
+import { createGame, TARGET, TUNING, brutalBonusOf, hpOf, lastChance, powerBeat, swingOf } from '../src/game.js';
 import { activeSymbols, emptyChain, playCard, scoreChain, stackOnCard } from '../src/rules.js';
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
@@ -28,30 +28,50 @@ async function atPlayerTurn(chain) {
   return game;
 }
 
-// --- fuerza: +2 en este ataque y en todos los que siguen ----------------------
+// --- fuerza: +1 permanente instantáneo cada vez que aparece ------------------
 {
-  // Una cadena de dos aquatic vale 2² = 4. La carta de fuerza es el segundo eslabón.
-  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'], 'strength'));
-  const game = await atPlayerTurn(chain);
-  assert.equal(scoreChain(chain).total, 4 + 1, 'la cadena vale lo que vale'); // aquatic 2² + bird 1²
+  const game = createGame({ pace: 0 });
+  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+  await idle();
+  assert.equal(game.state.status.p1.strength, 0, 'fuerza inicial 0');
+  game.state.chains.p1 = chainOf(card(['aquatic', 'bird']));
 
-  // La fuerza todavía no está puesta: el golpe de este turno la estrena.
-  assert.equal(swingOf(game.state, 'p1'), 5, 'antes de soltar, el golpe es la cadena pelada');
+  // Ponemos una carta con Charm of Power en el mazo
+  const strCard = card(['aquatic', 'plant'], 'strength');
+  game.state.decks.p1.push(strCard);
+
+  // Al robarla (aparece en mesa), suma inmediatamente +1 daño permanente
+  await game.hit();
+  await idle();
+  assert.equal(game.state.status.p1.strength, TUNING.strengthStep, 'otorga +1 instantáneamente al aparecer');
+  // El swing del turno actual ya incluye la fuerza
+  assert.equal(swingOf(game.state, 'p1'), scoreChain(game.state.chains.p1).total + TUNING.strengthStep, 'el ataque actual ya suma la fuerza');
+
+  // Al plantarse, finishTurn no la vuelve a sumar
   await game.stand();
   await idle();
+  assert.equal(game.state.status.p1.strength, TUNING.strengthStep, 'al plantarse no se duplica');
 
-  const st = game.state.status.p1;
-  assert.equal(st.strength, TUNING.strengthStep, 'quedó acumulada');
-  assert.equal(game.state.roundScores.p1, 5, 'el ataque que la estrena no la cobra');
-  assert.equal(game.state.totals.p1, 5, 'el daño aplicado es el del ataque');
+  // Persiste si la cadena se corta en un turno futuro:
+  game.state.chains.p1 = chainOf(card(['aquatic', 'bird']));
+  const bustCard = card(['bug', 'reptile']); // corta cadena de aquatic
+  game.state.decks.p1.push(bustCard);
+  game.state.turn = 'p1';
+  await game.hit(); // corta la cadena y cierra el turno con 0
+  await idle();
+  assert.equal(game.state.status.p1.strength, TUNING.strengthStep, 'la fuerza ganada es permanente aunque se corte');
 
-  // La próxima cadena idéntica sí pega 2 más.
-  game.state.chains.p1 = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant']));
-  assert.equal(swingOf(game.state, 'p1'), 5 + TUNING.strengthStep, 'el golpe siguiente ya suma');
+  // Otra carta de Charm of Power que aparece suma otro +1 permanente
+  const strCard2 = card(['aquatic', 'beast'], 'strength');
+  game.state.chains.p1 = emptyChain();
+  game.state.decks.p1.push(strCard2);
+  game.state.phase = 'turn';
+  game.state.turn = 'p1';
+  game.state.busy = false;
+  await game.hit();
+  await idle();
+  assert.equal(game.state.status.p1.strength, 2 * TUNING.strengthStep, 'se acumula +1 con cada aparición');
 
-  // Y se acumula: una segunda carta de fuerza suma otros 2.
-  game.state.status.p1.strength += TUNING.strengthStep;
-  assert.equal(swingOf(game.state, 'p1'), 5 + 2 * TUNING.strengthStep, 'acumulable');
   console.log('  ✓ fuerza');
 }
 
@@ -120,9 +140,9 @@ async function atPlayerTurn(chain) {
   console.log('  ✓ caracol (se gasta con daño)');
 }
 
-// --- veneno: la mitad del daño, mordiendo cada ronda y partiéndose al medio ---
+// --- veneno: dosis fija por frasco, mordiendo cada ronda y partiéndose al medio ---
 {
-  // aquatic×3 = 9, bird muere en la segunda: 9 + 1 = 10 de ataque → 5 de veneno.
+  // Un frasco pone 6 de veneno, pegue lo que pegue el ataque.
   const chain = chainOf(
     card(['aquatic', 'bird']),
     card(['aquatic', 'plant'], 'poison'),
@@ -133,7 +153,7 @@ async function atPlayerTurn(chain) {
   await game.stand();
   await idle();
 
-  assert.equal(game.state.status.p2.poison, 5, 'medio ataque de veneno');
+  assert.equal(game.state.status.p2.poison, TUNING.poisonDose, 'un frasco, una dosis');
   const before = hpOf(game.state, 'p2');
 
   // El veneno muerde al finalizar el turno del oponente (p2) y recién después se parte al medio.
@@ -147,10 +167,36 @@ async function atPlayerTurn(chain) {
     else await idle();
   }
   assert.ok(closed, 'el intercambio cerró');
-  assert.equal(closed.hp, before - 5, 'mordió por 5');
-  // 5 se parte en 2, y 2 es el piso: mordió con todo y se fue en la misma ronda.
-  assert.equal(closed.poison, 0, 'y después se fue: la mitad de 5 no pasa el piso');
+  assert.equal(closed.hp, before - 6, 'mordió por 6');
+  // 6 se parte en 3, que todavía pasa el piso de 2.
+  assert.equal(closed.poison, 3, 'y quedó la mitad');
   console.log('  ✓ veneno');
+}
+{
+  // Dos frascos en la cadena ponen dos dosis, y se suman al veneno que ya había.
+  const chain = chainOf(
+    card(['aquatic', 'bird'], 'poison'),
+    card(['aquatic', 'plant'], 'poison'),
+  );
+  const game = await atPlayerTurn(chain);
+  game.state.status.p2.poison = 4;
+  await game.stand();
+  await idle();
+  assert.equal(game.state.status.p2.poison, 4 + 2 * TUNING.poisonDose, 'dos frascos, dos dosis, sobre lo que había');
+  console.log('  ✓ veneno (acumulable)');
+}
+{
+  // El veneno no pasa por el escudo ni por el tope de la máscara: va directo a la vida.
+  const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
+  game.state.status.p1.poison = 10;
+  game.state.status.p1.egg = 50;
+  game.state.status.p1.steelskin = 6;
+  await game.stand();
+  for (let i = 0; i < 50 && game.state.status.p1.poison === 10; i++) await idle();
+  assert.equal(hpOf(game.state, 'p1'), TARGET - 10, 'mordió los 10 enteros');
+  assert.equal(game.state.status.p1.egg, 50, 'sin tocar el escudo');
+  assert.equal(game.state.status.p1.steelskin, 6, 'ni gastar la máscara');
+  console.log('  ✓ veneno (atraviesa el escudo)');
 }
 
 {
@@ -175,8 +221,8 @@ async function atPlayerTurn(chain) {
   await game.stand();
   await idle();
 
-  // p1 le aplicó 5 de veneno a p2 (ataque de 10)
-  assert.equal(game.state.status.p2.poison, 5, 'le aplicó 5 de veneno al rival');
+  // p1 le aplicó una dosis de veneno a p2 (ataque de 10)
+  assert.equal(game.state.status.p2.poison, 6, 'le aplicó 6 de veneno al rival');
   const p2HpAfterAttack = hpOf(game.state, 'p2');
   assert.equal(p2HpAfterAttack, p2HpBefore - 10, 'el ataque conectó por 10');
 
@@ -186,17 +232,17 @@ async function atPlayerTurn(chain) {
 
   // La ronda cerró porque p1 era el segundo en jugar.
   // ¡El veneno NO debió morder a p2 al cerrar la ronda!
-  assert.equal(game.state.status.p2.poison, 5, 'p2 conserva los 5 de veneno al cerrar la ronda');
+  assert.equal(game.state.status.p2.poison, 6, 'p2 conserva los 6 de veneno al cerrar la ronda');
   assert.equal(hpOf(game.state, 'p2'), p2HpAfterAttack, 'p2 no recibió daño de veneno enseguida');
 
   // En la siguiente ronda, cuando p2 juega y termina su turno, muerde el veneno:
   for (let i = 0; i < 800; i++) {
-    if (game.state.status.p2.poison === 0) break;
+    if (game.state.status.p2.poison !== 6) break;
     if (game.state.phase === 'draft' && game.drafting() === 'p1') await game.skipDraft();
     else await idle();
   }
-  assert.equal(game.state.status.p2.poison, 0, 'el veneno mordió y se redujo a 0 al finalizar el turno de p2');
-  assert.equal(hpOf(game.state, 'p2'), p2HpAfterAttack - 5, 'p2 perdió los 5 puntos de veneno');
+  assert.equal(game.state.status.p2.poison, 3, 'el veneno mordió y se partió al medio al finalizar el turno de p2');
+  assert.equal(hpOf(game.state, 'p2'), p2HpAfterAttack - 6, 'p2 perdió los 6 puntos de veneno');
   console.log('  ✓ veneno (jugando segundo no muerde enseguida al cerrar la ronda)');
 }
 
@@ -250,10 +296,22 @@ async function atPlayerTurn(chain) {
   await idle();
   assert.equal(hpOf(game.state, 'p1'), TARGET, 'no se pasa del tope');
   assert.equal(game.state.healed.p1, 4, 'solo se guarda lo que curó de verdad');
+}
+{
+  // En la última chance no hay cura: la maceta no levanta del cero.
+  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'], 'pot'));
+  const game = await atPlayerTurn(chain);
+  game.state.totals.p2 = TARGET;
+  assert.equal(lastChance(game.state), 'p1');
+  await game.stand();
+  for (let i = 0; i < 50 && game.state.phase !== 'matchEnd'; i++) await idle();
+  assert.equal(game.state.healed.p1, 0, 'la maceta no cura sin vida');
+  assert.equal(hpOf(game.state, 'p1'), 0);
+  assert.equal(game.state.phase, 'matchEnd', 'y el golpe cierra la partida');
   console.log('  ✓ maceta');
 }
 
-// --- huevo: escudo de medio golpe, de un solo uso -----------------------------
+// --- huevo: escudo de un tercio del golpe, que se suma -------------------------
 {
   const chain = chainOf(
     card(['aquatic', 'bird']),
@@ -261,9 +319,9 @@ async function atPlayerTurn(chain) {
     card(['aquatic', 'beast']),
   );
   const game = await atPlayerTurn(chain);
-  await game.stand(); // ataque de 10 → huevo de 5
+  await game.stand(); // ataque de 10 → escudo de 3
   await idle();
-  assert.equal(game.state.status.p1.egg, 5, 'huevo de la mitad del golpe');
+  assert.equal(game.state.status.p1.egg, 3, 'escudo de un tercio del golpe');
 }
 {
   // El huevo se come lo que puede del próximo golpe y deja pasar el resto.
@@ -314,6 +372,7 @@ async function atPlayerTurn(chain) {
   );
   const game = await atPlayerTurn(chain);
   game.state.status.p2.egg = 4;
+  game.state.status.p2.eggBreak = TUNING.eggBreak; // un huevo de verdad trae su cáscara
   await game.stand(); // 10 de ataque contra 4 de huevo: lo rompe
   await idle();
   assert.equal(game.state.status.p2.egg, 0, 'el huevo se rompió');
@@ -351,24 +410,22 @@ async function atPlayerTurn(chain) {
   console.log('  ✓ huevo (cadena cortada)');
 }
 {
-  // Dos cartas de huevo en la misma cadena:
-  // El escudo NO se acumula (se reemplaza, queda en 5).
-  // El daño de rotura SÍ se acumula (+8 por cada huevo = 16).
+  // Dos cartas de huevo en la misma cadena: se suman el escudo (3 + 3) y la cáscara
+  // (+8 por cada huevo = 16).
   const chain = chainOf(
     card(['aquatic', 'bird']),
     card(['aquatic', 'plant'], 'egg'),
     card(['aquatic', 'beast'], 'egg'),
   );
   const game = await atPlayerTurn(chain);
-  await game.stand(); // 10 de ataque -> huevo de 5 (reemplaza, no se acumula), eggBreak de 16 (8+8)
+  await game.stand(); // 10 de ataque -> 3 de escudo por huevo, eggBreak de 16 (8+8)
   await idle();
-  assert.equal(game.state.status.p1.egg, 5, 'el escudo NO se acumula, se reemplaza');
+  assert.equal(game.state.status.p1.egg, 6, 'el escudo se acumula');
   assert.equal(game.state.status.p1.eggBreak, 16, 'el daño de rotura acumula 8 por cada huevo');
-  console.log('  ✓ huevo (el escudo no se acumula, daño acumulable)');
+  console.log('  ✓ huevo (escudo y cáscara acumulables)');
 }
 {
-  // Ganar huevo teniendo ya un huevo activo:
-  // El nuevo escudo reemplaza al anterior; el daño de rotura se acumula (+8).
+  // Ganar huevo teniendo ya escudo: se suma al anterior; el daño de rotura también (+8).
   const chain = chainOf(
     card(['aquatic', 'bird']),
     card(['aquatic', 'plant']),
@@ -377,11 +434,20 @@ async function atPlayerTurn(chain) {
   const game = await atPlayerTurn(chain);
   game.state.status.p1.egg = 2; // escudo previo
   game.state.status.p1.eggBreak = 8;
-  await game.stand(); // 10 de ataque -> nuevo escudo de 5 (reemplaza al de 2), +8 de eggBreak (total 16)
+  await game.stand(); // 10 de ataque -> +3 de escudo sobre los 2, +8 de eggBreak (total 16)
   await idle();
-  assert.equal(game.state.status.p1.egg, 5, 'el nuevo escudo reemplaza al anterior');
+  assert.equal(game.state.status.p1.egg, 5, 'el nuevo escudo se suma al anterior');
   assert.equal(game.state.status.p1.eggBreak, 16, 'el daño de rotura se acumula a 16');
-  console.log('  ✓ huevo (el escudo se reemplaza al ganar uno nuevo)');
+  console.log('  ✓ huevo (el escudo se suma al que había)');
+}
+{
+  // Un golpe chico igual deja escudo: al menos 1, para que la cáscara tenga qué romper.
+  const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'], 'egg')));
+  await game.stand(); // 2 de ataque: un tercio es 0, queda en 1
+  await idle();
+  assert.equal(game.state.status.p1.egg, 1, 'mínimo 1 de escudo');
+  assert.equal(game.state.status.p1.eggBreak, TUNING.eggBreak);
+  console.log('  ✓ huevo (mínimo 1 de escudo)');
 }
 {
   // El rival tiene huevo acumulado (por ejemplo 10 de escudo y 16 de daño de cáscara).
@@ -436,10 +502,9 @@ async function atPlayerTurn(chain) {
 
 // --- cadena cortada: no sale ningún poder ------------------------------------
 {
-  // Cuatro poderes en la mano y un ataque de 0: no sale ninguno. Ni la fuerza, que
-  // era la que cobraba igual.
+  // Cuatro poderes en la mano y un ataque de 0: no sale ninguno de los que requieren conectar daño.
   const chain = chainOf(
-    card(['aquatic', 'bird'], 'strength'),
+    card(['aquatic', 'bird'], 'pot'),
     card(['aquatic', 'plant'], 'snail'),
     card(['aquatic', 'beast'], 'poison'),
     card(['bug', 'reptile'], 'egg'), // ni bug ni reptile siguen vivos: acá se corta
@@ -453,8 +518,7 @@ async function atPlayerTurn(chain) {
   const s = game.state;
   assert.equal(s.roundScores.p1, 0, 'una cadena cortada hace 0');
   assert.equal(s.totals.p1, 0);
-  // La fuerza tampoco: sin ataque no hay nada que afilar.
-  assert.equal(s.status.p1.strength, 0, 'la fuerza no sale de un ataque en cero');
+  assert.equal(s.healed.p1, 0, 'la maceta no cura sin ataque');
   assert.equal(s.status.p2.weak, 0, 'el caracol se mide contra el daño: nada');
   assert.equal(s.status.p2.poison, 0, 'el veneno tampoco');
   assert.equal(s.status.p1.egg, 0, 'el huevo tampoco');
@@ -575,10 +639,10 @@ async function atPlayerDraft(chain) {
 
 {
   // Con la cadena cortada no cobra nadie: ni el pulpo, que pide haberse plantado, ni
-  // la fuerza, que se mide contra el daño como todo el resto.
+  // la maceta, que se mide contra el daño.
   const chain = chainOf(
     card(['aquatic', 'bird'], 'octopus'),
-    card(['bug', 'reptile'], 'strength'), // ni bug ni reptile viven: acá se corta
+    card(['bug', 'reptile'], 'pot'), // ni bug ni reptile viven: acá se corta
   );
   const game = await atPlayerTurn(chain);
   assert.ok(chain.busted);
@@ -586,7 +650,7 @@ async function atPlayerDraft(chain) {
   await idle();
   assert.equal(game.state.roundScores.p1, 0, 'el ataque hizo 0');
   assert.equal(game.state.status.p1.stacked, 0, 'el pulpo se fue con la cadena');
-  assert.equal(game.state.status.p1.strength, 0, 'y la fuerza también');
+  assert.equal(game.state.healed.p1, 0, 'la maceta tampoco cura');
   console.log('  ✓ pulpo (cadena cortada: no cobra)');
 }
 
@@ -608,15 +672,15 @@ async function atPlayerDraft(chain) {
   console.log('  ✓ pulpo (plantado y debilitado: cobra)');
 }
 
-// --- garra brutal: +2 de daño por cada símbolo de la cadena más larga ---------
+// --- garra brutal: +3 de daño por cada símbolo de la cadena más larga ---------
 {
   // 1. Cadena de 1 carta con Garra Brutal: se activa siempre
   const chain1 = chainOf(
     card(['beast', 'bird'], 'brutal'),
   );
   const game1 = await atPlayerTurn(chain1);
-  // beast = 1, bird = 1. base = 1^2 + 1^2 = 2. brutal: 1 * 2 * 1 = 2. swing = 4
-  assert.equal(swingOf(game1.state, 'p1'), 4, 'se activa siempre, incluso con 1 carta');
+  // beast = 1, bird = 1. base = 1^2 + 1^2 = 2. brutal: 1 * 3 * 1 = 3. swing = 5
+  assert.equal(swingOf(game1.state, 'p1'), 5, 'se activa siempre, incluso con 1 carta');
 
   // 2. Cadena de 3 cartas con Bestia viva (longitud 3 de Bestia)
   const chain3 = chainOf(
@@ -626,12 +690,12 @@ async function atPlayerDraft(chain) {
   );
   const game3 = await atPlayerTurn(chain3);
   // scoreChain: beast 3^2 = 9, bird 1^2 = 1. total = 10
-  // maxRunLength = 3 (beast = 3). 1 brutal * 2 * 3 = 6 de bono. total swing = 10 + 6 = 16
-  assert.equal(swingOf(game3.state, 'p1'), 16, 'suma +2 por símbolo de la cadena más larga');
+  // maxRunLength = 3 (beast = 3). 1 brutal * 3 * 3 = 9 de bono. total swing = 10 + 9 = 19
+  assert.equal(swingOf(game3.state, 'p1'), 19, 'suma +3 por símbolo de la cadena más larga');
 
   await game3.stand();
   await idle();
-  assert.equal(game3.state.roundScores.p1, 16, 'el daño aplicado incluye el bono');
+  assert.equal(game3.state.roundScores.p1, 19, 'el daño aplicado incluye el bono');
 
   // 3. Cadena donde la más larga no es Bestia (ej. Bird tiene 3 y Bestia murió en 1)
   const chainNoBeast = chainOf(
@@ -641,8 +705,8 @@ async function atPlayerDraft(chain) {
   );
   const gameNoBeast = await atPlayerTurn(chainNoBeast);
   // bird 3^2 = 9, beast 1^2 = 1. base = 10. maxRunLength = 3 (bird).
-  // bono = 1 * 2 * 3 = 6. total = 10 + 6 = 16.
-  assert.equal(swingOf(gameNoBeast.state, 'p1'), 16, 'da bono por la cadena más larga de cualquier clase');
+  // bono = 1 * 3 * 3 = 9. total = 10 + 9 = 19.
+  assert.equal(swingOf(gameNoBeast.state, 'p1'), 19, 'da bono por la cadena más larga de cualquier clase');
 
   // 4. Cadena con 2 cartas de Garra Brutal (acumulable)
   const chain2Brutal = chainOf(
@@ -651,8 +715,8 @@ async function atPlayerDraft(chain) {
     card(['beast', 'aquatic'], 'brutal'),
   );
   const game2Brutal = await atPlayerTurn(chain2Brutal);
-  // 2 garras * 2 * 3 (largo max) = +12 de bono. Base: 10. Total: 22.
-  assert.equal(swingOf(game2Brutal.state, 'p1'), 22, 'dos garras se acumulan (+12)');
+  // 2 garras * 3 * 3 (largo max) = +18 de bono. Base: 10. Total: 28.
+  assert.equal(swingOf(game2Brutal.state, 'p1'), 28, 'dos garras se acumulan (+18)');
 
   // 5. Cadena cortada: todo da 0
   const chainBusted = playCard(chain3, card(['bug', 'reptile']));
@@ -785,21 +849,18 @@ async function atPlayerDraft(chain) {
   console.log('  ✓ pluma sagrada (acumulación)');
 }
 
-// --- brote de roble: compatibilidad con oak ----------------------------------
-{
-  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'], 'oak'));
-  const game = await atPlayerTurn(chain);
-  // El jugador recibe 20 de daño para poder curarse
-  game.state.totals.p2 += 20;
-
-  await game.stand();
-  await idle();
-
-  const st = game.state.status.p1;
-  // La carta otorga 2 hojas. Al final del turno cura 2*4=8 y consume 1 hoja -> queda 1 hoja
-  assert.equal(game.state.healed.p1, 8, 'curó +8 al final del turno (2 hojas * 4)');
-  assert.equal(st.leaf, 1, 'quedó 1 hoja activa tras consumir 1');
-  console.log('  ✓ brote de roble (compatibilidad)');
+/**
+ * Deja correr la partida hasta que al jugador le vuelve a tocar, salteando su centro.
+ * Las hojas curan al empezar ese turno, antes de robar.
+ */
+async function toNextPlayerTurn(game) {
+  for (let i = 0; i < 2000 && game.state.turn !== null; i++) await idle();
+  for (let i = 0; i < 2000 && (game.state.turn !== 'p1' || game.state.phase !== 'turn'); i++) {
+    if (game.state.phase === 'draft' && game.drafting() === 'p1') await game.skipDraft();
+    else if (game.state.phase === 'roundEnd') await game.nextRound();
+    else await idle();
+  }
+  assert.equal(game.state.turn, 'p1', 'le vuelve a tocar al jugador');
 }
 
 // --- hoja (leaf): 2 hojas por carta, cura 4 por hoja y consume 1 -------------
@@ -809,27 +870,20 @@ async function atPlayerDraft(chain) {
   game.state.totals.p2 += 20;
 
   await game.stand();
-  for (let i = 0; i < 400 && game.state.status.p1.leaf !== 1; i++) await idle();
+  await idle();
+  assert.equal(game.state.healed.p1, 0, 'al plantarse todavía no cura');
+  assert.equal(game.state.status.p1.leaf, 2, 'ganó 2 hojas');
 
-  const st = game.state.status.p1;
-  assert.equal(game.state.healed.p1, 8, 'curó +8 al final del turno (2 hojas * 4)');
-  assert.equal(st.leaf, 1, 'quedó 1 hoja activa tras consumir 1');
+  // Próximo turno: cura antes de robar.
+  await toNextPlayerTurn(game);
+  assert.equal(game.state.healed.p1, 8, 'curó +8 al inicio del turno (2 hojas * 4)');
+  assert.equal(game.state.status.p1.leaf, 1, 'quedó 1 hoja activa tras consumir 1');
 
-  // Segunda ronda: p1 juega su siguiente turno y se planta
-  for (let i = 0; i < 800 && game.state.phase !== 'roundEnd'; i++) {
-    if (game.state.phase === 'draft' && game.drafting() === 'p1') await game.skipDraft();
-    else await idle();
-  }
-  if (game.state.phase === 'roundEnd') {
-    game.state.decks.p1 = [card(['aquatic', 'bird']), card(['aquatic', 'bird'])];
-    await game.nextRound();
-  }
-  for (let i = 0; i < 800 && (game.state.turn !== 'p1' || game.state.phase !== 'turn'); i++) await idle();
-
+  // Se planta con cartas sin hoja y al turno siguiente la última hoja cura 4.
+  game.state.chains.p1 = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'bird']));
   await game.stand();
-  for (let i = 0; i < 400 && game.state.status.p1.leaf !== 0; i++) await idle();
-
-  assert.equal(game.state.healed.p1, 12, 'curó +4 adicional en la siguiente ronda (total 12)');
+  await toNextPlayerTurn(game);
+  assert.equal(game.state.healed.p1, 12, 'curó +4 adicional en el turno siguiente (total 12)');
   assert.equal(game.state.status.p1.leaf, 0, 'se consumieron todas las hojas');
 
   console.log('  ✓ hoja (leaf)');
@@ -845,15 +899,17 @@ async function atPlayerDraft(chain) {
 
   await game.stand();
   await idle();
-
   // Tenía 4 + 2 de la carta = 6, pero tope 5.
-  // Al final del turno cura 5 * 4 = 20 HP y consume 1 hoja -> quedan 4
+  assert.equal(game.state.status.p1.leaf, 5, 'tope de 5 hojas');
+
+  // Al inicio del próximo turno cura 5 * 4 = 20 HP y consume 1 hoja -> quedan 4
+  await toNextPlayerTurn(game);
   assert.equal(game.state.healed.p1, 20, 'curó 20 con el tope de 5 hojas');
   assert.equal(game.state.status.p1.leaf, 4, 'quedan 4 hojas tras consumir 1');
   console.log('  ✓ hoja (acumulación hasta 5)');
 }
 
-// --- hoja (leaf): curación y consumo incluso si la cadena se corta -----------
+// --- hoja (leaf): la cura llega aunque la cadena se corte ---------------------
 {
   const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
   game.state.status.p1.leaf = 2;
@@ -866,76 +922,66 @@ async function atPlayerDraft(chain) {
   await idle();
 
   assert.ok(game.state.chains.p1.busted, 'la cadena se cortó');
-  // No debe sumar hojas nuevas porque swing fue 0
-  // Pero las 2 hojas que ya tenía curan 8 HP y consumen 1 hoja -> queda 1
-  assert.equal(game.state.healed.p1, 8, 'curó +8 al final del turno fallido');
+  // No suma hojas nuevas porque el golpe fue 0, y las que tenía no curan al cortarse.
+  assert.equal(game.state.status.p1.leaf, 2, 'sin hojas nuevas y sin gastar');
+  assert.equal(game.state.healed.p1, 0, 'no cura al cortarse');
+
+  // Al empezar el próximo turno las 2 hojas curan 8 y se gasta 1, antes de robar.
+  await toNextPlayerTurn(game);
+  assert.equal(game.state.healed.p1, 8, 'curó +8 al inicio del turno');
   assert.equal(game.state.status.p1.leaf, 1, 'quedó 1 hoja tras consumir 1');
-  console.log('  ✓ hoja (curación al final del turno aunque la cadena se corte)');
+  console.log('  ✓ hoja (curación al inicio del turno aunque el anterior se haya cortado)');
 }
 
-// --- greedy leech: drena 6 de vida (o 12 con 4+ columnas en mesa) --------------
+// --- Mantis Dagger: roba 5 HP por cada mantis en ataque exitoso --------------
 {
-  // 1. Cadena normal (< 4 columnas): drena 6
-  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'bug'], 'leech'));
-  const game = await atPlayerTurn(chain);
-  game.state.totals.p2 += 20; // p1 tiene 80 HP
-  const hpP2Before = hpOf(game.state, 'p2');
-  const hpP1Before = hpOf(game.state, 'p1');
+  // 1. Cadena con 1 Mantis Dagger: roba 5 de vida
+  const chain1 = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'bug'], 'leech'));
+  const game1 = await atPlayerTurn(chain1);
+  game1.state.totals.p2 += 20; // p1 tiene 80 HP
+  const hpP2Before = hpOf(game1.state, 'p2');
+  const hpP1Before = hpOf(game1.state, 'p1');
 
-  await game.stand();
+  await game1.stand();
   await idle();
 
-  // Daño normal de cadena (aquatic 2^2 + bird 1^2 = 5) + 6 de leech = 11 de daño
-  assert.equal(game.state.totals.p1, 5 + TUNING.leechDrain, 'suma 6 al daño por drenaje');
-  assert.equal(hpOf(game.state, 'p2'), hpP2Before - 5 - TUNING.leechDrain, 'rival pierde 11 HP');
-  assert.equal(hpOf(game.state, 'p1'), hpP1Before + TUNING.leechDrain, 'jugador se cura 6 HP');
+  // Daño normal de cadena (aquatic 2^2 + bird 1^2 = 5) + 5 de leech = 10 de daño total
+  assert.equal(game1.state.totals.p1, 5 + TUNING.leechDrain, 'suma 5 al daño por drenaje');
+  assert.equal(hpOf(game1.state, 'p2'), hpP2Before - 5 - TUNING.leechDrain, 'rival pierde 10 HP');
+  assert.equal(hpOf(game1.state, 'p1'), hpP1Before + TUNING.leechDrain, 'jugador se cura 5 HP');
 
-  // 2. Con 4 o más columnas: drena 12
-  const chain4 = chainOf(
+  // 2. Con 2 Mantis Dagger en la cadena: roba 10 de vida (5 por cada una)
+  const chain2 = chainOf(
     card(['aquatic', 'bird']),
-    card(['aquatic', 'plant']),
-    card(['aquatic', 'beast']),
     card(['aquatic', 'bug'], 'leech'),
-  );
-  const game4 = await atPlayerTurn(chain4);
-  game4.state.totals.p2 += 30;
-  const p2Start = hpOf(game4.state, 'p2');
-  const p1Start = hpOf(game4.state, 'p1');
-  const pts = scoreChain(chain4).total;
-
-  await game4.stand();
-  await idle();
-
-  assert.equal(game4.state.totals.p1, pts + TUNING.leechBonusDrain, 'con 4 columnas drena 12');
-  assert.equal(hpOf(game4.state, 'p2'), p2Start - pts - TUNING.leechBonusDrain);
-  assert.equal(hpOf(game4.state, 'p1'), p1Start + TUNING.leechBonusDrain, 'cura 12');
-
-  // 3. Cadena con 3 columnas y 1 carta apilada (4 cartas en total): cuenta columnas (drena 6)
-  const chain3Stacked = chainOf(
-    card(['aquatic', 'bird']),
     card(['aquatic', 'plant']),
     card(['aquatic', 'bug'], 'leech'),
   );
-  const stackedChain = stackOnCard(chain3Stacked, 0, card(['aquatic', 'beast']));
-  assert.equal(stackedChain.cards.length, 3, 'siguen siendo 3 columnas');
-  const gameStacked = await atPlayerTurn(stackedChain);
-  const ptsStacked = scoreChain(stackedChain).total;
-  await gameStacked.stand();
-  await idle();
-  assert.equal(gameStacked.state.totals.p1, ptsStacked + TUNING.leechDrain, '3 columnas con apilado drena 6 (no 12)');
+  const game2 = await atPlayerTurn(chain2);
+  game2.state.totals.p2 += 30;
+  const p2Start = hpOf(game2.state, 'p2');
+  const p1Start = hpOf(game2.state, 'p1');
+  const pts2 = scoreChain(chain2).total;
 
-  // 4. Cadena cortada: no drena
-  const chainBusted = playCard(chain, card(['plant', 'reptile']));
+  await game2.stand();
+  await idle();
+
+  assert.equal(game2.state.totals.p1, pts2 + 2 * TUNING.leechDrain, 'con 2 mantis drena 10 (5 por cada una)');
+  assert.equal(hpOf(game2.state, 'p2'), p2Start - pts2 - 2 * TUNING.leechDrain, 'rival pierde daño + 10');
+  assert.equal(hpOf(game2.state, 'p1'), p1Start + 2 * TUNING.leechDrain, 'jugador se cura 10');
+
+  // 3. Cadena cortada: no drena
+  const chainBusted = playCard(chain1, card(['plant', 'reptile']));
   const gameBusted = await atPlayerTurn(chainBusted);
   const p2Busted = hpOf(gameBusted.state, 'p2');
   await gameBusted.stand();
   await idle();
   assert.equal(hpOf(gameBusted.state, 'p2'), p2Busted, 'si se corta no drena nada');
 
-  console.log('  ✓ greedy leech');
+  console.log('  ✓ Mantis Dagger (greedy leech)');
 }
 
-// --- piel de escamas: tope defensivo de 12 (acumulable bajando de a 2) ---------
+// --- Gecko Mask: +2 de escudo y tope de 12 a la vida (acumulable bajando de a 2) ---
 {
   // 1. Al plantarse, activa steelskin = 12
   const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'reptile'], 'steelskin'));
@@ -944,6 +990,8 @@ async function atPlayerDraft(chain) {
   await idle();
 
   assert.equal(game.state.status.p1.steelskin, TUNING.steelskinBaseCap, 'blindaje inicial de 12');
+  assert.equal(game.state.status.p1.egg, TUNING.steelskinShield, 'y 2 de escudo');
+  assert.equal(game.state.status.p1.eggBreak, 0, 'sin cáscara: eso es del huevo');
 
   // 2. Acumulable: un segundo steelskin baja el tope en -2 (a 10)
   const chain2 = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'reptile'], 'steelskin'));
@@ -952,6 +1000,14 @@ async function atPlayerDraft(chain) {
   await game2.stand();
   await idle();
   assert.equal(game2.state.status.p1.steelskin, 10, 'segunda piel reduce tope a 10');
+  assert.equal(game2.state.status.p1.egg, 2, 'y suma su escudo');
+
+  // El escudo de la máscara se suma al que ya había.
+  const gameStack = await atPlayerTurn(chainOf(card(['aquatic', 'bird']), card(['aquatic', 'reptile'], 'steelskin')));
+  gameStack.state.status.p1.egg = 5;
+  await gameStack.stand();
+  await idle();
+  assert.equal(gameStack.state.status.p1.egg, 7, 'el escudo se suma');
 
   // Piso mínimo de 6
   game2.state.status.p1.steelskin = 6;
@@ -980,7 +1036,28 @@ async function atPlayerDraft(chain) {
   assert.equal(hpOf(game3.state, 'p2'), p2HpBefore - 12, 'la CPU solo recibió 12 de daño');
   assert.equal(game3.state.status.p2.steelskin, 0, 'el blindaje se consumió con el ataque');
 
-  console.log('  ✓ piel de escamas');
+  // 4. El escudo va primero y el tope, sobre lo que llega a la vida: 26 contra 10 de
+  // escudo dejan pasar 16, y la máscara los baja a 12.
+  const game4 = await atPlayerTurn(bigChain);
+  game4.state.status.p2.egg = 10;
+  game4.state.status.p2.steelskin = 12;
+  await game4.stand();
+  await idle();
+  assert.equal(hpOf(game4.state, 'p2'), TARGET - 12, 'a la vida llegan 12');
+  assert.equal(game4.state.status.p2.egg, 0, 'el escudo se gastó');
+  assert.equal(game4.state.totals.p2, 0, 'escudo sin huevo: no hay cáscara');
+  assert.equal(game4.state.roundScores.p1, 22, 'el ataque vale lo que no frenó la máscara');
+
+  // 5. Un golpe que se come entero el escudo no gasta la máscara.
+  const game5 = await atPlayerTurn(chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'])));
+  game5.state.status.p2.egg = 20;
+  game5.state.status.p2.steelskin = 12;
+  await game5.stand();
+  await idle();
+  assert.equal(game5.state.status.p2.egg, 15);
+  assert.equal(game5.state.status.p2.steelskin, 12, 'la máscara sigue puesta');
+
+  console.log('  ✓ Gecko Mask');
 }
 
 // --- free game: apilado en primera carta y cartas posteriores ----------------
@@ -1091,11 +1168,11 @@ async function atPlayerDraft(chain) {
   assert.deepEqual(col.powers, ['freegame', 'strength'], 'la columna conserva ambos poderes');
   assert.equal(col.power, 'strength', 'power refleja el poder de combate');
 
-  // Al atacar/plantarse, el poder de fuerza debe aplicarse
-  assert.equal(game.state.status.p1.strength, 0, 'fuerza inicial 0');
+  // El poder de fuerza se aplica de inmediato al aparecer la carta
+  assert.equal(game.state.status.p1.strength, 1, 'la fuerza se aplicó al aparecer (+1 de fuerza)');
   await game.stand();
   await idle();
-  assert.equal(game.state.status.p1.strength, 1, 'la fuerza apilada se aplicó (+1 de fuerza)');
+  assert.equal(game.state.status.p1.strength, 1, 'conserva +1 de fuerza');
   console.log('  ✓ free game (poder apilado sobre free game no desaparece y tiene efecto)');
 }
 
@@ -1120,6 +1197,145 @@ async function atPlayerDraft(chain) {
   await idle();
   assert.ok(game.state.status.p2.poison > 0, 'el veneno se aplicó al rival');
   console.log('  ✓ free game (free game apilado sobre poder conserva el efecto del poder)');
+}
+
+// --- las animaciones: el motor dice qué poderes actuaron y sobre quién --------
+// La pantalla no adivina mirando qué cambió: cada poder deja su efecto en
+// `state.powerFx`, en orden, con el asiento sobre el que cae (ver `power-fx.js`).
+{
+  const watch = (game) => {
+    const events = [];
+    game.subscribe((s) => {
+      // Con la foto del estado en ese instante: sin pausas la partida sigue enseguida.
+      if (s.powerFx && s.powerFx.id !== events.at(-1)?.id) {
+        events.push({ ...structuredClone(s.powerFx), status: structuredClone(s.status) });
+      }
+    });
+    return events;
+  };
+  const moments = (events) => events.flatMap((e) => e.fx.map((f) => `${f.power}:${f.moment}:${f.on}`));
+
+  // Todos los que actúan al plantarse salen juntos, en un solo efecto y en orden.
+  {
+    const game = await atPlayerTurn(chainOf(
+      card(['aquatic', 'bird']),
+      card(['aquatic', 'plant'], 'egg'),
+      card(['aquatic', 'beast'], 'poison'),
+      card(['aquatic', 'bug'], 'snail'),
+      card(['aquatic', 'reptile'], 'octopus'),
+      card(['aquatic', 'plant'], 'bubble'),
+      card(['aquatic', 'beast'], 'brutal'),
+      card(['aquatic', 'bug'], 'leaf'),
+      card(['aquatic', 'reptile'], 'leech'),
+      card(['aquatic', 'plant'], 'steelskin'),
+      card(['aquatic', 'beast'], 'pot'),
+    ));
+    game.state.totals.p2 = 30; // que la maceta y la daga tengan algo que curar
+    const events = watch(game);
+    await game.stand();
+    await idle();
+
+    const [drink, stand] = events;
+    assert.deepEqual(moments([drink]), ['brutal:stand:p1'], 'la bebida se vuelca primero, sola, al plantarse');
+    assert.ok(stand, 'el ataque deja sus poderes animados en el estado');
+    assert.equal(stand.player, 'p1');
+    assert.deepEqual(moments([stand]), [
+      'egg:apply:p1', 'poison:apply:p2', 'snail:apply:p2', 'octopus:apply:p1', 'bubble:apply:p1',
+      'leaf:apply:p1', 'leech:apply:p2', 'steelskin:apply:p1', 'pot:apply:p1',
+    ], 'cada uno sobre quien cae, en el orden de la cadena; la bebida ya se animó al plantarse');
+    const of = (power) => stand.fx.find((f) => f.power === power);
+    assert.equal(of('egg').amount + TUNING.steelskinShield, stand.status.p1.egg, 'con lo que sumó al escudo');
+    assert.equal(of('poison').amount, stand.status.p2.poison);
+    assert.equal(of('steelskin').amount, stand.status.p1.steelskin);
+    assert.equal(of('leech').amount, TUNING.leechDrain);
+    assert.ok(of('leech').heal > 0 && of('pot').amount > 0, 'y lo que curó de verdad');
+    assert.ok(stand.fx.every((f) => powerBeat(f) > 0), 'cada uno con su compás');
+  }
+
+  // Los segundos momentos: el caracol parte el ataque y la máscara lo frena.
+  {
+    const game = await atPlayerTurn(chainOf(
+      card(['aquatic', 'bird']), card(['aquatic', 'plant']), card(['aquatic', 'beast']), card(['aquatic', 'bug']),
+    ));
+    game.state.status.p1.weak = 1;
+    game.state.status.p2.steelskin = 3;
+    const events = watch(game);
+    await game.stand();
+    await idle();
+    assert.deepEqual(moments(events).slice(0, 2), ['snail:slow:p1', 'steelskin:block:p2'],
+      'el caracol sobre el que pega y la máscara sobre el que la tiene');
+    assert.ok(events[0].fx[1].mitigated > 0, 'con lo que frenó');
+  }
+
+  // La fuerza, al robarla; la burbuja, al abrir la ronda.
+  {
+    const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird'])));
+    const events = watch(game);
+    game.state.decks.p1.push(card(['aquatic', 'plant'], 'strength'));
+    await game.hit();
+    await idle();
+    assert.deepEqual(moments(events), ['strength:draw:p1'], 'la fuerza se anima al salir');
+  }
+
+  // La bebida no se anima al entrar: se vuelca al plantarse, antes del recorrido y del
+  // golpe, con lo que le suma al daño.
+  {
+    const game = await atPlayerTurn(chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant'])));
+    const events = watch(game);
+    game.state.decks.p1.push(card(['aquatic', 'beast'], 'brutal'));
+    await game.hit();
+    assert.deepEqual(moments(events), [], 'al entrar a la cadena todavía no se anima');
+    assert.equal(game.state.poured.p1, false, 'ni cuenta en el número de la pantalla');
+    const bonus = brutalBonusOf(game.state.chains.p1);
+    assert.ok(bonus > 0);
+    const full = swingOf(game.state, 'p1');
+    assert.equal(swingOf(game.state, 'p1', { brutal: false }), full - bonus, 'sin la bebida, el golpe sin su bono');
+
+    const beats = [];
+    game.subscribe((s) => {
+      if (s.aiming && beats.at(-1) !== 'aim') beats.push('aim');
+      if (s.lastHit && !beats.includes('hit')) beats.push('hit');
+    });
+    const standing = game.stand();
+    const [drink] = events;
+    assert.deepEqual(moments(events), ['brutal:stand:p1'], 'se vuelca al plantarse');
+    assert.equal(drink.fx[0].amount, bonus, 'con lo que suma la bebida');
+    assert.deepEqual(beats, [], 'antes de que la cadena se recorra y salga el golpe');
+    assert.equal(game.state.poured.p1, true);
+    await standing;
+    await idle();
+    assert.deepEqual(beats.slice(0, 2), ['aim', 'hit'], 'y después, el recorrido y el golpe');
+    assert.equal(game.state.lastHit.amount, full, 'el golpe la lleva sumada');
+  }
+
+  // El veneno al finalizar el turno, las hojas al empezarlo, y la burbuja y el pulpo en el centro.
+  {
+    const game = await atPlayerTurn(chainOf(
+      card(['aquatic', 'bird']),
+      card(['aquatic', 'plant'], 'poison'),
+      card(['aquatic', 'beast'], 'leaf'),
+      card(['aquatic', 'bug'], 'octopus'),
+      card(['aquatic', 'reptile'], 'bubble'),
+    ));
+    game.state.totals.p2 = 40;
+    const events = watch(game);
+    await game.stand();
+    for (let i = 0; i < 1500 && !moments(events).includes('bubble:open:p1'); i++) {
+      if (game.drafting() === 'p1') {
+        const [pick] = game.pickable();
+        if (pick) await game.takeCard(pick.uid);
+        else await game.skipDraft();
+      } else await idle();
+    }
+    const seen = moments(events);
+    for (const want of ['leaf:tick:p1', 'poison:tick:p2', 'bubble:trap:p1', 'octopus:pick:p1', 'bubble:open:p1']) {
+      assert.ok(seen.includes(want), `falta ${want} (${seen.join(', ')})`);
+    }
+    const bite = events.find((e) => e.fx[0].moment === 'tick' && e.fx[0].power === 'poison');
+    assert.equal(bite.player, 'p1', 'el veneno que muerde es del que lo puso');
+  }
+
+  console.log('  ✓ poderes animados en el estado');
 }
 
 console.log('✓ poderes ok');

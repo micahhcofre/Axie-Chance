@@ -10,12 +10,12 @@ const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 const MODULES = [
   'i18n-en', 'i18n',
   'data', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'rules', 'ai', 'adventure-levels', 'adventure', 'game',
-  'vfx-clips', 'vfx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'ui', 'rooms', 'link', 'qr', 'net',
+  'vfx-clips', 'vfx', 'power-fx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'result', 'ui', 'rooms', 'link', 'qr', 'net',
   'tutorial', 'lobby', 'main',
 ];
 const FONTS =
   'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800' +
-  '&family=IBM+Plex+Mono:wght@500;600&family=Lilita+One&display=swap';
+  '&family=Lilita+One&display=swap';
 
 // Todos los PNG de Icons/ —crests, poderes, estados y las dos versiones del logo— en
 // un solo mapa por nombre de archivo. `data.js` los pide con `iconUrl()`, y el HTML

@@ -18,6 +18,7 @@ Encadenás símbolos mientras te animes: cuanto más larga la racha de símbolos
   - `src/axie-poses.js` (variantes de poses y animaciones precalculadas).
   - `src/audio-clips.js` (mediciones y buffers de clips de audio).
   - `src/vfx-clips.js` (metadatos de sprites de efectos visuales).
+  - `Icons/result-*.png` (telas, ramas y telarañas de las pantallas de resultado del kit; los escribe `npm run result-art`).
   - `Axies/<id>/*.png` (dibujos de los starters de Origins cortados del atlas del kit; los escriben `npm run axies` y `npm run poses` vía `scripts/starters.mjs`).
 - **Tests**: Corren en Node.js puro usando un DOM shim ultraligero (`test/dom.mjs`), sin frameworks pesados ni dependencias externas (usa `node:assert/strict`).
 - **Convención de idiomas**: Código fuente (variables, funciones, clases, identificadores) en **inglés**; UI, comentarios explicativos, textos y documentación en **español**.
@@ -29,13 +30,14 @@ Encadenás símbolos mientras te animes: cuanto más larga la racha de símbolos
 
 ```sh
 npm start              # Servidor dev con live reload + servidor de salas en red (http://localhost:8000)
-npm test               # Ejecuta las 13 suites de test unitarios e integración en Node
+npm test               # Ejecuta las suites de test unitarios e integración en Node
 npm run build          # Empaqueta el juego en dist/axie-chance.html (archivo único con assets inlined)
 npm run balance        # Banco de balance: simula partidas sembradas y mide efectividad de poderes
 npm run axies          # Regenera src/axie-avatars.js desde el mixer de Axies (offline)
 npm run poses          # Regenera src/axie-poses.js (animaciones y poses horneadas)
 npm run vfx            # Procesa y regenera el atlas de efectos visuales (src/vfx-clips.js)
 npm run sfx            # Regenera src/audio-clips.js (mediciones y duraciones de SFX)
+npm run result-art     # Corta de las pantallas de resultado del kit las piezas Icons/result-*.png
 npm run deploy         # Construye y despliega automáticamente a AWS S3 y CloudFront vía CDK
 npm run cdk:diff       # Inspecciona diferencias pendientes de infraestructura AWS en perfil dev
 npm run cdk:synth      # Sintetiza la plantilla CloudFormation de la infraestructura
@@ -71,8 +73,9 @@ data.js ← rules.js ← ai.js
 | **`src/data.js`** | Taxonomía canónica, clases, partes anatómicas, saltos, tríadas canónicas, fórmula de supresión de counters, Axie Core (Part Evolution), 12 poderes de clase (`POWERS`), Free Game, `TUNING`, `buildPool()`, `baseDeck()`, `buildPersonalDeck()`, `makeRng(seed)`. |
 | **`src/rules.js`** | Funciones matemáticas puras: `scoreChain()`, `survivalOdds()`, `timesIn()`, `emptyChain()`, `playCard()`, `isScoringCell()`, `stackOnCard()` (apilado de Free Game). Sin efectos secundarios. |
 | **`src/game.js`** | Máquina de estados: `createGame()`, turnos, robo (`hit`), plantarse (`stand`), draft del mercado (`takeCard`, `skipDraft`), renovación del mercado (`renewMarket`), apilado (`chooseStackTarget`), reloj de turno y draft, abandono (`forfeit`), cálculo de daño (`swingOf`), vida (`hpOf`), última chance (`lastChance`). |
-| **`src/ai.js`** | Toma de decisiones de la CPU: `decideDraw()` (expectimax con lookahead 1-3 según dificultad), conectividad de cartas (`connectivity()`), valoración de poderes (`POWER_WORTH`), selección de draft (`planDraft()`, `pickBest()`, `pickBonus()`). |
+| **`src/ai.js`** | Toma de decisiones de la CPU: `decideDraw()` (expectimax; "duro" mide el ataque contra la partida con `attackWorth()` y la mesa de `attackViewOf()` en `game.js`), conectividad de cartas (`connectivity()`), valoración de poderes (`POWER_WORTH`), selección de draft (`planDraft()`, `pickBest()`, `pickBonus()`). |
 | **`src/ui.js`** | Renderizado reactivo de la mesa en `#arena`: render de cartas, rachas, HUD, barras de vida, escudos, status badges (veneno, hojas, caracol, etc.), dial de probabilidades (*odds*), controles de acción, selección interactiva de columnas para Free Game. |
+| **`src/result.js`** | Pantalla del final, una escena por resultado con las piezas de `BattleUI` del kit: **victoria** (tela azul, rama que florece, rayos, papelitos, `power_awaken`), **derrota** (tela roja, rama seca, telarañas, llovizna, letras que caen, rival festejando atrás, `death_mark_apply`), **empate** (media tela de cada lado que chocan, rayo, chispas, los dos mareados con `stunned`) y **anulada** (sin escena). `resultView()` decide qué ve cada pantalla (asiento, espectador, Aventura, tutorial), las marcas (`state.records`: mejor golpe y cadena más larga) y el **botín** (`state.rewards[asiento]`, ver `rewardsOf()`: `{ id, name, icon, qty?, rarity? }`). `RESULT_BEAT` es el orden de entrada que comparten CSS (`--t-*`), efectos, sonido (`win`/`lose`/`tie`) y contadores. Las puertas del final (`endActionsHtml` en `ui.js`) viven acá y no en el pie; "Ver la mesa" la apaga. |
 | **`src/lobby.js`** | Interfaz principal: portada con paseo de Axies (*strollers*), selector de modo de juego (Aventura, Solo CPU, Red), selector de Axie con asignación de mejoras (+), lanzador de tutorial, modales de reglas y enciclopedia de símbolos. |
 | **`src/adventure-levels.js`** | Definición declarativa de la campaña de niveles (`ADVENTURE_CAMPAIGN`): rivales starters, dificultades, nuevos poderes y showcase especial. |
 | **`src/adventure.js`** | Lógica del Modo Aventura: compilación y validación (`buildAdventureLevels`), derivación de `id` y `activePowers`, helpers (`isFinalLevel`, `nextLevelId`, `DIFFICULTY_LABELS`) y persistencia en `localStorage` (`axie-chance:adventure`). |
@@ -88,13 +91,14 @@ data.js ← rules.js ← ai.js
 | **`src/audio.js`** | Motor de sonido con Web Audio API: reproducción de SFX, música de fondo en loop, control de volumen maestro y muteo. |
 | **`src/audio-cues.js`** | Orquestador de sonido: inspecciona las diferencias de estado (`lastHit`, cambios de fase, bust) y dispara los SFX adecuados. |
 | **`src/vfx.js`** | Animaciones de efectos visuales (golpes, chispas, veneno) basadas en atlas de sprites y `requestAnimationFrame`. |
+| **`src/power-fx.js`** | Animación propia de cada carta con poder (los 12): la carta se enciende con su gesto, el amuleto llega al Axie con su recorrido (`FLIGHT_PATHS`: el huevo rebota, el veneno se revolea, la pluma cae del cielo, la fuerza se clava, la bebida se vuelca sobre el número de daño, que sube contando, el pulpo salta, la burbuja sube, la maceta brota, la hoja hace remolino, el caracol se arrastra, la daga vuelve con orbes de vida, la máscara cae puesta) y al llegar cae el efecto *buff* del kit, el gesto, el sonido y el cartel. También los segundos momentos: veneno al finalizar el turno, hojas al empezarlo, caracol que parte el ataque, Gecko que lo frena, burbuja que atrapa y abre la ronda, pulpo que abre la carta extra. Lee `state.powerFx` (lo anota `stageFx` en `game.js`) y la pluma en `lastHit`; el motor espera lo que pide `POWER_BEAT`. La chapa retiene vida y marcas hasta que el poder llega y la vida sube o baja contando; la cura y el escudo del huevo suben como cartel desde la chapa (`hudTag`). Los poderes ya no suenan desde `audio-cues.js`. |
 | **`scripts/dev.mjs`** | Servidor de desarrollo HTTP con live reload vía SSE (`/__dev`), `net.json` y el relay de salas por WebSocket en `/net/ws` (con `scripts/ws.mjs`, servidor WebSocket mínimo sin dependencias). |
 | **`relay/core.mjs`** | Relay de salas (el "cartero"): crea salas con código y llave de anfitrión, lista, conecta pantallas con el anfitrión y reenvía mensajes sin abrirlos. Almacén intercambiable: `memoryStore()` en dev, DynamoDB en AWS. |
 | **`relay/lambda.mjs`** | El relay en AWS Lambda detrás de API Gateway WebSocket, con DynamoDB (TTL `expires`). Usa el AWS SDK que trae el runtime: no se empaqueta nada. |
 | **`scripts/build.mjs`** | Empaquetador a un único archivo `dist/axie-chance.html` con todos los recursos e iconos incrustados como data URIs. |
 | **`scripts/balance.mjs`**| Banco de pruebas automatizado: simula miles de partidas con semillas controladas para medir el balance de los poderes. |
 | **`infra/`** | Proyecto AWS CDK en TypeScript para desplegar el sitio estático sobre S3 privado con CloudFront (OAC). |
-| **`test/`** | Banco completo de 13 suites de pruebas automatizadas ejecutadas directamente con Node.js puro. |
+| **`test/`** | Banco completo de 14 suites de pruebas automatizadas ejecutadas directamente con Node.js puro. |
 
 ---
 
@@ -141,9 +145,9 @@ El juego implementa formalmente la taxonomía oficial de Axie Infinity:
    - Cada robo sucesivo: si contiene un símbolo vivo, alarga esa racha. Las rachas que no coincidan quedan congeladas. Si una carta no coincide con **ninguna** racha viva, se produce **corte de cadena (bust)** y el ataque vale 0.
    - **Plantarse**: Ejecuta el ataque. El daño base es el puntaje de la cadena ($\sum \text{largo}^2$).
 3. **Fórmula de Daño (`swingOf`)**:
-   $$\text{Ataque} = (\text{Puntaje Cadena} + \text{Fuerza} + \text{Bonus Brutal}) \times \text{Modificador Caracol} - \text{Escudo Huevo}$$
+   $$\text{Ataque} = (\text{Puntaje Cadena} + \text{Fuerza} + \text{Bonus Brutal}) \times \text{Modificador Caracol}$$
    - Si la cadena se cortó ($\text{base} = 0$), el daño total es 0 (no aplican fuerza ni modificadores).
-   - Si el rival tiene **Piel de Escamas**, el daño entrante se topea al límite establecido.
+   - Al recibirlo, primero absorbe el **escudo** (`status.egg`: huevos y Gecko Mask sumados) y después la **Gecko Mask** topea lo que llega a la vida.
 4. **Mercado Central (Draft)**:
    - Hay **6 cartas visibles** sacadas del pool común.
    - Si te plantaste: podés llevarte **1 carta con poder** O **2 cartas sin poder**.
@@ -152,10 +156,12 @@ El juego implementa formalmente la taxonomía oficial de Axie Infinity:
    - **Renovación**: Si ninguna de las 6 cartas tiene tu símbolo, se puede renovar el centro entero una vez por draft (`renewMarket()`).
 5. **Reloj de Turno (`CLOCK`)**:
    - 30 segundos para decidir robar o plantarse (si se agota, se corta la cadena automáticamente).
-   - 10 segundos por pick de draft (si se agota, se saltea el pick).
-6. **Última Chance**:
-   - Si el segundo jugador en el orden de la ronda recibe daño letal antes de atacar, se le otorga la **Última Chance**.
-   - Juega su turno con halo dorado: si logra dejar al rival en 0 HP también, la partida termina en **Empate** (*Draw*).
+   - 20 segundos por pick de draft (si se agota, se saltea el pick). Al renovar el centro se reinicia a 20 segundos.
+6. **Última Chance** (`lastChance()`):
+   - Quien queda en 0 HP (cualquiera de los dos) tiene **un golpe más**. El que cierra lo juega en el mismo intercambio; el que abre (o quien cae después de atacar), abriendo la ronda siguiente, solo.
+   - Juega su turno con halo de fuego: si logra dejar al rival en 0 HP también, la partida termina en **Empate** (*Draw*).
+   - **Overkill**: si el daño pasado el cero supera 30 (`TUNING.overkill`, ver `overkillOf()`), no hay última chance.
+   - **Sin cura** mientras está en 0 HP (`heal()` devuelve 0; las hojas no se gastan).
 7. **Abandono (`forfeit`)**:
    - Si se abandona antes de la ronda 5 (`FORFEIT_ROUNDS`), la partida se declara **nula** (`'void'`) para evitar *dodging*.
    - A partir de la ronda 5, quien abandona pierde y el oponente gana.
@@ -168,18 +174,18 @@ En cada partida estándar se sortea **un poder activo por clase** (6 en total), 
 
 | Clase | Poder (Origins) | ID | Amuleto (`amuletos/`) | Activación y Mecánica Detallada |
 |---|---|---|---|---|
-| **Bestia** | **Charm of Power** | `strength` | `ecard_beast_4001.png` | **+1 permanente de daño** en este ataque y todos los futuros. Acumulable. Requiere `swing > 0`. |
-| **Bestia** | **Energy Drink M** | `brutal` | `ecard_beast_5003.png` | Suma **+2 de daño por cada símbolo de tu cadena más larga**. Se activa siempre. Requiere `swing > 0`. |
+| **Bestia** | **Charm of Power** | `strength` | `ecard_beast_4001.png` | **+1 permanente de daño** otorgado al instante apenas aparece la carta (incluso si la cadena se corta). Acumulable. |
+| **Bestia** | **Energy Drink M** | `brutal` | `ecard_beast_5003.png` | Suma **+3 de daño por cada símbolo de tu cadena más larga**. Se activa siempre. Requiere `swing > 0`. Durante el turno la mesa marca la racha más larga (sin sumarla al número de daño); al plantarse, antes del recorrido de la cadena, se vuelca sobre el daño y lo sube contando (`state.poured`, momento `stand`). |
 | **Pez** | **Sticky Octopus** | `octopus` | `ecard_aquatic_5004.png` | Otorga **1 pick extra del mercado** por cada pulpo (fase bonus del draft). Requiere no haberse cortado (`!busted`), no requiere daño. |
 | **Pez** | **Bubble Paste** | `bubble` | `ecard_aquatic_4003.png` | **Redirige tu pick de draft para abrir tu próxima ronda**. Con múltiples burbujas, fusiona cartas del tope de tu mazo en una **carta gigante** multi-símbolo. Requiere `!busted`. |
-| **Pájaro** | **Secret Egg** | `egg` | `ecard_bird_5003.png` | Otorga un escudo protector de $\lfloor \text{swing} / 2 \rfloor$. **No se acumula** (se reemplaza por uno nuevo). Al romperse, inflige **8 de daño fijo acumulable (`eggBreak`)** de contraataque directo al agresor. Requiere `swing > 0`. |
+| **Pájaro** | **Secret Egg** | `egg` | `ecard_bird_5003.png` | Suma un escudo de $\max(1, \lfloor \text{swing} / 3 \rfloor)$ al que ya tenés (**se acumula**, también con el de Gecko Mask). Al romperse, inflige **8 de daño fijo acumulable por huevo (`eggBreak`)** de contraataque directo al agresor. Requiere `swing > 0`. |
 | **Pájaro** | **Feather Earring** | `feather` | `ecard_bird_momo_1.png` | Inflige **5 de daño directo inmediato** al rival **apenas se roba la carta**. No se pierde si la cadena se corta. Ignora escudos y caracoles. |
 | **Planta** | **Leafy Pot** | `pot` | `ecard_plant_4003.png` | **Te curás exactamente lo mismo que pegaste** este turno (hasta el tope de 100 HP). Requiere `swing > 0`. |
-| **Planta** | **Spring Leaf** | `leaf` *(alias `oak`)* | `ecard_plant_ena_1.png` | Otorga **+2 hojas** al plantarte con éxito (tope 5). Al final de cada uno de tus turnos, **cura 4 HP por hoja y consume 1 hoja**. La curación ocurre incluso si ese turno luego se corta. Requiere `swing > 0` para ganar hojas. |
+| **Planta** | **Spring Leaf** | `leaf` | `ecard_plant_ena_1.png` | Otorga **+2 hojas** al plantarte con éxito (tope 5). Al inicio de cada uno de tus turnos (antes de robar), **cura 4 HP por hoja y consume 1 hoja**. Las hojas recién ganadas curan desde tu turno siguiente. Requiere `swing > 0` para ganar hojas. |
 | **Bicho** | **Lazy Snail** | `snail` | `ecard_bug_5005.png` | Añade 1 carga de debilidad al rival. El próximo ataque del rival **hace la mitad del daño** ($\lceil \text{hit} / 2 \rceil$). Acumulable en cantidad de ataques. Requiere `swing > 0`. |
-| **Bicho** | **Mantis Dagger** | `leech` | `ecard_mantis_dagger.png` | Al atacar, **roba 6 de vida al rival** (daño + curación). Con 4 o más columnas en mesa, el drenaje se duplica a **12 HP**. Requiere `swing > 0`. |
-| **Reptil** | **Poison Vial** | `poison` | `ecard_reptile_venoki_1.png` | Envenena al rival con $\lfloor \text{swing} / 2 \rfloor$. Al finalizar el turno del jugador envenenado: el veneno muerde (resta vida), se divide a la mitad ($\lfloor v / 2 \rfloor$) y si queda $\le 2$ se disipa. Acumulable. Requiere `swing > 0`. |
-| **Reptil** | **Gecko Mask** | `steelskin` | `ecard_reptile_4003.png` | Establece un **blindaje que limita el próximo golpe rival a un máximo de 12 de daño**. Cada acumulación reduce el tope en -2 (12 $\to$ 10 $\to$ 8) con piso mínimo de 6. Se consume al recibir daño. Requiere `swing > 0`. |
+| **Bicho** | **Mantis Dagger** | `leech` | `ecard_mantis_dagger.png` | En un ataque exitoso, **roba 5 de vida al rival** por cada Mantis Dagger en tu cadena (con 2 robás 10). Requiere `swing > 0`. |
+| **Reptil** | **Poison Vial** | `poison` | `ecard_reptile_venoki_1.png` | Pone **6 de veneno por frasco** (`poisonDose`), pegues lo que pegues. Al finalizar el turno del jugador envenenado: el veneno muerde (resta vida **ignorando escudo y Gecko Mask**), se divide a la mitad ($\lfloor v / 2 \rfloor$) y si queda $\le 2$ se disipa. Acumulable. Requiere plantarse (no se aplica si la cadena se corta). |
+| **Reptil** | **Gecko Mask** | `steelskin` | `ecard_reptile_4003.png` | Suma **2 de escudo** (`steelskinShield`) y un **tope a la vida: el próximo golpe rival te saca 12 como máximo** (se aplica después del escudo). Cada acumulación suma 2 de escudo y reduce el tope en -2 (12 $\to$ 10 $\to$ 8) con piso mínimo de 6. El tope se consume cuando un golpe pasa el escudo. Requiere `swing > 0`. |
 | **Neutral** | **Rocket Stamp** | `freegame` | `ecard_neutral_5001.png` | **Comodín apilable (15 cartas en pool)**. Al robarla se corta si no comparte símbolos vivos; al entrar con éxito, tu próximo robo alarga una carta existente sumando sus símbolos. |
 
 > Todos los símbolos especiales se obtienen **exclusivamente de la carpeta `simbolos especiales/amuletos/`**. Para resincronizar tras cambios: `npm run amuletos`.
@@ -196,12 +202,12 @@ En cada partida estándar se sortea **un poder activo por clase** (6 en total), 
 ### 2. Modo Aventura (`mode: 'adventure'`)
 - Campaña individual modular de progresión por niveles. Consultar arquitectura detallada y receta para agregar niveles en [docs/aventura.md](docs/aventura.md).
 - El rival de cada nivel es un **starter de Origins** de la clase del nivel (`STARTERS` en `src/axies.js`: cuerpos fijos de Spine del kit, fuera del roster elegible), y la ficha del nivel lo muestra vivo haciendo gestos:
-  - **N1: Primeros Pasos** (Olek - Planta, Fácil): Fuerza + Maceta + Free Game (Pool: 62 cartas).
-  - **N2: Defensa y Estrategia** (Momo - Pájaro, Fácil): + Huevo + Caracol (Pool: 74 cartas).
-  - **N3: El Arte del Mercado** (Puffy - Pez, Normal): + Pulpo + Veneno (Pool: 86 cartas, 6 clásicos completos).
-  - **N4: Furia de la Naturaleza** (Buba - Bestia, Normal): Garra Brutal + Hoja (reemplazan Fuerza y Maceta).
-  - **N5: Sombras y Vuelo** (Pomodoro - Bicho, Duro): Greedy Leech + Pluma Sagrada (reemplazan Caracol y Huevo).
-  - **N6: Duelo de Maestros** (Venoki - Reptil, Duro): Burbuja + Piel de Escamas (reemplazan Pulpo y Veneno).
+  - **N1: Primeros Pasos** (Olek - Planta, Fácil): Charm of Power + Leafy Pot + Free Game (Pool: 62 cartas).
+  - **N2: Defensa y Estrategia** (Momo - Pájaro, Fácil): + Secret Egg + Lazy Snail (Pool: 74 cartas).
+  - **N3: El Arte del Mercado** (Puffy - Pez, Normal): + Sticky Octopus + Poison Vial (Pool: 86 cartas, 6 clásicos completos).
+  - **N4: Furia de la Naturaleza** (Buba - Bestia, Normal): Energy Drink M + Spring Leaf (reemplazan Charm of Power y Leafy Pot).
+  - **N5: Sombras y Vuelo** (Pomodoro - Bicho, Duro): Mantis Dagger + Feather Earring (reemplazan Lazy Snail y Secret Egg).
+  - **N6: Duelo de Maestros** (Venoki - Reptil, Duro): Bubble Paste + Gecko Mask (reemplazan Sticky Octopus y Poison Vial).
 - Persistencia de niveles completados y desbloqueados en `localStorage` (`axie-chance:adventure`) con desbloqueo hacia adelante al incorporar nuevos niveles.
 
 ### 3. Modo Tutorial Guiado (`mode: 'tutorial'`)
@@ -221,13 +227,14 @@ En cada partida estándar se sortea **un poder activo por clase** (6 en total), 
 
 - **Algoritmo**: *Expectimax* con optimización de perfil de mazo (`deckProfile`) que reduce $96$ cartas a $\sim 41$ combinaciones de símbolos.
 - **Dificultades (`STYLE`)**:
-  - `facil`: Profundidad 1, margen 1.35 (juega conservadora/tímida), no persigue final.
-  - `normal`: Profundidad 2, margen 1.0, juega el final (arriesga en última chance).
-  - `duro`: Profundidad 3, margen 1.0, lookahead profundo de $\sim 70.000$ evaluaciones en 5 ms.
+  - `facil`: Profundidad 1, margen 1.35 (tímida), no juega el final, la mitad de las veces elige del centro al azar (`sloppyDraft`) y no renueva el centro (`renewsMarket`).
+  - `normal`: Profundidad 1, margen 1.0, maximiza los puntos de cada turno. Mirar más cartas no le cambiaría nada: con puntaje puro, si robar una no conviene, robar dos tampoco.
+  - `duro`: Profundidad 3, juega por la partida (`attackWorth`, pesos en `DURO`): pega contra escudo, Gecko Mask y la vida que queda; dejarlo sin vida vale un bono; cortarse pierde los poderes de la mesa y medio centro; si el rival lo tumba en el próximo golpe va a todo o nada; en su última chance juega a la probabilidad de empatar.
+  - Medición (`npm run balance -- --difficulties`): contra un mismo jugador simulado la CPU gana ~39% en fácil, ~55% en normal y ~63% en duro (1200 partidas por dificultad). Un draft que leyera la partida (negarle poderes al rival, pesar poderes por vida) se probó y no movió nada.
 - **Valoración de Draft**:
   - Evalúa la **conectividad** de las cartas con el mazo propio.
   - Compara la rama de 2 cartas sin poder contra 1 carta con poder mediante la tabla `POWER_WORTH`:
-    - `poison`: 1.70, `octopus`: 1.55, `bubble`: 1.55, `leech`: 1.45, `egg`: 1.30, `feather`: 1.30, `steelskin`: 1.30, `strength`: 1.25, `brutal`: 1.25, `leaf`/`oak`: 1.20, `freegame`: 1.20, `snail`: 1.15, `pot`: 0.95.
+    - `poison`: 1.70, `octopus`: 1.55, `bubble`: 1.55, `leech`: 1.45, `egg`: 1.30, `feather`: 1.30, `steelskin`: 1.30, `strength`: 1.25, `brutal`: 1.25, `leaf`: 1.20, `freegame`: 1.20, `snail`: 1.15, `pot`: 0.95.
 
 ---
 
@@ -238,7 +245,7 @@ Se ejecutan con `npm test` en Node.js puro usando `test/dom.mjs` como shim míni
 1. `test/rules.test.js`: Cadenas, puntaje cuadrático, dial de supervivencia, Free Game stack.
 2. `test/styles.test.js`: Reglas CSS críticas, visibilidad de atributos `hidden`, paleta y texturas.
 3. `test/match.test.js`: Flujo de partida completa vs bot en todas las dificultades y Última Chance.
-4. `test/powers.test.js`: Los 12 poderes de clase + Free Game apilable + compatibilidad con Oak.
+4. `test/powers.test.js`: Los 12 poderes de clase + Free Game apilable.
 5. `test/ui.test.js`: Montaje en DOM, botones de control, escudos, status badges, perspectivas p1/p2.
 6. `test/lobby.test.js`: Portada, paseo continuo de 1000 iteraciones, selector de Axies y mejoras (+).
 7. `test/versus.test.js`: Partida local 2P en una sola pantalla sin conexión de red.
@@ -249,6 +256,7 @@ Se ejecutan con `npm test` en Node.js puro usando `test/dom.mjs` como shim míni
 11. `test/audio.test.js`: Motor de audio Web Audio API, niveles de volumen y muting.
 12. `test/tutorial.test.js`: Presupuesto de texto (≤ 6 palabras, ≤ 2 burbujas por ronda, sin modales), mazos guionados (rueda, corte, Rocket) y partida guiada de punta a punta hasta la victoria.
 13. `test/adventure.test.js`: Configuración de 6 niveles, pools escalonados, progresión y persistencia.
+14. `test/result.test.js`: Pantalla del final: escena por pantalla (ganador, perdedor, espectador, empate, anulada, Aventura), marcas de la partida, botín saneado y escapado, y cuándo suena el remate.
 ---
 
 ## Infraestructura y Despliegue en AWS

@@ -137,6 +137,10 @@ const STAND = '#controls [data-action="stand"]';
 // El centro no exige tu color: se recomienda. Brillan las que lo llevan (el Pez de Marea).
 const MARKET_COLOR = '#market .market-card[data-syms~="aquatic"]:not([disabled])';
 const MARKET_ROCKET = '#market [data-power="freegame"]';
+// Tocar una carta del centro la marca y la compra se confirma con un botón: con una
+// carta marcada, la flecha deja las cartas y señala el botón.
+const CONFIRM = '#market [data-action="confirm"]:not([disabled])';
+const toConfirm = (cards) => `#market:not(:has(.is-chosen)) ${cards.replace('#market ', '')}, ${CONFIRM}`;
 const cardsOf = (s) => s.chains?.p1?.cards.length ?? 0;
 const attacked = (s) => s.roundScores?.p1 != null;
 const busted = (s) => Boolean(s.chains?.p1?.busted);
@@ -178,7 +182,7 @@ function createSteps() {
       round: 1,
       allowed: 'none',
       draft: { plainOnly: true },
-      target: (s) => (picking(s) ? MARKET_COLOR : null),
+      target: (s) => (picking(s) ? toConfirm(MARKET_COLOR) : null),
       side: 'top',
       glow: (s) => (picking(s) ? MARKET_COLOR : null),
       bubble: tr('Buscá tu color'),
@@ -264,7 +268,7 @@ function createSteps() {
       round: 4,
       allowed: 'none',
       draft: { power: 'freegame' },
-      target: (s) => (picking(s) ? MARKET_ROCKET : null),
+      target: (s) => (picking(s) ? toConfirm(MARKET_ROCKET) : null),
       side: 'top',
       glow: (s) => (picking(s) ? MARKET_ROCKET : null),
       bubble: tr('Llevate el cohete'),
@@ -325,7 +329,7 @@ function createSteps() {
       id: 'r5-rival-last-chance',
       round: 5,
       allowed: 'none',
-      target: () => '#plate-p2 .plate-hp',
+      target: () => null,
       glow: () => '#plate-p2 .plate-hp',
       delay: 0,
       done: (s) => s.phase === 'matchEnd',
@@ -384,24 +388,6 @@ export function createOverlay({ onQuit = null } = {}) {
   document.querySelector?.('.topbar')?.classList.add('tuto-topbar');
 
   const bubble = root.querySelector?.('.tuto-bubble');
-
-  // La salida va en la barra de arriba, al lado del menú: siempre visible y cliqueable.
-  const quit = document.createElement('button');
-  quit.className = 'btn tuto-quit';
-  quit.type = 'button';
-  quit.title = tr('Salir del tutorial');
-  quit.textContent = tr('Salir ✕');
-  quit.onclick = (e) => {
-    e?.stopPropagation?.();
-    e?.preventDefault?.();
-    onQuit?.();
-  };
-  quit.onpointerdown = (e) => {
-    e?.stopPropagation?.();
-  };
-  const bar = document.querySelector?.('.topbar-actions');
-  if (bar?.prepend) bar.prepend(quit);
-  else root.appendChild?.(quit);
 
   const SIDES = { bottom: 0, top: 1, right: 2, left: 3 };
   const arrows = []; // una por cosa señalada; se crean a medida que hacen falta
@@ -549,7 +535,7 @@ export function createOverlay({ onQuit = null } = {}) {
     const vh = globalThis.innerHeight || 0;
     const first = arrowAt(0);
     first.hidden = false;
-    const size = first.offsetWidth || 48;
+    const size = first.offsetWidth || 34;
     const talking = bubble && !bubble.hidden;
     const bw = talking ? (bubble.offsetWidth || 150) : 0;
     const bh = talking ? (bubble.offsetHeight || 42) : 0;
@@ -653,7 +639,6 @@ export function createOverlay({ onQuit = null } = {}) {
       applyGlow();
       if (frame) globalThis.cancelAnimationFrame?.(frame);
       frame = 0;
-      quit.remove?.();
       document.querySelector?.('.topbar')?.classList.remove('tuto-topbar');
       root.remove?.();
     },
@@ -671,6 +656,12 @@ export function createTutorial(game, onDone = () => {}) {
   let finished = false;
   let unsub = null;
 
+  const menuBtn = document.getElementById?.('menu-btn');
+  const prevMenuText = menuBtn?.textContent;
+  if (menuBtn) menuBtn.textContent = tr('Salir del tutorial');
+  const onMenuQuit = () => { finish(); };
+  menuBtn?.addEventListener?.('click', onMenuQuit);
+
   const overlay = createOverlay({ onQuit: finish });
 
   function cleanup() {
@@ -678,6 +669,10 @@ export function createTutorial(game, onDone = () => {}) {
     finished = true;
     unsub?.();
     document.removeEventListener?.('pointerdown', lost, true);
+    if (menuBtn) {
+      menuBtn.removeEventListener?.('click', onMenuQuit);
+      if (prevMenuText) menuBtn.textContent = prevMenuText;
+    }
     overlay.destroy();
     const st = game.state;
     if (st) {
@@ -705,7 +700,8 @@ export function createTutorial(game, onDone = () => {}) {
     if (!pointing) return;
     if (
       e.target?.closest?.(pointing) ||
-      e.target?.closest?.('.tuto-quit') ||
+      // Cambiar la carta marcada del centro no es perderse (ver `CONFIRM`).
+      e.target?.closest?.('#market .market-card:not([disabled])') ||
       e.target?.closest?.('.topbar-actions') ||
       e.target?.closest?.('#hud-menu')
     ) {

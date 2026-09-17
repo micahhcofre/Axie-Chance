@@ -281,11 +281,14 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   const deck = buildPool();
 
   // Con una cadena recién abierta de 3 símbolos siempre conviene robar.
-  assert.equal(decideDraw(chainOf(card('bird', 'plant', 'bug')), deck, { difficulty: 'duro' }), true);
+  for (const difficulty of ['facil', 'normal', 'duro']) {
+    assert.equal(decideDraw(chainOf(card('bird', 'plant', 'bug')), deck, { difficulty }), true, difficulty);
+  }
 
   // Con un solo símbolo vivo y una racha larga, plantarse.
   const risky = chainOf(card('bird'), card('bird', 'plant'), card('bird', 'bug'), card('bird', 'beast'));
   assert.equal(scoreChain(risky).total, 16);
+  assert.equal(decideDraw(risky, deck, { difficulty: 'normal' }), false);
   assert.equal(decideDraw(risky, deck, { difficulty: 'duro' }), false);
 
   // La última chance (`needs`): el empate es el único final que le queda.
@@ -293,14 +296,50 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   assert.equal(scoreChain(fresh).total, 3);
   // Con lo que ya tiene alcanza: se planta y lo asegura, aunque el EV diga robar
   // —robar no puede mejorar un empate y sí puede perderlo—.
+  assert.equal(decideDraw(fresh, deck, { needs: 3, difficulty: 'normal' }), false);
   assert.equal(decideDraw(fresh, deck, { needs: 3, difficulty: 'duro' }), false);
-  // Si todavía no alcanza, no persigue el número: sigue con su cabeza de siempre. Acá
-  // eso es robar, porque la cadena recién abierta lo pide.
-  assert.equal(decideDraw(fresh, deck, { needs: 30, difficulty: 'duro' }), true);
-  // Y acá es plantarse, con el mismo número imposible: perseguirlo sería robar hasta
-  // cortarse y dejar el golpe final en 0.
-  assert.equal(decideDraw(risky, deck, { needs: 30, difficulty: 'duro' }), false);
+  // "Fácil" no juega el final: roba igual.
+  assert.equal(decideDraw(fresh, deck, { needs: 3, difficulty: 'facil' }), true);
+  // Si todavía no alcanza, "normal" no persigue el número: sigue con su cabeza de
+  // siempre. Acá eso es robar, porque la cadena recién abierta lo pide.
+  assert.equal(decideDraw(fresh, deck, { needs: 30, difficulty: 'normal' }), true);
+  // Y acá es plantarse, con el mismo número imposible.
+  assert.equal(decideDraw(risky, deck, { needs: 30, difficulty: 'normal' }), false);
+  assert.equal(decideDraw(risky, deck, { needs: 10, difficulty: 'normal' }), false);
+  // "Duro" sabe que un golpe que no empata pierde igual: con 16 contra 30 va a buscarlo.
+  assert.equal(decideDraw(risky, deck, { needs: 30, difficulty: 'duro' }), true);
   assert.equal(decideDraw(risky, deck, { needs: 10, difficulty: 'duro' }), false);
+}
+
+// --- IA "duro": el ataque contra la partida ----------------------------------
+{
+  const view = (over = {}) => ({
+    strength: 0, weak: false, myHp: 100, myShield: 0, myCap: 0, myPoison: 0,
+    foeHp: 100, foeShield: 0, foeThorns: 0, foeCap: 0, foeStrength: 0, foeWeak: false,
+    lastChance: false, ...over,
+  });
+  const deck = buildPool();
+  const fresh = chainOf(card('bird', 'plant', 'bug'));
+
+  // Si plantarse ya lo deja sin vida, se planta: "normal" seguiría robando por puntos.
+  assert.equal(decideDraw(fresh, deck, { difficulty: 'normal' }), true);
+  assert.equal(decideDraw(fresh, deck, { difficulty: 'duro', view: view({ foeHp: 3 }) }), false);
+  assert.equal(decideDraw(fresh, deck, { difficulty: 'duro', view: view({ foeHp: 20 }) }), true);
+
+  // Un mazo donde 7 de 10 cartas siguen la racha: robar conviene por puntos.
+  const sevenOfTen = [
+    ...Array.from({ length: 7 }, () => card('bird', 'aquatic')),
+    ...Array.from({ length: 3 }, () => card('reptile')),
+  ];
+  const plain = chainOf(card('bird', 'plant'), card('bird', 'bug'));
+  const poisoned = chainOf(card('bird', 'plant'), { ...card('bird', 'bug'), power: 'poison' });
+  assert.equal(decideDraw(plain, sevenOfTen, { difficulty: 'normal' }), true);
+  assert.equal(decideDraw(plain, sevenOfTen, { difficulty: 'duro', view: view() }), true);
+  // Pero con un veneno en la mesa cortarse lo pierde: "duro" lo cobra y se planta.
+  assert.equal(decideDraw(poisoned, sevenOfTen, { difficulty: 'normal' }), true);
+  assert.equal(decideDraw(poisoned, sevenOfTen, { difficulty: 'duro', view: view() }), false);
+  // Salvo que el próximo golpe del rival lo tumbe: ahí lo que rinde después no importa.
+  assert.equal(decideDraw(poisoned, sevenOfTen, { difficulty: 'duro', view: view({ myHp: 5 }) }), true);
 
   const t0 = performance.now();
   decideDraw(chainOf(card('bird', 'plant', 'bug')), deck, { difficulty: 'duro' });

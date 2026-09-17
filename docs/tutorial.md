@@ -236,7 +236,7 @@ Las reacciones no bloquean nada: si el navegador no anima, el tutorial funciona 
 
 ## 11. Pantalla final
 
-Reutiliza el cartel grande de fin de partida (`finaleHtml` en `ui.js`) con el texto
-**"¡TUTORIAL COMPLETADO!"**, y en el pie dos botones: **Ir a modo Aventura** (el
+Reutiliza la pantalla del final (la escena de victoria de `src/result.js`) con el texto
+**"¡TUTORIAL COMPLETADO!"**, y abajo dos botones: **Ir a modo Aventura** (el
 mismo destino que `data-action="adv-map"`) y **Menú principal**. Se marca
 `tutorialDone` en `localStorage` como hoy.

@@ -9,9 +9,11 @@ import { createCues } from './audio-cues.js';
 import {
   FORFEIT_ROUNDS, TARGET, PLAYERS, MARKET_SIZE, TUNING, hpOf, isBotSeat, lastChance,
   matchResult, ownedBy,
-  seatVoice, swingOf,
+  seatVoice, swingOf, brutalBonusOf,
 } from './game.js';
+import { createPowerFx, preloadPowers, POWER_GAP } from './power-fx.js';
 import { markLevelCompleted, isFinalLevel, nextLevelId } from './adventure.js';
+import { createResult, RESULT_WAIT } from './result.js';
 
 const $ = (id) => document.getElementById(id);
 const settled = new Set();
@@ -71,8 +73,11 @@ function addressing(state, player) {
 
 // El símbolo va escrito en el casillero y no solo pintado: el recorrido de la cadena
 // necesita encontrar el eslabón de cada racha carta por carta (ver `traceChain`).
-function symChip(symbol, on) {
-  return `<span class="sym" data-sym="${symbol}" data-on="${on}" style="--c:${SYMBOLS[symbol].color}">
+//
+// `drink` marca el eslabón de la racha que mide la bebida (ver `brutalRunOf`).
+function symChip(symbol, on, drink = false) {
+  const mark = drink ? ' data-brutal="true"' : '';
+  return `<span class="sym" data-sym="${symbol}" data-on="${on}"${mark} style="--c:${SYMBOLS[symbol].color}">
     ${crest(symbol)}</span>`;
 }
 
@@ -86,16 +91,34 @@ function powerChip(card) {
   const classPower = powers.find((p) => POWERS[p]?.symbol);
   const color = classPower ? (SYMBOLS[POWERS[classPower].symbol]?.color ?? '#f5c542') : '#f5c542';
   const cls = powers.length > 1 ? 'card-power card-power--multi' : 'card-power';
-  return `<span class="${cls}" style="--c:${color}"
+  return `<span class="${cls}" style="--c:${color}" data-powers="${powers.join(' ')}"
     >${powers.map((p) => powerIcon(p)).join('')}</span>`;
 }
 
-function cardHtml(chain, card, index, isStackTarget = false) {
+/**
+ * La racha que mide la Energy Drink: la más larga de la cadena, que es la que le pone el
+ * número a lo que suma al plantarse. Mientras dura el turno se va marcando en la mesa
+ * para que se vea qué racha conviene estirar. Con empate, la viva: es la que todavía
+ * puede crecer. `null` si la cadena no trae bebida o ya se cortó.
+ */
+function brutalRunOf(chain) {
+  if (chain.busted || !chain.cards.some((c) => powersOf(c).includes('brutal'))) return null;
+  let best = null;
+  for (const run of chain.runs) {
+    if (!best || run.length > best.length || (run.length === best.length && run.alive && !best.alive)) best = run;
+  }
+  return best?.symbol ?? null;
+}
+
+function cardHtml(chain, card, index, isStackTarget = false, drink = null) {
   const giant = card.stackedCards ? ' card--giant' : '';
   const targetCls = isStackTarget ? ' card--stack-target' : '';
   const cls = (settled.has(card.uid) ? 'card is-settled' : 'card') + giant + targetCls;
   settled.add(card.uid);
-  const syms = card.symbols.map((s) => symChip(s, isScoringCell(chain, index, s))).join('');
+  const syms = card.symbols.map((s) => {
+    const on = isScoringCell(chain, index, s);
+    return symChip(s, on, on && s === drink);
+  }).join('');
   const targetAttr = isStackTarget ? ` data-stack-col="${index}" role="button" tabindex="0" title="${tr('Alargar columna {n}', { n: index + 1 })}"` : '';
   const dropHint = isStackTarget ? '<span class="card-stack-drop-hint" aria-hidden="true">↓</span>' : '';
   return `<div class="${cls}" data-col="${index}"${targetAttr}>${dropHint}${syms}${powerChip(card)}</div>`;
@@ -113,14 +136,10 @@ function bustCardHtml(card) {
 function pendingStackHtml(card, zoomAttr = '', chooser = null) {
   const syms = card.symbols.map((s) => symChip(s, true)).join('');
   const badge = chooser
-    ? tr('Free Game — {name} elige la columna', { name: chooser })
-    : tr('Free Game — Elegí qué columna colocar');
+    ? `\n      <div class="tetris-badge"><i>✨</i><span>${tr('{name} elige la columna', { name: chooser })}</span></div>`
+    : '';
   return `
-    <div class="tetris-dock"${zoomAttr} id="tetris-dock" aria-label="${tr('Carta de Free Game para colocar')}">
-      <div class="tetris-badge">
-        <i>✨</i>
-        <span>${badge}</span>
-      </div>
+    <div class="tetris-dock"${zoomAttr} id="tetris-dock" aria-label="${tr('Carta para colocar')}">${badge}
       <div class="tetris-lane" id="tetris-lane">
         <div class="card card--tetris-floating" id="tetris-floating-card">
           <span class="card-no">✨</span>
@@ -131,18 +150,17 @@ function pendingStackHtml(card, zoomAttr = '', chooser = null) {
     </div>`;
 }
 
-function runsHtml(chain) {
+function runsHtml(chain, drink = null) {
   if (chain.cards.length === 0) return `<span class="runs-empty">${tr('sin cartas')}</span>`;
-  if (chain.busted) {
-    return `<span class="runs-zero">${
-      chain.timeout
-        ? tr('Se acabó el tiempo · el ataque falla')
-        : tr('Cadena cortada · el ataque falla')}</span>`;
-  }
+  if (chain.busted) return '';
   return scoreChain(chain)
     .breakdown.map((run) => {
-      return `<span class="run" data-alive="${run.alive}" style="--c:${SYMBOLS[run.symbol].color}">
-        ${crest(run.symbol, 'sm')} ×${run.length} <b>${run.points}</b></span>`;
+      // La racha de la bebida lleva su amuleto y lo que va a sumar al plantarse.
+      const extra = run.symbol === drink
+        ? `<span class="run-brutal">${powerIcon('brutal', 'sm')}+${brutalBonusOf(chain)}</span>`
+        : '';
+      return `<span class="run" data-alive="${run.alive}"${run.symbol === drink ? ' data-brutal="true"' : ''} style="--c:${SYMBOLS[run.symbol].color}">
+        ${crest(run.symbol, 'sm')} ×${run.length} <b>${run.points}</b>${extra}</span>`;
     })
     .join('');
 }
@@ -154,13 +172,17 @@ function runsHtml(chain) {
  */
 export function statusHtml(state, player) {
   const st = state.status[player];
-  const pipIcon = (src, value, title) =>
-    `<span class="pip-status" title="${title}"><img src="${src}" alt=""><b>${value}</b></span>`;
-  const pip = (id, value, title) => pipIcon(iconUrl(`status-${id}.png`), value, title);
+  // `data-pip` es el poder que la puso: la animación del poder la guarda hasta que el
+  // amuleto llega (ver `holdPip` en `power-fx.js`).
+  const pipIcon = (id, src, value, title) =>
+    `<span class="pip-status" data-pip="${id}" title="${title}"><img src="${src}" alt=""><b>${value}</b></span>`;
+  const pip = (id, value, title) => pipIcon(id, iconUrl(`status-${id}.png`), value, title);
 
   const chips = [];
-  if (st.egg) {
-    const breakDmg = st.eggBreak || TUNING.eggBreak;
+  // La cáscara del huevo: se ve mientras haya escudo que romper y daño cargado. El
+  // escudo solo, sin huevo (el de la máscara), ya lo cuenta la chapa.
+  if (st.egg && st.eggBreak) {
+    const breakDmg = st.eggBreak;
     chips.push(pip('egg', breakDmg,
       tr('{name}: {dmg} de daño acumulado al romperse (escudo: {shield})', {
         name: POWERS.egg.name,
@@ -188,7 +210,7 @@ export function statusHtml(state, player) {
       })));
   }
   if (st.stacked) {
-    chips.push(pipIcon(POWERS.octopus.icon, st.stacked,
+    chips.push(pipIcon('octopus', POWERS.octopus.icon, st.stacked,
       st.stacked === 1
         ? tr('{name}: +1 carta extra para tu mazo al cerrar el turno', { name: POWERS.octopus.name })
         : tr('{name}: +{count} cartas extra para tu mazo al cerrar el turno', {
@@ -197,7 +219,7 @@ export function statusHtml(state, player) {
           })));
   }
   if (st.bubbles) {
-    chips.push(pipIcon(POWERS.bubble.icon, st.bubbles,
+    chips.push(pipIcon('bubble', POWERS.bubble.icon, st.bubbles,
       st.bubbles === 1
         ? tr('{name}: la carta que elijas del centro abrirá tu próxima ronda', { name: POWERS.bubble.name })
         : tr('{name}: {bubbles} cartas apiladas abrirán tu próxima ronda como carta gigante', {
@@ -206,23 +228,23 @@ export function statusHtml(state, player) {
           })));
   }
   if (state.bubbleCard?.[player]) {
-    chips.push(pipIcon(POWERS.bubble.icon, '🫧',
+    chips.push(pipIcon('bubble', POWERS.bubble.icon, '🫧',
       tr('{name}: apertura lista para la próxima ronda', { name: POWERS.bubble.name })));
   }
   if (st.leaf > 0) {
     const heal = st.leaf * TUNING.leafHeal;
     chips.push(pip('leaf', st.leaf,
       st.leaf === 1
-        ? tr('{name}: 1 hoja (cura +{heal} al final de tu turno y consume 1)', { name: POWERS.leaf.name, heal })
-        : tr('{name}: {leaf} hojas (cura +{heal} al final de tu turno y consume 1)', {
+        ? tr('{name}: 1 hoja (cura +{heal} al inicio de tu turno y consume 1)', { name: POWERS.leaf.name, heal })
+        : tr('{name}: {leaf} hojas (cura +{heal} al inicio de tu turno y consume 1)', {
             name: POWERS.leaf.name,
             leaf: st.leaf,
             heal,
           })));
   }
   if (st.steelskin) {
-    chips.push(pipIcon(POWERS.steelskin.icon, `≤${st.steelskin}`,
-      tr('{name}: limita el próximo ataque rival a máximo {cap} de daño', {
+    chips.push(pip('steelskin', `≤${st.steelskin}`,
+      tr('{name}: el próximo ataque rival te saca {cap} de vida como máximo', {
         name: POWERS.steelskin.name,
         cap: st.steelskin,
       })));
@@ -243,31 +265,18 @@ export function statusHtml(state, player) {
  */
 export function plateHtml(state, player) {
   const own = axie(state.axies[player]);
-  const chain = state.chains[player];
   const hp = hpOf(state, player);
-  const dealt = state.roundScores[player];
   const shield = state.status[player].egg;
 
-  // Una sola marca por vez: cómo terminó su ataque. El turno no se escribe acá —lo
-  // cuenta el aro de color que se prende alrededor de la chapa entera mientras dura
-  // (ver `.fighter[data-active="true"] .plate`)—, y un cartelito que dijera
-  // "cargando" al lado del aro sería la misma cosa dos veces.
-  let tag = '';
-  if (dealt === 0 && chain.busted) {
-    tag = `<span class="plate-tag" data-kind="bust">${tr('falló')}</span>`;
-  } else if (dealt) {
-    tag = `<span class="plate-tag" data-kind="hit">${tr('{dealt} de daño', { dealt })}</span>`;
-  }
-
   const shieldBadge = shield > 0
-    ? `<span class="plate-shield" title="${tr('Escudo: aguanta {shield} de daño', { shield })}"><img src="${iconUrl('shield.png')}" alt="" class="shield-icon"><b>${shield}</b></span>`
+    ? `<span class="plate-shield" data-pip="shield" title="${tr('Escudo: aguanta {shield} de daño', { shield })}"><img src="${iconUrl('shield.png')}" alt="" class="shield-icon"><b>${shield}</b></span>`
     : '';
 
   return `
     <span class="plate-top" style="--c:${SYMBOLS[own.class].color}">
       ${crest(own.class, 'sm')}<span class="plate-name">${own.name}</span>
       <span class="plate-who">${
-        player === mySeat ? tr('Vos') : seatVoice(state, player).short}</span>${tag}
+        player === mySeat ? tr('Vos') : seatVoice(state, player).short}</span>
     </span>
     <span class="plate-hp" data-low="${hp <= TARGET / 4}">
       <span class="hpbar"><i></i></span>
@@ -302,13 +311,19 @@ function focusOf(state, picking) {
  * Es uno solo para los dos jugadores, como la mesa: muestra el del que la tiene puesta
  * (ver `focusOf`).
  */
-function swingHtml(state, player) {
+// `held` es daño que ya está en el estado pero que el número todavía no muestra: el de la
+// bebida que viene volando a sumarse (ver `holdSwing` en `mount`). Y antes de eso, hasta
+// que se planta, la bebida no entra en el número: se vuelca encima al plantarse (ver
+// `poured` en `game.js`) y mientras tanto se marca la racha que la mide.
+function swingHtml(state, player, held = 0) {
   const chain = state.chains[player];
+  const poured = Boolean(state.poured?.[player]);
   // El número grande es el daño que se va a aplicar de verdad, no el de la cadena
   // pelada: si la fuerza o el caracol lo mueven, el desglose va abajo.
-  const points = swingOf(state, player);
+  const points = Math.max(swingOf(state, player, { brutal: poured }) - held, 0);
   const raw = chain.busted ? 0 : scoreChain(chain).total;
   const st = state.status[player];
+  const brutal = poured && !held ? brutalBonusOf(chain) : 0;
 
   // Solo se muestra el desglose cuando hay algo que explicar: si la cadena vale lo
   // mismo que el golpe, el número solo alcanza.
@@ -316,6 +331,7 @@ function swingHtml(state, player) {
   if (points !== raw) {
     mods.push(tr('{raw} de cadena', { raw }));
     if (st.strength) mods.push(tr('+{str} de fuerza', { str: st.strength }));
+    if (brutal) mods.push(tr('+{brutal} de garra brutal', { brutal }));
     if (st.weak) mods.push(tr('partido al medio por el caracol'));
   }
   const breakdown = mods.length ? `<span class="swing-mods">${mods.join(' · ')}</span>` : '';
@@ -354,27 +370,15 @@ function swingHtml(state, player) {
     ${breakdown}`;
 }
 
-// `fit` es lo que la pantalla le pide achicar de más para que la mesa entre en el alto
-// que tiene (ver `fitField` en `mount`): acá no se sabe cuánto mide la ventana.
-function fieldHtml(state, player, fit = 1) {
+// El zoom de partida de la mesa, antes de mirar la ventana: cuánto se achica de entrada
+// una carta apilada alta, el dock del Free Game o una cadena larga. Es una apuesta a
+// ciegas —acá no se sabe cuánto mide la ventana— que después corrige `fitField`.
+function baseZoom(state, player) {
   const chain = state.chains[player];
   const isStackTarget = Boolean(state.pendingStack && state.pendingStack.player === player);
-  // La columna la elige solo el dueño de la carta: en la pantalla del rival no hay
-  // columnas que tocar.
-  const placing = isStackTarget && isMine(player);
-  const cards = chain.cards.map((c, i) => {
-    const colAllowed = !state.tutorial || state.tutorialAllowedCol == null || state.tutorialAllowedCol === i;
-    return cardHtml(chain, c, i, placing && colAllowed);
-  }).join('');
-  const bust = chain.bustCard ? bustCardHtml(chain.bustCard) : '';
-
   let maxSyms = 2;
-  if (chain?.cards) {
-    for (const c of chain.cards) {
-      if (c.symbols && c.symbols.length > maxSyms) {
-        maxSyms = c.symbols.length;
-      }
-    }
+  for (const c of chain?.cards ?? []) {
+    if (c.symbols && c.symbols.length > maxSyms) maxSyms = c.symbols.length;
   }
 
   // Zoom out dinámico y progresivo:
@@ -397,8 +401,27 @@ function fieldHtml(state, player, fit = 1) {
       : 0.74;
     zoom = Math.min(zoom, cardZoom);
   }
-  zoom = Math.round(zoom * fit * 100) / 100;
+  return zoom;
+}
 
+// `fit` es lo que la pantalla le corrige a `baseZoom` para que la mesa ocupe el alto que
+// tiene (ver `fitField` en `mount`): menos de 1 si no entra, más de 1 si sobra lugar. La
+// carta nunca pasa de su tamaño de diseño: sobrando lugar, a lo sumo lo recupera.
+function fieldHtml(state, player, fit = 1) {
+  const chain = state.chains[player];
+  const isStackTarget = Boolean(state.pendingStack && state.pendingStack.player === player);
+  // La columna la elige solo el dueño de la carta: en la pantalla del rival no hay
+  // columnas que tocar.
+  const placing = isStackTarget && isMine(player);
+  // La racha de la bebida se marca hasta que sale el golpe: ahí ya se volcó y sumó.
+  const drink = state.roundScores[player] === null ? brutalRunOf(chain) : null;
+  const cards = chain.cards.map((c, i) => {
+    const colAllowed = !state.tutorial || state.tutorialAllowedCol == null || state.tutorialAllowedCol === i;
+    return cardHtml(chain, c, i, placing && colAllowed, drink);
+  }).join('');
+  const bust = chain.bustCard ? bustCardHtml(chain.bustCard) : '';
+
+  const zoom = Math.min(1, Math.round(baseZoom(state, player) * fit * 100) / 100);
   const zoomAttr = zoom < 1 ? ` style="--zoom:${zoom}"` : '';
   const pending = isStackTarget
     ? pendingStackHtml(state.pendingStack.card, zoomAttr, placing ? null : seatVoice(state, player).name)
@@ -407,7 +430,7 @@ function fieldHtml(state, player, fit = 1) {
   return `
     ${pending}
     <div class="strip"${zoomAttr}>${cards}${bust}</div>
-    <div class="runs"${zoomAttr}>${runsHtml(chain)}</div>`;
+    <div class="runs"${zoomAttr}>${runsHtml(chain, drink)}</div>`;
 }
 
 // Arriba solo queda dónde estamos parados: la vida se lee sobre cada Axie y las cartas
@@ -440,25 +463,77 @@ function setClock(el, clock) {
 
 const clockColor = (state, clock) => SYMBOLS[axie(state.axies[clock.seat]).class].color;
 
-function marketCardHtml(card, pickable) {
+function marketCardHtml(card, pickable, chosen = false) {
   const syms = card.symbols
     .map((s) => `<span class="sym" data-on="true" style="--c:${SYMBOLS[s].color}">${crest(s)}</span>`)
     .join('');
-  const cls = settled.has(card.uid) ? 'market-card is-settled' : 'market-card';
+  let cls = settled.has(card.uid) ? 'market-card is-settled' : 'market-card';
+  if (chosen) cls += ' is-chosen';
   settled.add(card.uid);
   const label = card.symbols.map((s) => SYMBOLS[s].name).join(tr(' y '))
     + (card.power ? tr(', con {power}', { power: POWERS[card.power].name }) : '');
   return `<button class="${cls}" data-uid="${card.uid}"${pickable ? '' : ' disabled'}
     data-power="${card.power ?? ''}" data-syms="${card.symbols.join(' ')}"
+    ${pickable ? `aria-pressed="${chosen}"` : ''}
     aria-label="${label}">${syms}${powerChip(card)}</button>`;
+}
+
+/**
+ * El botón que cierra la elección. Tocar una carta la marca y nada más: la compra se
+ * hace acá, así un toque de más no se lleva la carta equivocada. Sin carta marcada
+ * está apagado y dice qué falta; con una, lleva sus símbolos para que se lea qué se
+ * está llevando sin volver a mirar la fila.
+ */
+function confirmHtml(card) {
+  if (!card) {
+    return `<button class="btn btn-primary market-confirm" data-action="confirm" disabled>
+      ${tr('Elegí una carta')}</button>`;
+  }
+  const syms = card.symbols.map((s) => crest(s, 'sm')).join('');
+  return `<button class="btn btn-primary market-confirm" data-action="confirm">
+    <span>${tr('Confirmar selección')}</span><span class="market-confirm-syms">${syms}</span></button>`;
+}
+
+/**
+ * El cartel de arriba del centro: al marcar una carta con poder, qué hace cada uno en
+ * un renglón. El hueco está siempre, vacío si no hay nada que explicar, así marcar otra
+ * carta cambia el cartel sin reescribir el panel (ver `markChoice`).
+ */
+function marketTipHtml(card) {
+  const powers = card ? powersOf(card) : [];
+  if (powers.length === 0) return '<div class="market-tip" hidden></div>';
+  return `<div class="market-tip" role="status">${powerTipRows(powers)}</div>`;
+}
+
+/**
+ * Los renglones del cartel, uno por poder, apilados. Una carta gigante puede traer el
+ * mismo poder más de una vez: va un solo renglón con cuántas son, así el cartel no se
+ * alarga repitiendo lo mismo.
+ */
+function powerTipRows(powers) {
+  const counts = new Map();
+  for (const id of powers) if (POWERS[id]) counts.set(id, (counts.get(id) ?? 0) + 1);
+  return [...counts].map(([id, n]) => {
+    const p = POWERS[id];
+    const color = p.symbol ? SYMBOLS[p.symbol].color : '#f5c542';
+    const times = n > 1 ? ` <i class="market-tip-times">×${n}</i>` : '';
+    return `<p class="market-tip-row" style="--c:${color}">${powerIcon(id, 'sm')}
+      <span><b>${p.name}${times}</b>${p.tip}</span></p>`;
+  }).join('');
 }
 
 /**
  * El centro. No está siempre puesto: aparece encima del combate recién cuando alguien
  * cierra su turno, que es cuando hay algo que elegir, y se va al terminar el reparto.
  */
-function marketHtml(state, { picking, pickable, canRenew }) {
+function marketHtml(state, { picking, pickable, canRenew, chosen = null }) {
   const open = new Set(pickable.map((c) => c.uid));
+  // Solo vale marcada una carta que todavía se puede llevar.
+  const isPickable = (c) => {
+    if (state.tutorial && state.tutorialPlainOnly && c.power) return false;
+    return state.tutorial && state.tutorialAllowedCard ? c.uid === state.tutorialAllowedCard : open.has(c.uid);
+  };
+  const choice = state.market.find((c) => c.uid === chosen && isPickable(c)) ?? null;
   const mode = state.draft?.mode;
   const remaining = state.draft?.remaining ?? 0;
   const bonus = state.draft?.step === 'bonus' ? state.draft.bonus : 0;
@@ -487,7 +562,8 @@ function marketHtml(state, { picking, pickable, canRenew }) {
       `<p class="overlay-note">${note}</p>`;
     actions = `<div class="overlay-actions">
       <button class="btn" data-action="skip"
-        title="${tr('Perdés la carta que te debe el pulpo')}">${tr('No agarrar')}</button></div>`;
+        title="${tr('Perdés la carta que te debe el pulpo')}">${tr('No agarrar')}</button>
+      ${confirmHtml(choice)}</div>`;
   } else {
     // No se pregunta el modo: la carta que toques ya dice qué te llevás.
     let note;
@@ -511,102 +587,29 @@ function marketHtml(state, { picking, pickable, canRenew }) {
     const skipLabel = state.draft.took ? tr('No agarrar más') : tr('No agarrar');
     actions = `<div class="overlay-actions">${renew}
       <button class="btn" data-action="skip" ${skipDisabled}
-        title="${tr('Cerrá el reparto sin sumar cartas al mazo')}">${skipLabel}</button></div>`;
+        title="${tr('Cerrá el reparto sin sumar cartas al mazo')}">${skipLabel}</button>
+      ${confirmHtml(choice)}</div>`;
   }
 
-  const slots = state.market.map((c) => {
-    let isPick = state.tutorial && state.tutorialAllowedCard ? c.uid === state.tutorialAllowedCard : open.has(c.uid);
-    if (state.tutorial && state.tutorialPlainOnly && c.power) {
-      isPick = false;
-    }
-    return marketCardHtml(c, isPick);
-  }).join('');
+  const slots = state.market
+    .map((c) => marketCardHtml(c, isPickable(c), c === choice))
+    .join('');
   const empty = '<div class="market-slot"></div>'.repeat(
     Math.max(MARKET_SIZE - state.market.length, 0),
   );
-  // El centro tapa la barra, y con ella el reloj: acá va una copia.
-  const clock = state.clock?.kind === 'draft' ? state.clock : null;
-  const timer = clock
-    ? `<div class="clock clock--draft" role="timer" data-on="true"
-        style="--c:${clockColor(state, clock)};--p:${clockLeft(clock) / clock.ms}">${clockHtml(clock)}</div>`
-    : '';
   return `<div class="overlay-panel o-panel">
-    <div class="overlay-head">${head}${timer}</div>
-    <div class="market-row">${slots}${empty}</div>
+    ${marketTipHtml(choice)}
+    <div class="overlay-head">${head}</div>
+    <div class="market-row" data-choosing="${Boolean(choice)}">${slots}${empty}</div>
     ${actions}
   </div>`;
 }
 
 /**
- * El pie de la pantalla, armado. Son dos casilleros y siempre los mismos dos: arriba lo
- * que hay para leer —el renglón de lo que está pasando, y la cinta cuando algo cierra—
- * y abajo lo que hay para apretar.
- *
- * Los dos salen siempre, aunque estén vacíos, y eso no es de adorno: el alto del pie lo
- * fija el CSS (ver `--pie`) contando con que las dos cajas están puestas. Devolver
- * nada más el renglón cuando no hay nada que apretar —el turno de la CPU, el respiro
- * entre rondas— dejaría el casillero de abajo sin nadie adentro y, con él, la mesa
- * entera subiendo y bajando dos veces por turno. Vacío es un estado, no una ausencia.
+ * Los botones al pie del arena.
  */
-const pie = (say, acts = '') =>
-  `<div class="controls-say">${say}</div>
-   <div class="controls-acts">${acts}</div>`;
-
-/**
- * El renglón del pie. Casi siempre es gris y calla; la única vez que levanta la voz es
- * la última chance, y ahí va en fuego, el mismo naranja que en ese momento tiene el
- * bicho prendido alrededor (ver `rage` y `.controls-msg[data-tone="fury"]`). Es el
- * único turno de la partida en el que seguir significa otra cosa —ya no se juega por
- * ganar sino por empatar—, así que se dice con el color y no solo con la frase.
- */
-const say = (msg, fury = false) =>
-  `<span class="controls-msg"${fury ? ' data-tone="fury"' : ''}>${msg}</span>`;
-
-/** Cuántos papelitos caen al ganar. Los suficientes para que se lea como una lluvia
- * y no como una docena de cuadraditos contables, y no tantos como para que un teléfono
- * tenga que mover doscientas cajas a la vez. */
-const CONFETTI = 46;
-
-/**
- * La lluvia de papelitos de la victoria.
- *
- * Se arma acá, en HTML, y no en el canvas de los golpes: ese canvas está en
- * `plus-lighter` —los efectos del kit vienen capturados sobre negro y se **suman** a
- * la pantalla— y un papelito sumado deja de ser un papelito, es una luz. Esto es papel:
- * opaco, con su color plano, tapando lo que pasa por atrás.
- *
- * Cada uno lleva lo suyo en variables: de dónde arranca, cuánto tarda, cuánto se
- * corre al caer y cuánto gira. El CSS pone el resto (ver `.confetti`). El azar va acá
- * y no en el CSS porque el cartel se pinta una sola vez por partida: la lluvia se
- * sortea entera al terminar y después no cambia más.
- *
- * Los colores son los seis de las clases, que son los colores del juego.
- */
-function confettiHtml() {
-  const colors = Object.values(SYMBOLS).map((s) => s.color);
-  const bits = [];
-  for (let i = 0; i < CONFETTI; i++) {
-    // Repartidos a lo ancho por su lugar en la fila y no al azar puro: sorteando las
-    // dos coordenadas quedan grumos y claros, que se lee como que algo se rompió. El
-    // empujón al azar es para que no se note la fila.
-    const x = ((i + .5) / CONFETTI) * 100 + (Math.random() * 5 - 2.5);
-    const bit = [
-      `--x:${x.toFixed(2)}%`,
-      // Los primeros salen enseguida y el resto va cayendo detrás: la lluvia entra con
-      // el cartel y se termina sola a los cuatro segundos y pico.
-      `--delay:${(Math.random() * 1.5).toFixed(2)}s`,
-      `--dur:${(2.4 + Math.random() * 1.9).toFixed(2)}s`,
-      // Para qué lado se va mientras cae, y cuántas vueltas da en el camino.
-      `--sway:${(Math.random() * 120 - 60).toFixed(0)}px`,
-      `--spin:${(Math.random() * 1080 - 540).toFixed(0)}deg`,
-      `--c:${colors[i % colors.length]}`,
-      // Unos anchos y otros finitos, que es lo que hace que parezcan recortados.
-      `--w:${(6 + Math.random() * 6).toFixed(1)}px`,
-    ].join(';');
-    bits.push(`<i style="${bit}"></i>`);
-  }
-  return `<div class="confetti" aria-hidden="true">${bits.join('')}</div>`;
-}
+const pie = (acts = '') =>
+  `<div class="controls-acts">${acts}</div>`;
 
 /**
  * Ganó el que está mirando.
@@ -620,61 +623,37 @@ function confettiHtml() {
  */
 const wonMatch = (state) => matchResult(state) === (mySeat ?? 'p1');
 
-/**
- * El cartel del final: el grande, el del medio de la pantalla.
- *
- * Estaba abajo, en el pie, sobre la misma cinta tallada que usan los carteles de cada
- * intercambio. Dos problemas con eso. Uno: apoyado sobre la cinta y pegado al botón de
- * abajo se leía como **otro botón**, y el que termina la partida se queda mirando cuál
- * de los dos hay que apretar. Dos: el final de la partida no es una noticia más de la
- * fila de noticias — es *la* noticia, y las noticias que importan no se dan en el
- * mismo renglón donde venía diciéndose quién pegó más fuerte.
- *
- * Así que acá no hay caja: es letra sola, grande, en el medio, encima de los dos
- * bichos —uno festejando y el otro tirado, que es la otra mitad de lo que se está
- * diciendo—.
- *
- * Y son dos carteles y no cinco. Antes había uno por cada combinación de modo y
- * resultado —"¡Ganaste el combate!", "Te noquea la CPU", "¡Gana el Jugador 2!", el
- * empate— y todos decían el mismo dato con distintas palabras. Lo único que el que
- * está mirando quiere saber al terminar es si ganó, así que hay uno para cada
- * respuesta: la victoria, que además tira papelitos, y la otra, que no le echa la
- * culpa a nadie. El doble KO cae del lado de la segunda: nadie ganó, y eso es
- * exactamente lo que dice.
- *
- * La tercera es la partida anulada —alguien se fue en las primeras rondas (ver
- * `FORFEIT_ROUNDS`)—, que no es perder ni empatar: no se jugó, y decir cualquiera de
- * las otras dos sería mentir. Cuando la partida terminó por abandono, abajo se dice
- * quién se fue: sin eso, la partida se corta de golpe en el medio y no se entiende por qué.
- */
-function finaleHtml(state) {
-  const won = wonMatch(state);
-  const voided = matchResult(state) === 'void';
-  let text;
-  if (state.mode === 'adventure') {
-    text = won
-      ? (isFinalLevel(state.adventure?.level)
-        ? tr('¡Aventura Completada!')
-        : tr('¡{name} Superado!', { name: state.adventure?.name ?? tr('Nivel') }))
-      : tr('Derrota en la Aventura');
-  } else if (state.mode === 'tutorial') {
-    text = tr('¡TUTORIAL COMPLETADO!');
-  } else {
-    text = won ? tr('¡Victoria!') : voided ? tr('Partida anulada') : tr('La suerte no estuvo de tu lado…');
-  }
-  const gone = state.forfeit && seatVoice(state, state.forfeit.by).name;
-  const note = !gone ? ''
-    : voided
-      ? tr('{gone} abandonó en las primeras {rounds} rondas: no gana nadie.', { gone, rounds: FORFEIT_ROUNDS })
-      : tr('{gone} abandonó la partida.', { gone });
-  return `<strong class="finale-text">${text}</strong>` +
-    (note ? `<span class="finale-note">${note}</span>` : '') +
-    (won ? confettiHtml() : '');
-}
-
 /** En el tutorial solo vale la acción que habilita el guión ('any' las habilita todas). */
 const gated = (state, action) => Boolean(state?.tutorial && state.tutorialAllowed
   && state.tutorialAllowed !== action && state.tutorialAllowed !== 'any');
+
+/**
+ * Las puertas del final: otra partida con lo mismo, o volver a elegir. Van en la
+ * pantalla del final (ver `result.js`) y no en el pie: son lo único que se puede hacer
+ * ahí, y el pie quedaba debajo de la pantalla.
+ */
+function endActionsHtml(state) {
+  const btn = (action, label, primary = false) =>
+    `<button class="btn${primary ? ' btn-primary' : ''}" data-action="${action}">${label}</button>`;
+  // La puerta al menú es de la portada, así que solo existe donde hay portada: en la
+  // partida en red la salida es la de la sala, y un botón que no lleva a ningún lado
+  // es peor que no tenerlo.
+  //
+  // Si alguien se fue, tampoco hay "Jugar de nuevo": el asiento de enfrente quedó
+  // vacío y no hay contra quién. Queda una sola puerta, la de volver a las salas.
+  if (netPlay && state.forfeit) return btn('leave', tr('Volver a las salas'), true);
+  // El tutorial termina en una puerta hacia el juego de verdad, no en una revancha.
+  if (state.mode === 'tutorial') {
+    return btn('adv-map', tr('Ir a modo Aventura'), true) + btn('menu', tr('Menú principal'));
+  }
+  if (state.mode === 'adventure') {
+    const first = !wonMatch(state) ? btn('restart', tr('Reintentar Nivel'), true)
+      : isFinalLevel(state.adventure?.level) ? btn('adv-map', tr('Ver Aventura'), true)
+        : btn('adv-next', tr('Siguiente Nivel'), true);
+    return first + btn('adv-map', tr('Aventura')) + btn('menu', tr('Menú principal'));
+  }
+  return btn('restart', tr('Jugar de nuevo'), true) + (netPlay ? '' : btn('menu', tr('Menú principal')));
+}
 
 function controlsHtml(state, { picking, acting }) {
   // El centro ya lo dice todo: su propio cartel abre con quién elige y con qué
@@ -682,91 +661,16 @@ function controlsHtml(state, { picking, acting }) {
   // en la misma pantalla, uno leído y el otro ignorado.
   if (state.phase === 'draft') return pie('');
 
-  if (state.phase === 'matchEnd') {
-    // Cómo terminó no se dice acá abajo: sale grande en el medio de la pantalla (ver
-    // `finaleHtml`). El pie queda con lo único que hay para hacer, que son las dos
-    // puertas: otra partida con lo mismo, o volver a elegir.
-    //
-    // Y no dice más nada. El renglón traía la vida final y en cuántos intercambios, y
-    // era repetir en letra chica lo que ya está en pantalla: las dos barras de vida
-    // siguen puestas arriba y el número de intercambio, en el marcador.
-    //
-    // La puerta al menú es de la portada, así que solo existe donde hay portada: en la
-    // partida en red la salida es la de la sala, y un botón que no lleva a ningún lado
-    // es peor que no tenerlo.
-    //
-    // Si alguien se fue, tampoco hay "Jugar de nuevo": el asiento de enfrente quedó
-    // vacío y no hay contra quién. Queda una sola puerta, la de volver a las salas.
-    if (netPlay && state.forfeit) {
-      return pie('', `<button class="btn btn-primary" data-action="leave">${tr('Volver a las salas')}</button>`);
-    }
-    // El tutorial termina en una puerta hacia el juego de verdad, no en una revancha.
-    if (state.mode === 'tutorial') {
-      return pie(
-        '',
-        `<button class="btn btn-primary" data-action="adv-map">${tr('Ir a modo Aventura')}</button>` +
-        `<button class="btn" data-action="menu">${tr('Menú principal')}</button>`,
-      );
-    }
-    if (state.mode === 'adventure') {
-      const won = wonMatch(state);
-      const isLastLevel = isFinalLevel(state.adventure?.level);
-      if (won) {
-        return pie(
-          '',
-          (!isLastLevel
-            ? `<button class="btn btn-primary" data-action="adv-next">${tr('Siguiente Nivel')}</button>`
-            : `<button class="btn btn-primary" data-action="adv-map">${tr('Ver Aventura')}</button>`) +
-          `<button class="btn" data-action="adv-map">${tr('Aventura')}</button>` +
-          `<button class="btn" data-action="menu">${tr('Menú principal')}</button>`,
-        );
-      }
-      return pie(
-        '',
-        `<button class="btn btn-primary" data-action="restart">${tr('Reintentar Nivel')}</button>` +
-        `<button class="btn" data-action="adv-map">${tr('Aventura')}</button>` +
-        `<button class="btn" data-action="menu">${tr('Menú principal')}</button>`,
-      );
-    }
-    return pie(
-      '',
-      `<button class="btn btn-primary" data-action="restart">${tr('Jugar de nuevo')}</button>` +
-      (netPlay ? '' : `<button class="btn" data-action="menu">${tr('Menú principal')}</button>`),
-    );
-  }
+  // Terminada la partida el pie queda vacío: la pantalla del final tapa la mesa y trae
+  // sus propias puertas (ver `endActionsHtml`).
+  if (state.phase === 'matchEnd') return pie('');
 
   if (state.phase === 'roundEnd') {
-    // El cierre del intercambio no dice nada. Ni el cartel de quién pegó más fuerte,
-    // ni el renglón con el daño de cada uno y las dos vidas.
-    //
-    // Los dos contaban en palabras lo que el intercambio acaba de actuar: los números
-    // del daño salen volando de los bichos al golpear, el que se llevó la peor parte
-    // lo muestra el cuerpo, y las vidas están arriba, en las barras, moviéndose. Un
-    // cartel y una línea de texto apilados bajo las cartas para repetir eso, en el
-    // único momento de la partida que tenía que ser un respiro y no una lectura más.
-    //
-    // Sin botón, además: la ronda siguiente arranca sola (ver `endRound`). Así que el
-    // pie queda con las dos cajas vacías, que es un estado y no un olvido — el alto
-    // lo fija el CSS con las dos puestas (ver `pie`), y la mesa no se mueve.
     return pie('');
   }
 
-  // El que juega su última chance ya está sin vida: el único final que le queda es el
-  // empate, y eso se dice, porque cambia por completo cómo se lee el turno.
-  const dying = lastChance(state);
-
-  // Sin nadie a quien darle un botón: o está jugando la máquina, o entre el reparto y
-  // el turno siguiente (turn === null) no hay nada que decidir.
   if (!acting || !isMine(acting)) {
-    // En red el turno del otro no es una espera muerta: se ve cómo se le arma la
-    // cadena carta por carta en la misma mesa. El cartel solo dice de quién es.
-    const msg = !state.turn ? tr('Repartiendo…')
-      : !acting && dying === state.turn ? tr('Última chance de la CPU: si te deja sin vida, empatan.')
-      : !acting ? tr('La CPU está cargando su ataque…')
-      : dying === acting
-        ? tr('{at}última chance: si te deja sin vida, empatan.', { at: addressing(state, acting) })
-        : tr('{at}está cargando su ataque…', { at: addressing(state, acting) });
-    return pie(say(msg, Boolean(state.turn) && dying === (acting ?? state.turn)));
+    return pie('');
   }
 
   const off = (action) => (state.busy || gated(state, action) ? 'disabled' : '');
@@ -774,43 +678,7 @@ function controlsHtml(state, { picking, acting }) {
   const acts = `<button class="btn btn-danger${lit('hit')}" data-action="hit" ${off('hit')}>${tr('Robar carta')}</button>
      <button class="btn btn-primary${lit('stand')}" data-action="stand" ${off('stand')}>${tr('Atacar')}</button>`;
 
-  if (state.pendingStack && state.pendingStack.player === acting) {
-    const card = state.pendingStack.card;
-    return pie(
-      say(tr('✨ Free Game: elegí la columna donde colocar {card}', { card: cardLabel(card) })),
-      acts,
-    );
-  }
-
-  if (state.freeGame?.[acting]) {
-    return pie(
-      say(tr('✨ Free Game activo: robando carta automáticamente…')),
-      acts,
-    );
-  }
-
-  const at = addressing(state, acting);
-  // En un turno normal el renglón no dice nada, y eso es lo correcto: lo que decía
-  // —"sigue viva 🦋🐙"— ya está dibujado dos veces más arriba, en los símbolos
-  // encendidos de la cadena. Repetirlo en palabras no agregaba un dato: le sacaba aire
-  // a lo único que se aprieta y le pedía al ojo que leyera para enterarse de algo que
-  // ya estaba mirando.
-  //
-  // Quedan las dos cosas que la cadena no puede mostrar: la última chance —que cambia
-  // qué significa seguir— y, en la partida compartida, de quién es el turno, que sin
-  // esto no lo dice nadie porque los dos juegan en la misma pantalla.
-  const msg = dying === acting
-    ? tr('{at}última chance: si dejás sin vida al otro, empatan.', { at })
-    : at && !mySeat ? tr('Le toca a {name}.', { name: seatVoice(state, acting).name })
-    : '';
-  // Los dos botones van juntos en su propia caja y no sueltos al pie, y el cartel
-  // queda arriba de ellos. Son la única cosa que se aprieta en toda la partida: tienen
-  // que estar donde el pulgar los busca —en el medio, uno al lado del otro y del mismo
-  // tamaño—, y no arrinconados contra el borde derecho con el cartel tirando del otro
-  // lado. Que midan lo mismo lo hace la caja (ver `.controls-acts` en el CSS), no el
-  // largo de lo que dice cada uno: "Atacar" es una palabra y "Robar carta" son dos, y
-  // aun así ninguno de los dos es el botón grande.
-  return pie(say(msg, dying === acting), acts);
+  return pie(acts);
 }
 
 /**
@@ -969,10 +837,21 @@ function paint(node, html) {
  * clics, que es lo que evita que alguien toque una carta que ya no está.
  */
 const OVERLAY_OUT = 200;
+const OVERLAY_IN = 300;
 let closing = 0;
+let rising = 0;
 function overlay(el, open) {
   if (open) {
     clearTimeout(closing);
+    // La entrada (`overlay-rise`) es de cuando el centro se abre y de nada más. Colgada
+    // del panel a secas se repetía cada vez que el panel se reescribía —otra carta
+    // llevada, otro cartel— y el centro titilaba entero.
+    if (el.dataset.open !== 'true') {
+      clearTimeout(rising);
+      el.dataset.rise = 'true';
+      rising = setTimeout(() => { el.dataset.rise = ''; }, OVERLAY_IN);
+      rising.unref?.();
+    }
     el.dataset.open = 'true';
     el.dataset.closing = '';
     el.hidden = false;
@@ -1301,7 +1180,7 @@ export const whiffed = (hit) => hit.amount === 0 && hit.blocked === 0;
  * repinta entera a cada carta y una animación puesta en el HTML se cortaría a la
  * mitad. El `<span>` del número se saca solo al terminar, así no se apilan.
  */
-function playHit(vfx, audio, arena, portraits, motions, hit, klass) {
+function playHit(vfx, audio, arena, portraits, motions, hit, klass, powerFx) {
   const el = portraits[hit.target];
   if (!el) return 0;
 
@@ -1329,7 +1208,11 @@ function playHit(vfx, audio, arena, portraits, motions, hit, klass) {
   // no trae uno para el huevo— y todo el peso lo llevan el retroceso, el número y el
   // sonido de rebote. El huevo ya se vio romperse en el golpe anterior; esto es la
   // consecuencia, y llega un beat después justamente para que se lean separados.
+  // Los efectos de los poderes van sobre el dibujo del Axie y no sobre su nodo, que
+  // ocupa media pantalla (ver `art` en `power-fx.js`).
+  const art = el.querySelector?.('.axie') ?? el;
   if (hit.kind === 'thorns') {
+    vfx.play('eggThorns', art, { from: sideOf(hit.by), width: 2 });
     audio.sfx('thorns');
     pulse(el, 'react', 'hit', 900);
     motions[hit.target].pulse('hurt');
@@ -1345,13 +1228,10 @@ function playHit(vfx, audio, arena, portraits, motions, hit, klass) {
     return 0;
   }
 
+  // La pluma sale volando de su carta y pega al llegar: todo eso es de la animación de
+  // los poderes (ver `power-fx.js`).
   if (hit.kind === 'feather') {
-    audio.sfx('thorns');
-    pulse(el, 'react', 'hit', 900);
-    motions[hit.target].pulse('hurt');
-    pulse(arena, 'shake', shakeOf(hit.amount) || 'soft', 500);
-    floatTag(el, 'feather',
-      `<span class="dmg-label">${powerIcon('feather', 'sm')} ${POWERS.feather.name}</span>−${hit.amount}`);
+    powerFx.feather(hit);
     return 0;
   }
 
@@ -1387,7 +1267,9 @@ function playHit(vfx, audio, arena, portraits, motions, hit, klass) {
   if (hit.blocked > 0) {
     audio.sfx('block', { delay: impact + 80 });
     setTimeout(() => {
-      floatTag(el, 'egg', `${powerIcon('egg', 'sm')} ${hit.broke ? tr('¡se rompe!') : `−${hit.blocked}`}`);
+      // El escudo del kit: se sacude si aguanta, estalla si se rompe.
+      vfx.play(hit.broke ? 'eggBreak' : 'eggShield', art, { from: sideOf(hit.by), width: 1.8 });
+      floatTag(el, 'egg', `<img class="power power--sm" src="${iconUrl('shield.png')}" alt=""> ${hit.broke ? tr('¡se rompe!') : `−${hit.blocked}`}`);
     }, impact + 80);
   }
 
@@ -1426,9 +1308,10 @@ function playHit(vfx, audio, arena, portraits, motions, hit, klass) {
 /**
  * El clip del kit que le corresponde a cada postura. `charging` no tiene uno propio
  * que se repita: `activity/prepare` es plantarse para atacar, se reproduce una vez y
- * el Axie se queda así hasta que le toque golpear.
+ * el Axie se queda así hasta que le toque golpear. Ganar tampoco usa el suyo: el Axie
+ * respira en su lugar y festeja con saltitos contentos (ver `HOLDS` en `axie-motion.js`).
  */
-const CLIP_OF = { idle: 'idle', charging: 'ready', ko: 'ko', win: 'win' };
+const CLIP_OF = { idle: 'idle', charging: 'ready', ko: 'ko', win: 'celebrate' };
 
 function stanceOf(state, player) {
   // El que se queda sin vida no se desploma en el acto: alcanza a devolver el golpe
@@ -1495,6 +1378,41 @@ export function toggleLang() {
   if (typeof location?.reload === 'function') location.reload();
 }
 
+/** Lo que dura la salida de un panel (`lobby-out` en `styles.css`), con margen. */
+const LEAVE_MS = 260;
+
+/**
+ * Cerrar una pantalla era esconderla de golpe, aunque para entrar se deslizaba. Como
+ * `hidden` tiene que cambiar en el acto (lo leen el teclado, la sala y los tests), lo
+ * que sale es una copia quieta del nodo: sin ids, sin foco y sin toques, se apaga
+ * encima de lo que entra y se borra sola.
+ *
+ * La copia se cuelga de `host` y se clava con `position: fixed` en el rectángulo que
+ * ocupaba la de verdad. Colgada al lado del original seguía a su contenedor, y en
+ * pantallas angostas la esquina del botón de jugar cambia de ancho y de altura según
+ * la vista (ver `.lobby[data-view="front"] .lobby-panel`): la copia saltaba.
+ * @param {HTMLElement} node  la pantalla que se va, todavía a la vista.
+ * @param {HTMLElement} host  de dónde colgar la copia.
+ */
+export function ghostOut(node, host) {
+  if (typeof node.cloneNode !== 'function' || !host?.appendChild) return;
+  const box = node.getBoundingClientRect?.();
+  if (!box?.width) return;
+  const ghost = node.cloneNode(true);
+  ghost.removeAttribute('id');
+  for (const n of ghost.querySelectorAll('[id]')) n.removeAttribute('id');
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.inert = true;
+  ghost.dataset.leaving = 'true';
+  Object.assign(ghost.style, {
+    position: 'fixed', margin: '0', inset: 'auto',
+    left: `${box.left}px`, top: `${box.top}px`,
+    width: `${box.width}px`, height: `${box.height}px`,
+  });
+  host.appendChild(ghost);
+  setTimeout(() => ghost.remove(), LEAVE_MS);
+}
+
 /** Abre o cierra el menú de opciones/sonido tanto en el combate como en la portada. */
 export function openHud(on) {
   const hud = $('hud-menu');
@@ -1502,6 +1420,8 @@ export function openHud(on) {
   const lobbyBtn = $('lobby-settings-btn');
   if (!hud) return;
   const show = on !== undefined ? Boolean(on) : hud.hidden;
+  // Se va apagándose, igual que las pantallas de la portada.
+  if (!show && !hud.hidden) ghostOut(hud, document.body);
   hud.hidden = !show;
   hudBtn?.setAttribute('aria-expanded', String(show));
   lobbyBtn?.setAttribute('aria-expanded', String(show));
@@ -1521,6 +1441,36 @@ export function openHud(on) {
   }
 }
 
+/** Lo que suena al tocarse: botones de verdad y lo que hace de botón. */
+const PRESSABLE = 'button, [role="button"]';
+/** El mezclador que suena al tocar. Lo pone la última pantalla que se armó. */
+let pressAudio = null;
+
+/**
+ * Que cada botón suene al tocarlo. Un solo escucha para toda la página, en vez de uno
+ * por botón: la mesa, la portada y la sala repintan sus botones todo el tiempo, y así
+ * suena hasta el que se dibujó recién.
+ *
+ * Escucha `click` y no `pointerdown`: es lo que dispara el botón de verdad —con el dedo
+ * que arrastra la pantalla no suena— y también llega con Enter o Espacio. Un botón
+ * apagado no da `click`, así que no suena solo.
+ *
+ * Va en captura porque varios botones cortan el viaje del clic (el menú, el idioma),
+ * pero el toque sale un instante después: si el botón es justamente el de prender los
+ * efectos, primero se prenden y después suena, que es la confirmación.
+ */
+export function pressSounds(audio) {
+  const first = !pressAudio;
+  pressAudio = audio;
+  if (!first) return;
+  document.addEventListener('click', (e) => {
+    const target = e.target?.closest?.(PRESSABLE);
+    if (!target || target.getAttribute?.('aria-disabled') === 'true') return;
+    pressAudio.unlock();
+    setTimeout(() => pressAudio.press(), 0);
+  }, { capture: true });
+}
+
 export function mount(game, { seat = null, net = false, start = true, leave = null } = {}) {
   mySeat = seat;
   netPlay = net;
@@ -1530,7 +1480,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // Los Axies solo cambian entre partidas: se repintan aparte del resto de la
   // pantalla, que se rehace en cada carta. Recrear sus capas a cada rato la haría
   // parpadear entera.
-  const shown = { p1: null, p2: null, match: null, finale: null };
+  const shown = { p1: null, p2: null, match: null, result: null };
   // Las animaciones que traen los propios Axies. Viven aparte del repintado: son del
   // muñeco, no de la partida, y siguen corriendo entre carta y carta.
   const motions = {
@@ -1538,8 +1488,6 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     p2: createMotion(portraits.p2, 0.5),
   };
   const arena = $('arena');
-  // El cartel del final, encima de la escena (ver `finaleHtml`).
-  const finale = $('finale');
   // Cómo arranca la próxima partida: contra quién, con qué dificultad y con qué Axie.
   // Todo eso se elige en la portada y queda acá adentro, así "Jugar de nuevo" repite
   // lo último que se eligió sin volver a preguntar nada.
@@ -1557,7 +1505,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // un `1fr` que, en una ventana ancha y baja, queda en cero y le deja menos que eso. Lo
   // que la mesa puede ocupar son esas dos filas juntas, y eso no depende de lo que haya
   // adentro —medir el alto de la mesa sí, y se pondría a oscilar—.
-  function fitField() {
+  function fitField(state, focus) {
     const css = globalThis.getComputedStyle;
     if (!css) return fieldFit;
     const rows = css(arena).gridTemplateRows.split(' ').map(parseFloat);
@@ -1568,16 +1516,80 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     if (!room || !rects.length) return fieldFit;
     const need = Math.max(...rects.map((r) => r.bottom)) - Math.min(...rects.map((r) => r.top));
     if (!need) return fieldFit;
-    const next = Math.max(0.4, Math.min(1, fieldFit * room * 0.97 / need));
+    const next = Math.max(0.4, Math.min(1 / baseZoom(state, focus), fieldFit * room * 0.97 / need));
     return Math.abs(next - fieldFit) < 0.02 ? fieldFit : next;
   }
+  /**
+   * El cartel del centro, pero sobre una carta de la mesa o del mazo: tocar una carta
+   * con poder dice qué hace cada uno, apilados. Se cuelga afuera de la carta, en el
+   * `body`, porque la mesa se repinta a cada carta y adentro no duraría; y va como
+   * `popover` porque así sube a la capa de arriba de todo, también por encima del panel
+   * del mazo, que es un `<dialog>` y ahí ningún `z-index` alcanza. Tocar la misma carta, otra cosa o
+   * `Escape` lo saca; si la carta se fue de la mesa, se va con ella.
+   */
+  let cardTip = null;
+  let tipAnchor = null;
+  function hideCardTip() {
+    cardTip?.remove();
+    cardTip = null;
+    tipAnchor = null;
+  }
+  function toggleCardTip(cardEl) {
+    const powers = cardEl.querySelector?.('.card-power')?.dataset.powers?.split(/\s+/).filter(Boolean) ?? [];
+    const same = tipAnchor === cardEl;
+    hideCardTip();
+    if (same || powers.length === 0) return;
+    const tip = document.createElement('div');
+    tip.className = 'market-tip card-tip';
+    tip.setAttribute('role', 'status');
+    tip.setAttribute('popover', 'manual');
+    tip.innerHTML = powerTipRows(powers);
+    document.body.appendChild(tip);
+    tip.showPopover?.();
+    cardTip = tip;
+    tipAnchor = cardEl;
+    placeCardTip();
+  }
+  // Arriba de la carta si entra; si no, abajo; y si tampoco, contra el borde de arriba.
+  // A lo ancho, centrado sobre la carta sin salirse de la pantalla. La colita apunta a
+  // la carta aunque el cartel se haya corrido para entrar.
+  function placeCardTip() {
+    if (!cardTip?.getBoundingClientRect || !tipAnchor?.getBoundingClientRect) return;
+    const card = tipAnchor.getBoundingClientRect();
+    const box = cardTip.getBoundingClientRect();
+    const gap = 12;
+    const edge = 8;
+    const vw = globalThis.innerWidth ?? box.width;
+    const vh = globalThis.innerHeight ?? box.height;
+    const mid = card.left + card.width / 2;
+    const left = Math.max(edge, Math.min(mid - box.width / 2, vw - box.width - edge));
+    let top = card.top - box.height - gap;
+    let side = 'above';
+    if (top < edge) {
+      top = card.bottom + gap;
+      side = 'below';
+      if (top + box.height > vh - edge) {
+        top = edge;
+        side = 'none';
+      }
+    }
+    cardTip.style.left = `${left}px`;
+    cardTip.style.top = `${top}px`;
+    cardTip.style.setProperty('--arrow', `${Math.max(16, Math.min(mid - left, box.width - 16))}px`);
+    cardTip.dataset.side = side;
+  }
+
   function paintField(state, focus) {
     // Lo que ocupaba cada carta antes de repintar, para que no salte (ver `glideCards`).
     // Si la mesa cambia de dueño las cartas son otras y entran con su propio pase.
     const before = field.dataset.owner === focus ? cardBoxes() : null;
+    // El `fit` que sobró de la mesa anterior puede pedir más de lo que esta deja crecer
+    // (una carta apilada de seis símbolos que ya se resolvió): sin el tope, la regla de
+    // tres de `fitField` partiría de un zoom que no es el que se ve y no achicaría nunca.
+    fieldFit = Math.min(fieldFit, 1 / baseZoom(state, focus));
     paint(field, fieldHtml(state, focus, fieldFit));
-    for (let i = 0; i < 2; i++) {
-      const fit = fitField();
+    for (let i = 0; i < 3; i++) {
+      const fit = fitField(state, focus);
       if (fit === fieldFit) break;
       fieldFit = fit;
       paint(field, fieldHtml(state, focus, fieldFit));
@@ -1617,13 +1629,56 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // como la mesa: muestra la cadena del que la tiene puesta (ver `swingHtml`).
   const swing = $('swing');
   const market = $('market');
+  // La carta del centro marcada y todavía sin comprar (ver `confirmHtml`). Es de esta
+  // pantalla y no de la partida: la partida recién se entera al confirmar.
+  let chosen = null;
+  let chosenBy = null;
+  function marketNow(state) {
+    const drafter = game.drafter();
+    const myDraft = Boolean(drafter) && isMine(drafter);
+    return marketHtml(state, {
+      picking: game.drafting(),
+      pickable: myDraft ? game.pickable() : [],
+      canRenew: myDraft && game.canRenew(drafter),
+      chosen,
+    });
+  }
+  const paintMarket = (state) => paint(market, marketNow(state));
+
+  /**
+   * Marcar una carta no reescribe el centro: le cambia la marca a las cartas y el botón
+   * de confirmar, y nada más. Reescribirlo entero volvía a crear las cartas y el panel
+   * en cada toque, y el centro titilaba. Lo que queda anotado como pintado es el HTML
+   * con la marca, así el próximo repintado de la partida no lo vuelve a escribir igual.
+   */
+  function markChoice(state) {
+    const html = marketNow(state);
+    const confirm = market.querySelector?.('[data-action="confirm"]');
+    if (!confirm) return paintMarket(state);
+    for (const card of market.querySelectorAll('.market-card')) {
+      const on = Number(card.dataset.uid) === chosen && !card.disabled;
+      card.classList.toggle('is-chosen', on);
+      card.classList.remove('just-chosen');
+      if (!card.disabled) card.setAttribute('aria-pressed', String(on));
+      if (on) {
+        void card.offsetWidth; // para que el rebote vuelva a arrancar
+        card.classList.add('just-chosen');
+      }
+    }
+    const row = market.querySelector('.market-row');
+    if (row) row.dataset.choosing = String(chosen != null);
+    const card = chosen == null ? null : state.market.find((c) => c.uid === chosen);
+    confirm.outerHTML = confirmHtml(card);
+    const tip = market.querySelector('.market-tip');
+    if (tip) tip.outerHTML = marketTipHtml(card);
+    painted.set(market, html);
+  }
   const clockEl = $('clock');
   // El reloj corre entre estado y estado: un intervalo que vive mientras haya reloj.
   let ticking = 0;
   function paintClock() {
     const clock = game.state?.clock ?? null;
     setClock(clockEl, clock);
-    setClock(market.querySelector?.('.clock'), clock?.kind === 'draft' ? clock : null);
     if (!clock && ticking) {
       clearInterval(ticking);
       ticking = 0;
@@ -1634,10 +1689,78 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // mesa se repinta a cada estado (ver `traceChain`).
   const chainfx = $('chainfx');
   const audio = createAudio();
-  // El remate del final es del asiento de esta pantalla: en una sala los dos aparatos
-  // miran la misma partida y solo uno ganó.
-  const cues = createCues(audio, { seat: mySeat });
+  const cues = createCues(audio);
+  // La pantalla del final, encima de todo lo de la mesa (ver `result.js`).
+  const result = createResult($('result'), { audio });
+  // Vida que ya cambió en el estado pero que la chapa todavía no muestra: la de un poder
+  // que actúa cuando llega y no cuando se juega, como la pluma que viene cayendo o la
+  // maceta que todavía no brotó. Positivo es daño retenido; negativo, cura.
+  const hpHeld = { p1: 0, p2: 0 };
+  // Lo mismo con el número grande del daño: lo que la bebida suma y todavía no llegó.
+  const swingHeld = { p1: 0, p2: 0 };
+  // De quién es el número grande ahora mismo (ver el repintado).
+  let swingSeat = null;
+  // Una partida nueva deja sin efecto las cuentas que la anterior tenía a medias.
+  let heldEra = 0;
+  /**
+   * Suelta de a poco lo retenido: la vida y el daño no saltan al número nuevo, se los
+   * ve contar hasta llegar. Doce pasos como mucho, repartidos en `COUNT_MS`.
+   */
+  const COUNT_MS = 560;
+  function countOut(store, seat, amount, repaint) {
+    const steps = Math.max(1, Math.min(Math.abs(amount), 12));
+    const piece = Math.trunc(amount / steps);
+    const era = heldEra;
+    let left = amount;
+    for (let i = 1; i <= steps; i++) {
+      const t = setTimeout(() => {
+        if (era !== heldEra) return;
+        const part = i === steps ? left : piece;
+        left -= part;
+        store[seat] -= part;
+        repaint();
+      }, ((i - 1) * COUNT_MS) / steps);
+      t?.unref?.();
+    }
+  }
+  function paintSwing(state, seat) {
+    if (seat !== swingSeat) return;
+    paint(swing, swingHtml(state, seat, swingHeld[seat]));
+  }
+  /**
+   * La chapa de un asiento. La vida se descuenta del estado con lo retenido devuelto
+   * —número y barra, las dos cosas—, así la barra baja en el instante en que pega.
+   */
+  function paintPlate(state, player) {
+    const held = hpHeld[player];
+    const foe = PLAYERS.find((p) => p !== player);
+    const view = held ? { ...state, totals: { ...state.totals, [foe]: state.totals[foe] - held } } : state;
+    if (paint(plates[player], plateHtml(view, player))) void plates[player].offsetWidth;
+    plates[player].style.setProperty('--hp', `${(100 * hpOf(view, player)) / TARGET}%`);
+  }
+  const powerFx = createPowerFx({
+    vfx, audio, field, market, swing, plates, portraits, motions, pulse, floatTag, sideOf,
+    shake: (amount) => pulse(arena, 'shake', shakeOf(amount) || 'soft', 500),
+    holdHp: (seat, amount) => {
+      hpHeld[seat] += amount;
+      if (game.state) paintPlate(game.state, seat);
+    },
+    releaseHp: (seat, amount) => {
+      // La barra se enciende del color de lo que pasa: verde si cura, rojo si pega.
+      pulse(plates[seat], 'fxHp', amount < 0 ? 'heal' : 'hurt', 800);
+      countOut(hpHeld, seat, amount, () => game.state && paintPlate(game.state, seat));
+    },
+    holdSwing: (seat, amount) => {
+      swingHeld[seat] += amount;
+      if (game.state) paintSwing(game.state, seat);
+    },
+    releaseSwing: (seat, amount) => {
+      pulse(swing, 'fx', 'brutal', 800);
+      countOut(swingHeld, seat, amount, () => game.state && paintSwing(game.state, seat));
+    },
+  });
   let animated = 0; // id del último golpe ya animado
+  let powered = 0; // id de los últimos poderes ya animados (ver `state.powerFx`)
   let aimed = 0; // id del último recorrido de cadena ya dibujado
   // Qué mazo está abierto, o `null` si no hay ninguno. Lo mira el repintado para saber
   // si tiene que dibujar las cartas y de quién (ver más abajo).
@@ -1688,8 +1811,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       // `pulse`: sin él el navegador ve la barrita nueva y el ancho nuevo como un solo
       // cambio y la pone directamente ahí. Con él, la barrita nace donde estaba la
       // anterior —el `--hp` viejo sigue puesto— y recién entonces se va vaciando.
-      if (paint(plates[player], plateHtml(state, player))) void plates[player].offsetWidth;
-      plates[player].style.setProperty('--hp', `${(100 * hpOf(state, player)) / TARGET}%`);
+      paintPlate(state, player);
       // El color de la clase vive en el peleador y no en la chapa: la chapa se repinta
       // entera a cada carta, y el aro del turno se dibuja sobre el borde de ese nodo.
       fighters[player].style.setProperty('--c', SYMBOLS[axie(state.axies[player]).class].color);
@@ -1737,6 +1859,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
         motions[player].mount(state.axies[player]);
         // El atlas del golpe pesa: se pide al arrancar la partida, no al primer ataque.
         preloadVfx(state.symbols[player]);
+        preloadPowers(state.activePowers);
       }
     }
 
@@ -1750,6 +1873,12 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     }
     held = focus;
     paintField(state, focus);
+    // El cartel de una carta de la mesa sigue a su carta mientras siga ahí. Con el
+    // centro abierto se va: lo que se lee ahí es el cartel del centro.
+    if (tipAnchor && !$('deck-modal')?.open) {
+      if (!tipAnchor.isConnected || picking) hideCardTip();
+      else placeCardTip();
+    }
     field.dataset.owner = focus;
     field.dataset.busted = String(state.chains[focus].busted);
 
@@ -1757,7 +1886,8 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     // uno solo en pantalla, con el color del que la tiene puesta. El color va en el
     // nodo y no en el HTML porque adentro se repinta a cada carta y el resplandor
     // cuelga de acá.
-    paint(swing, swingHtml(state, focus));
+    swingSeat = focus;
+    paint(swing, swingHtml(state, focus, swingHeld[focus]));
     swing.style.setProperty('--c', SYMBOLS[axie(state.axies[focus]).class].color);
 
     // El centro solo existe mientras haya que elegir; el resto del tiempo no está.
@@ -1769,13 +1899,9 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     const myDraft = Boolean(drafter) && isMine(drafter);
     // Cerrado no se borra acá: el panel se queda escrito mientras se va, y lo limpia
     // `overlay` cuando terminó de irse.
-    if (drafting) {
-      paint(market, marketHtml(state, {
-        picking,
-        pickable: myDraft ? game.pickable() : [],
-        canRenew: myDraft && game.canRenew(drafter),
-      }));
-    }
+    if (!drafting || !myDraft || picking !== chosenBy) chosen = null;
+    chosenBy = drafting ? picking : null;
+    if (drafting) paintMarket(state);
 
     // El reloj, con el color del que lo tiene encima. Va después del centro porque
     // también le escribe la copia de adentro.
@@ -1797,22 +1923,6 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     acted = mine;
     paint($('controls'), controlsHtml(state, { picking, acting }));
 
-    // El cartel del final entra con una animación, así que se pinta una sola vez por
-    // partida y no en cada repintado: escribirlo de nuevo le haría arrancar la entrada
-    // desde cero cada vez que se mueve algo atrás. La llave es la partida y el
-    // resultado, que es lo único que puede cambiar sin que la partida cambie —el
-    // último golpe todavía puede dar vuelta un KO en empate—.
-    const ended = state.phase === 'matchEnd' ? `${state.match}|${matchResult(state)}` : null;
-    if (shown.finale !== ended) {
-      shown.finale = ended;
-      finale.hidden = !ended;
-      // El color y los papelitos cuelgan de una sola cosa: si ganó el que mira.
-      finale.dataset.won = ended ? String(wonMatch(state)) : '';
-      finale.innerHTML = ended ? finaleHtml(state) : '';
-      if (ended && state.mode === 'adventure' && wonMatch(state) && state.adventure?.level) {
-        markLevelCompleted(state.adventure.level);
-      }
-    }
     // El medidor es de quien tiene la mesa: es información pública —la cadena viva ya
     // se ve entera— y se muestra en el turno de cualquiera de los dos, no solo el propio.
     const decider = state.phase === 'turn' ? state.turn : null;
@@ -1849,7 +1959,36 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     let landed = 0;
     if (struck) {
       animated = struck.id;
-      landed = playHit(vfx, audio, arena, portraits, motions, struck, state.symbols[struck.by]);
+      landed = playHit(vfx, audio, arena, portraits, motions, struck, state.symbols[struck.by], powerFx);
+    }
+    // Los poderes que actuaron con el golpe salen después de que caiga, de a uno; los
+    // que actúan solos —el veneno que muerde al cerrar el turno— salen ya.
+    if (state.powerFx && state.powerFx.id !== powered) {
+      powered = state.powerFx.id;
+      powerFx.play(state.powerFx, struck ? landed + POWER_GAP : 0);
+    }
+
+    // La pantalla del final entra con su propia coreografía, así que se pinta una sola
+    // vez por final y no en cada repintado: escribirla de nuevo la haría arrancar desde
+    // cero cada vez que se mueve algo atrás. La llave es la partida y el resultado, que
+    // es lo único que puede cambiar sin que la partida cambie —el último golpe todavía
+    // puede dar vuelta un KO en empate—.
+    //
+    // Espera a que el último golpe caiga y el que perdió se desplome: taparlo antes es
+    // quedarse sin ver cómo terminó.
+    const ended = state.phase === 'matchEnd' ? `${state.match}|${matchResult(state)}` : null;
+    if (shown.result !== ended) {
+      shown.result = ended;
+      if (!ended) result.hide();
+      else {
+        result.show(state, {
+          seat: mySeat, net: netPlay, actions: endActionsHtml(state),
+          wait: Math.max(RESULT_WAIT, landed + 1300),
+        });
+        if (state.mode === 'adventure' && wonMatch(state) && state.adventure?.level) {
+          markLevelCompleted(state.adventure.level);
+        }
+      }
     }
     // La furia de la última chance, que sale una vez y cuelga del golpe que la
     // enciende: si el que quedó sin vida es justo el que está por recibir el golpe que
@@ -1904,10 +2043,11 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   for (const kind of ['pointerdown', 'keydown']) {
     document.addEventListener(kind, () => audio.unlock(), { capture: true });
   }
+  pressSounds(audio);
   // Un combate en una pestaña que nadie está mirando sigue solo: que siga callado.
   document.addEventListener('visibilitychange', () => audio.listen(!document.hidden));
 
-  // ---- el menú de las tres rayitas -------------------------------------------
+  // ---- el menú de configuración ---------------------------------------------
   // Todo lo que no es jugar vive acá adentro: el sonido, las reglas y la puerta de
   const hud = $('hud-menu');
   const hudBtn = $('hud-btn');
@@ -1959,6 +2099,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       toggles[kind].dataset.on = String(on);
       toggles[kind].setAttribute('aria-pressed', String(on));
       dials[kind].value = String(vol);
+      dials[kind].style.setProperty('--v', `${vol}%`);
       pcts[kind].textContent = `${vol}%`;
     }
   }
@@ -1986,7 +2127,8 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   /** Hay una carta de Free Game esperando columna, y la columna la elige esta pantalla. */
   const placing = () => Boolean(game.state?.pendingStack) && isMine(game.state.pendingStack.player);
 
-  $('controls').addEventListener('click', (e) => {
+  // Los botones del pie y los de la pantalla del final hablan el mismo idioma.
+  function onAction(e) {
     const action = e.target.closest('[data-action]')?.dataset.action;
     if (action === 'hit') {
       if (gated(game.state, 'hit')) return;
@@ -2010,7 +2152,9 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       }
     }
     else if (action === 'leave') leave?.();
-  });
+  }
+  $('controls').addEventListener('click', onAction);
+  $('result').addEventListener('click', onAction);
 
   /** Lo que hay que olvidar al cambiar de partida: cartas ya animadas y números viejos. */
   function forget() {
@@ -2025,6 +2169,12 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     hadPendingStack = false;
     animatedStack = 0;
     aimed = 0;
+    powerFx.reset();
+    heldEra++;
+    for (const seat of PLAYERS) {
+      hpHeld[seat] = 0;
+      swingHeld[seat] = 0;
+    }
     if (chainfx) chainfx.innerHTML = '';
   }
 
@@ -2042,9 +2192,20 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // Las restricciones del tutorial las aplica la partida misma (ver `game.js`).
   market.addEventListener('click', (e) => {
     if (e.target.closest('[data-action="renew"]')) return game.renewMarket();
-    if (e.target.closest('[data-action="skip"]')) return game.skipDraft();
+    if (e.target.closest('[data-action="skip"]')) {
+      chosen = null;
+      return game.skipDraft();
+    }
+    if (e.target.closest('[data-action="confirm"]:not([disabled])')) {
+      const uid = chosen;
+      chosen = null;
+      return uid == null ? undefined : game.takeCard(uid);
+    }
+    // Tocar una carta la marca; tocar la marcada la suelta.
     const uid = e.target.closest('.market-card:not([disabled])')?.dataset.uid;
-    if (uid) game.takeCard(Number(uid));
+    if (!uid || !game.state) return;
+    chosen = chosen === Number(uid) ? null : Number(uid);
+    markChoice(game.state);
   });
 
   function updateFloatingCardPosition(targetEl) {
@@ -2245,7 +2406,10 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
         const col = Number(activeTarget.dataset.stackCol);
         dropTetrisCard(col, activeTarget);
       }
+      return;
     }
+    const card = e.target.closest('.card');
+    if (card && !card.id) toggleCardTip(card);
   });
 
   let lastHoveredCol = null;
@@ -2312,8 +2476,23 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // mazo de la partida anterior hasta que alguien lo vuelva a abrir.
   deckModal.addEventListener('close', () => {
     peeking = null;
+    hideCardTip();
     paint($('deck-sheet'), '');
   });
+  $('deck-sheet').addEventListener('click', (e) => {
+    const card = e.target.closest?.('.card');
+    if (card) toggleCardTip(card);
+  });
+  // El cartel de una carta se va tocando cualquier otra cosa. Las cartas lo resuelven en
+  // su propio toque (que llega antes, subiendo), así que acá se las deja pasar.
+  document.addEventListener('click', (e) => {
+    if (tipAnchor && !e.target?.closest?.('#field .card, #deck-sheet .card')) hideCardTip();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideCardTip();
+  });
+  deckModal.addEventListener('scroll', hideCardTip, true);
+  globalThis.addEventListener?.('resize', hideCardTip);
 
   $('log-btn').addEventListener('click', () => $('log-modal').showModal());
   $('rules-btn').addEventListener('click', () => $('rules-modal').showModal());

@@ -3,6 +3,8 @@
 //   npm run balance                 # 300 partidas por celda
 //   npm run balance -- --games 800  # más partidas, menos ruido
 //   npm run balance -- --arms base,venenoMax
+//   npm run balance -- --cpu duro              # los poderes contra otra CPU
+//   npm run balance -- --difficulties          # cuánto gana cada dificultad
 //
 // Qué mide y por qué así:
 //
@@ -17,8 +19,8 @@
 // sobre repartos idénticos, así el ruido del sorteo se cancela en vez de sumarse. Sin
 // esto hacen falta miles de partidas por celda para distinguir un efecto real de la
 // suerte — y es exactamente el error que se cometió antes de que este script existiera.
-import { createGame, TUNING, hpOf } from '../src/game.js';
-import { decideDraw, pickBest, pickBonus } from '../src/ai.js';
+import { createGame, TUNING, hpOf, lastChance, overkillOf } from '../src/game.js';
+import { decideDraw, pickBest, pickBonus, planDraft } from '../src/ai.js';
 import { POWER_IDS } from '../src/data.js';
 
 const AXIES = ['aquatic', 'beast', 'bird', 'plant', 'bug', 'reptile'];
@@ -61,6 +63,19 @@ const ARMS = {
   sesgo07: { powerBias: 0.7 },
   sesgo15: { powerBias: 1.5 },
   sesgo20: { powerBias: 2 },
+  // La última chance: sin overkill (siempre se levanta), y con el tope más bajo o más
+  // alto. `overkill0` es "cualquier golpe de más la borra".
+  sinOverkill: { overkill: Infinity },
+  overkill0: { overkill: 0 },
+  overkill15: { overkill: 15 },
+  overkill50: { overkill: 50 },
+  // Los flojos de la base: la bebida, el caracol y la máscara, con más.
+  bebida3: { brutalStep: 3 },
+  bebida4: { brutalStep: 4 },
+  caracol2: { snailAttacks: 2 },
+  caracolTercio: { snailShare: 3 },
+  mascara10: { steelskinBaseCap: 10 },
+  mascara8: { steelskinBaseCap: 8, steelskinFloor: 4 },
 };
 
 const args = process.argv.slice(2);
@@ -73,6 +88,7 @@ const armNames = flag('arms', Object.keys(ARMS).join(',')).split(',');
 // Solo los poderes que interesan por defecto: los dos que se escapan y uno del
 // pelotón como referencia. `--powers all` corre los seis.
 const powers = flag('powers', 'strength,poison,snail');
+const CPU = flag('cpu', 'normal');
 const POWERS = powers === 'all' ? POWER_IDS : powers.split(',');
 
 /** El humano se lleva las dos cartas sin poder que mejor se enlazan con su mazo. */
@@ -81,13 +97,22 @@ const bestPlain = (game, s) => {
   return plain.length ? pickBest(plain, s.decks.p1) : null;
 };
 
+/** El jugador que no se ata a nada y elige del centro con el criterio de la CPU. */
+const FREE = Symbol('libre');
+
 /**
  * Una partida. `only` ata al jugador a ese poder; `null` es el control, que nunca
- * agarra ninguno. Devuelve 1 si gana, 0 si pierde, 0.5 si es doble KO.
+ * agarra ninguno; `FREE` elige como la CPU "normal". Devuelve 1 si gana, 0 si pierde, 0.5 si es doble KO.
  */
-async function playOne(seed, only) {
+async function playOne(seed, only, cpu = CPU) {
   const game = createGame({ pace: 0, seed });
-  game.newMatch({ difficulty: 'normal', axie: AXIES[seed % 6] });
+  const seen = { p1: false, p2: false };
+  let killer = null;
+  game.subscribe((st) => {
+    const lc = lastChance(st);
+    if (lc) seen[lc] = true;
+  });
+  game.newMatch({ difficulty: cpu, axie: AXIES[seed % 6] });
 
   let guard = 0;
   while (game.state.phase !== 'matchEnd') {
@@ -110,6 +135,15 @@ async function playOne(seed, only) {
         continue;
       }
 
+      // Sin atarse a nada: elige del centro como la CPU "normal" (ver `--difficulties`).
+      if (only === FREE) {
+        const options = game.pickable();
+        const kind = s.draft.mode === 'plain' || s.chains.p1.busted ? 'bust' : 'stand';
+        const [card] = planDraft(options, s.decks.p1, { kind }).cards;
+        if (card) await game.takeCard(card.uid);
+        else await game.skipDraft();
+        continue;
+      }
       const mine = only && game.pickable().find((c) => c.power === only);
       if (mine) { await game.takeCard(mine.uid); continue; }
       const plain = bestPlain(game, s);
@@ -122,8 +156,9 @@ async function playOne(seed, only) {
       // Mismo criterio que la CPU, incluido el golpe final: sin vida, plantarse por
       // debajo pierde igual. Si el jugador simulado juega peor que la CPU, la brecha
       // que se mide es la de las cabezas y no la de los poderes.
-      const needs = (s.roundScores.p2 !== null && hpOf(s, 'p1') <= 0)
-        ? s.totals.p2 - s.totals.p1 + 1
+      // Lo que necesita es la vida que le queda al otro, huevo incluido, menos su fuerza.
+      const needs = lastChance(s) === 'p1'
+        ? hpOf(s, 'p2') + s.status.p2.egg - s.status.p1.strength
         : null;
       if (decideDraw(s.chains.p1, game.unseenPool('p1'), { needs, difficulty: 'normal' })) {
         await game.hit();
@@ -137,9 +172,26 @@ async function playOne(seed, only) {
 
   const s = game.state;
   const down = { p1: hpOf(s, 'p1') <= 0, p2: hpOf(s, 'p2') <= 0 };
+  const e = endings;
+  e.games++;
+  e.rounds += s.round;
+  if (seen.p1) e.lc.p1++;
+  if (seen.p2) e.lc.p2++;
+  if (down.p1 && down.p2) e.tie++;
+  for (const p of ['p1', 'p2']) {
+    const other = p === 'p1' ? 'p2' : 'p1';
+    if (!down[p]) continue;
+    if (!seen[p] && !down[other]) e.overkill++;
+    if (seen[p] && !down[other]) e.lcFailed++;
+    e.excess.push(overkillOf(s, p));
+  }
   if (down.p1 && down.p2) return 0.5;
   return down.p2 ? 1 : 0;
 }
+
+/** Cómo terminan las partidas de cada variante: se llena en `playOne`. */
+let endings = null;
+const freshEndings = () => ({ games: 0, rounds: 0, tie: 0, overkill: 0, lcFailed: 0, lc: { p1: 0, p2: 0 }, excess: [] });
 
 /** Una celda: un poder bajo una variante, sobre todas las semillas. */
 async function cell(only, tuning, seeds) {
@@ -175,6 +227,22 @@ const pct = (x) => `${(100 * x).toFixed(1)}%`;
 const signed = (x) => `${x >= 0 ? '+' : ''}${(100 * x).toFixed(1)}`;
 
 const seeds = Array.from({ length: GAMES }, (_, i) => i + 1);
+
+// Las dificultades: el mismo jugador simulado —roba y elige del centro como la CPU
+// "normal"— contra la CPU en cada una. Lo que se lee es cuánto gana la CPU. No sirve
+// el control de arriba: sin agarrar nunca un poder pierde contra cualquiera.
+if (args.includes('--difficulties')) {
+  console.log(`${GAMES} partidas sembradas por dificultad · el jugador juega como "normal"\n`);
+  for (const cpu of ['facil', 'normal', 'duro']) {
+    endings = freshEndings();
+    const got = [];
+    for (const seed of seeds) got.push(await playOne(seed, FREE, cpu));
+    const lost = got.map((x) => 1 - x);
+    console.log(`   ${cpu.padEnd(6)} gana la CPU ${pct(mean(lost)).padStart(6)} ±${(200 * stderr(lost)).toFixed(1)} · ` +
+      `${(endings.rounds / endings.games).toFixed(1)} rondas`);
+  }
+  process.exit(0);
+}
 console.log(`${GAMES} partidas sembradas por celda · variantes: ${armNames.join(', ')}`);
 console.log(`poderes: ${POWERS.join(', ')}\n`);
 
@@ -182,6 +250,7 @@ const results = {};
 for (const arm of armNames) {
   const tuning = ARMS[arm];
   if (!tuning) throw new Error(`no existe la variante "${arm}"`);
+  endings = freshEndings();
   const control = await cell(null, tuning, seeds);
   const rows = [];
   for (const power of POWERS) {
@@ -189,7 +258,7 @@ for (const arm of armNames) {
     const { diff, err } = pairedDiff(got, control);
     rows.push({ power, win: mean(got), diff, err, got });
   }
-  results[arm] = { control, rows };
+  results[arm] = { control, rows, endings };
 
   console.log(`── ${arm} ${'─'.repeat(Math.max(46 - arm.length, 0))}`);
   console.log(`   control (nunca agarra poderes)  ${pct(mean(control))}`);
@@ -216,6 +285,15 @@ for (const arm of armNames) {
     console.log(`   ${String(tier).padStart(2)}. ${r.power.padEnd(9)} ${pct(r.win).padStart(6)}   ` +
       `${signed(r.diff).padStart(6)} ±${(200 * r.err).toFixed(1)} vs control`);
   }
+  // Los finales, sobre todas las partidas de la variante (control y poderes juntos).
+  const e = endings;
+  const ex = e.excess.slice().sort((a, b) => a - b);
+  const q = (f) => ex[Math.min(ex.length - 1, Math.floor(f * ex.length))];
+  console.log(`   finales: ${e.games} partidas · ${(e.rounds / e.games).toFixed(1)} rondas · ` +
+    `empates ${pct(e.tie / e.games)} · overkill ${pct(e.overkill / e.games)} · ` +
+    `última chance fallida ${pct(e.lcFailed / e.games)}`);
+  console.log(`   última chance: jugador ${pct(e.lc.p1 / e.games)} · CPU ${pct(e.lc.p2 / e.games)} · ` +
+    `daño de más al caer: mediana ${q(0.5)}, p75 ${q(0.75)}, p90 ${q(0.9)}`);
   console.log('');
 }
 

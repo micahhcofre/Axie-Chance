@@ -146,7 +146,7 @@ assert.equal(nodes.lobby.hidden, false, 'la portada es lo primero que se ve');
 assert.equal(nodes['lobby-front'].hidden, false, 'y arranca en la tapa, con el botón de jugar');
 assert.equal(nodes['lobby-menu'].hidden, true, 'con el menú guardado');
 assert.equal(nodes['lobby-choose'].hidden, true, 'y la elección también');
-assert.equal(nodes['menu-btn'].hidden, false, 'la puerta de vuelta queda puesta');
+assert.equal(nodes['menu-btn'].hidden, true, 'en la portada no hay partida que abandonar');
 assert.ok(AXIE_IDS.some((id) => AXIES[id].class === nodes.lobby.dataset.arena),
   `el terreno sorteado no es de nadie: ${nodes.lobby.dataset.arena}`);
 assert.equal(nodes['lobby-cast'].kids.length, 4, 'cuatro Axies paseándose');
@@ -277,13 +277,15 @@ const mejora = { [propias[0].key]: AXIES[mio].class };
 fire('lobby-play', 'click');
 assert.equal(nodes['lobby-menu'].hidden, false, 'el botón grande abre el menú');
 assert.equal(nodes['lobby-front'].hidden, true);
-document.getElementById('difficulty').value = 'duro';
+fire('lobby-menu', 'click', { target: { closest: () => ({ dataset: { diff: 'duro' } }) } });
+assert.equal(nodes.difficulty.dataset.value, 'duro', 'la dificultad se elige tocando su botón');
 fire('lobby-menu', 'click', { target: { closest: () => ({ dataset: { play: 'cpu' } }) } });
 assert.deepEqual(
   started,
   [{ mode: 'cpu', difficulty: 'duro', axie: mio, boosts: mejora }],
   'contra la CPU la partida arranca en el menú, con el Axie que tenés puesto y sus mejoras');
 assert.equal(nodes.lobby.hidden, true, 'la portada se tiene que ir');
+assert.equal(nodes['menu-btn'].hidden, false, 'con la partida andando se puede abandonar');
 
 // Jugar con otra persona es una sala, y la sala es otra pantalla: el menú no vuelve a
 // preguntar nada acá adentro. La única elección que queda en la portada es la tuya, y
@@ -311,12 +313,14 @@ assert.equal(nodes['lobby-front'].hidden, false, '"Volver" de la elección sale 
 fire('menu-btn', 'click');
 assert.equal(nodes.lobby.hidden, false);
 assert.equal(nodes['lobby-menu'].hidden, false, 'vuelve directo al menú');
-fire('lobby-back', 'click');
+fire('lobby-menu-close', 'click');
 assert.equal(nodes['lobby-front'].hidden, false, '"Volver" vuelve a la tapa');
 fire('lobby-rules', 'click');
 assert.equal(nodes['rules-modal'].open, true, 'las reglas se abren desde la portada');
 fire('lobby-symbols', 'click');
 assert.equal(nodes['symbols-modal'].open, true, 'los símbolos especiales se abren desde la portada');
+fire('lobby-vision', 'click');
+assert.equal(nodes['vision-modal'].open, true, 'la visión del producto se abre desde la portada');
 
 portada.close();
 assert.equal(nodes.lobby.hidden, true);

@@ -200,15 +200,12 @@ assert.match(nodes['plate-p2'].innerHTML, /Vos/, 'tu chapa dice Vos');
 assert.match(nodes['plate-p1'].innerHTML, /J1/, 'y la del otro, quién es');
 assert.doesNotMatch(nodes.controls.innerHTML, /data-action="hit"/,
   'en el turno del otro no hay botones que apretar');
-assert.match(nodes.controls.innerHTML, /Jugador 1 ·/, 'el cartel dice de quién es el turno');
 assert.match(nodes.odds.innerHTML, /odds-dial/, 'pero sí la probabilidad del mazo ajeno: es información pública');
 
 // ---- tu turno ---------------------------------------------------------------
 await fromHost(ws, { t: 'state', state: turnOfP2 }, 6);
 assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'en el tuyo sí');
 assert.match(nodes.controls.innerHTML, /data-action="stand"/);
-assert.match(nodes.controls.innerHTML, /class="controls-msg"><\/span>/,
-  'en tu propio turno el renglón no dice nada: hablan los botones');
 assert.match(nodes.odds.innerHTML, /odds-dial/, 'con el medidor de tu propia próxima carta');
 assert.equal(nodes['deck-label'].textContent, 'Tu mazo', 'el panel del mazo es siempre el tuyo');
 await fromHost(ws, { t: 'state', state: turnOfP1 }, 5);
@@ -306,10 +303,11 @@ ws = ws2;
   await settle();
   gone.forfeit('p1');
   await fromHost(ws, { t: 'state', state: wire(gone.state) }, 2);
-  assert.match(nodes.finale.innerHTML, /Partida anulada/, 'anulada no es perder');
-  assert.match(nodes.finale.innerHTML, /Jugador 1 abandonó/, 'y se dice quién se fue');
-  assert.match(nodes.controls.innerHTML, /data-action="leave"/, 'la salida es volver a las salas');
-  assert.doesNotMatch(nodes.controls.innerHTML, /data-action="restart"/,
+  assert.equal(nodes.result.dataset.outcome, 'void');
+  assert.match(nodes.result.innerHTML, /Partida anulada/, 'anulada no es perder');
+  assert.match(nodes.result.innerHTML, /Jugador 1 abandonó/, 'y se dice quién se fue');
+  assert.match(nodes.result.innerHTML, /data-action="leave"/, 'la salida es volver a las salas');
+  assert.doesNotMatch(nodes.result.innerHTML, /data-action="restart"/,
     'sin "Jugar de nuevo": enfrente no queda nadie');
   assert.equal(nodes['menu-btn'].hidden, true, 'terminada, no hay nada que abandonar');
 

@@ -35,6 +35,19 @@ const FIDGET = [5200, 11000];
 const FIDGETS = ['scratch', 'peek', 'snarl', 'cheer', 'chew', 'snap', 'stomp'];
 
 /**
+ * Posturas que no tienen clip propio: se sostienen con un clip en bucle (`loop`) y, en
+ * vez de aburrirse con cualquier cosa, repiten sus propios gestos (`emotes`) cada tanto
+ * (`every`, en ms).
+ *
+ * `celebrate` es festejar. El kit trae `activity/victory-pose-back-flip`, pero horneado
+ * a catorce cuadros la vuelta no se llega a dar y el cuerpo se corre para adelante casi
+ * un cuerpo entero: se ve como un cabezazo al rival. Festejar no necesita piruetas: el
+ * Axie se queda en su lugar respirando y a cada rato da el saltito contento de
+ * `battle/get-buff`, que casi no lo mueve de donde está.
+ */
+const HOLDS = { celebrate: { loop: 'idle', emotes: ['cheer'], every: [900, 2200] } };
+
+/**
  * Las poses horneadas son relativas al reposo, así que un clip que no existe se
  * reproduce como "no te muevas" y no rompe nada.
  */
@@ -165,6 +178,15 @@ export function createMotion(node, phase = 0, { fidget = FIDGET } = {}) {
     // Con el sistema pidiendo menos movimiento no se reproduce nada, ni siquiera al
     // cambiar de postura: el Axie se queda en su dibujo de reposo.
     if (quiet) return;
+    const hold = HOLDS[base];
+    if (hold) {
+      run(hold.loop, true);
+      const [min, max] = hold.every;
+      timer = setTimeout(() => {
+        pulse(hold.emotes[Math.floor(Math.random() * hold.emotes.length)]);
+      }, min + Math.random() * (max - min));
+      return;
+    }
     if (!MOTIONS[base]?.loop && !entered) {
       entered = true;
       const ms = run(base, false);
@@ -213,9 +235,9 @@ export function createMotion(node, phase = 0, { fidget = FIDGET } = {}) {
       }
       rest();
     },
-    /** Lo que le está pasando ahora y va a durar: `idle`, `ready`, `win`, `ko`. */
+    /** Lo que le está pasando ahora y va a durar: `idle`, `ready`, `celebrate`, `ko`. */
     stance(name) {
-      const next = clips?.[name] ? name : 'idle';
+      const next = HOLDS[name] || clips?.[name] ? name : 'idle';
       if (next === base) return;
       base = next;
       entered = false;

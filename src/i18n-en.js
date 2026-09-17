@@ -44,6 +44,8 @@ export const EN_STRINGS = {
   'Contra otra persona, en una sala': 'Against another player, in a room',
   'Volver': 'Back',
   'Elegí tu Axie': 'Choose your Axie',
+  'AXIES': 'AXIES',
+  'Axies': 'Axies',
   'Tutorial': 'Tutorial',
   'Campaña': 'Campaign',
   'Duelo': 'Duel',
@@ -166,17 +168,17 @@ export const EN_STRINGS = {
   '«Al pegar»': '“On hit”',
   'es plantarte con un ataque que haga daño. Si te cortás, esos poderes no salen.': 'means standing with an attack that deals damage. If you bust, these powers do not trigger.',
   '(Bestia) — Al pegar, +1 de daño en ese ataque y en todos los que siguen.': '(Beast) — On hit, +1 damage on this attack and all future attacks.',
-  '(Bestia) — Al pegar, +2 de daño por cada símbolo de tu racha más larga.': '(Beast) — On hit, +2 damage per symbol in your longest chain.',
+  '(Bestia) — Al pegar, +3 de daño por cada símbolo de tu racha más larga.': '(Beast) — On hit, +3 damage per symbol in your longest chain.',
   '(Pez) — Al plantarte (aunque pegues 0), elegís 1 carta extra del mercado para tu mazo.': '(Aquatic) — When standing (even dealing 0), draft 1 extra card from the market for your deck.',
   '(Pez) — Al plantarte, la carta que elijas del mercado abre tu próxima ronda.': '(Aquatic) — When standing, the card you draft from the market opens your next round.',
-  '(Pájaro) — Al pegar, ganás un escudo de la mitad del golpe; si el rival lo rompe, recibe 8 de daño.': '(Bird) — On hit, gain a shield for half the damage dealt; if broken, the rival takes 8 counter damage.',
+  '(Pájaro) — Al pegar, sumás un escudo de un tercio del golpe (mínimo 1); si el rival lo rompe, recibe 8 de daño por cada huevo.': '(Bird) — On hit, add a shield of a third of the damage dealt (at least 1); if broken, the rival takes 8 counter damage per egg.',
   '(Pájaro) — Apenas la robás, 5 de daño directo al rival, aunque después te cortes.': '(Bird) — As soon as drawn, 5 direct damage to the rival, even if you bust later.',
   '(Planta) — Al pegar, te curás lo mismo que pegaste.': '(Plant) — On hit, heal for the same amount of damage dealt.',
-  '(Planta) — Al pegar, +2 hojas (hasta 5); al final de cada turno tuyo, cada hoja te cura 4 y se gasta 1.': '(Plant) — On hit, +2 leaves (up to 5); at the end of each turn, each leaf heals 4 and consumes 1 leaf.',
+  '(Planta) — Al pegar, +2 hojas (hasta 5); al inicio de cada turno tuyo, cada hoja te cura 4 y se gasta 1.': '(Plant) — On hit, +2 leaves (up to 5); at the start of each of your turns, each leaf heals 4 and consumes 1 leaf.',
   '(Bicho) — Al pegar, el próximo ataque del rival hace la mitad de daño.': "(Bug) — On hit, the rival's next attack deals half damage.",
   '(Bicho) — Al pegar, le sacás 6 de vida al rival y te los curás (12 con 4 o más columnas en mesa).': '(Bug) — On hit, steal 6 HP from rival and heal yourself (12 with 4 or more columns on field).',
-  '(Reptil) — Al pegar, envenenás al rival con la mitad del golpe; al final de cada turno suyo le saca eso y se reduce a la mitad.': '(Reptile) — On hit, poison the rival for half the damage; at each turn end it bites and halves.',
-  '(Reptil) — Al pegar, el próximo golpe del rival te hace 12 de daño como máximo.': "(Reptile) — On hit, the rival's next attack deals a maximum of 12 damage.",
+  '(Reptil) — Al plantarte, le ponés 6 de veneno al rival (se suma); al final de cada turno suyo le saca eso sin importar su escudo, y se reduce a la mitad.': '(Reptile) — When you stand, give the rival 6 poison (stacks); at the end of each of their turns it bites through their shield and halves.',
+  '(Reptil) — Al pegar, sumás 2 de escudo y el próximo golpe del rival te saca 12 de vida como máximo.': "(Reptile) — On hit, add 2 shield and the rival's next attack takes at most 12 HP from you.",
   '(Comodín) — Si comparte un símbolo con tu cadena, tu próximo robo se monta sobre una carta de la mesa y le suma sus símbolos.': '(Wildcard) — If it shares a symbol with your chain, your next draw stacks onto a card on the field, adding its symbols.',
   'Campaña de 6 niveles progresivos donde se desbloquean 2 nuevos poderes de clase por nivel. En el': 'A 6-level progressive campaign where 2 new class powers unlock per level. In',
   'Nivel 1: Primeros Pasos': 'Level 1: First Steps',
@@ -212,7 +214,7 @@ export const EN_STRINGS = {
   'Acumulable': 'Stackable',
   '+2 de daño por cada símbolo de tu racha más larga': '+2 damage per symbol in your longest chain',
   'Potencia tu golpe según el tamaño de tu mejor racha. Al atacar, suma': 'Boosts your attack based on the size of your best chain. When attacking, adds',
-  '+2 de daño adicional': '+2 additional damage',
+  '+3 de daño adicional': '+3 additional damage',
   'por cada símbolo que tenga tu cadena más larga.': 'for each symbol in your longest chain.',
   'Se activa siempre que conectes el ataque (daño > 0).': 'Triggers whenever you connect an attack (damage > 0).',
   'Cadena más larga:': 'Longest chain:',
@@ -242,12 +244,12 @@ export const EN_STRINGS = {
   'La burbuja no se activa.': 'The bubble does not activate.',
   'Control de mazo': 'Deck control',
   'Carta Gigante': 'Giant Card',
-  'Escudo de medio golpe; al romperse devuelve 8 de daño': 'Shield for half damage; returns 8 damage when broken',
+  'Escudo de un tercio del golpe; al romperse devuelve 8 de daño por huevo': 'Shield of a third of the damage; returns 8 damage per egg when broken',
   'Genera un': 'Generates a',
   'escudo protector': 'protective shield',
-  'equivalente a la mitad del golpe infligido. Dura hasta que se rompa absorbiendo daño rival y, al romperse, contraataca.': 'equal to half the damage dealt. Lasts until broken absorbing enemy damage, and counterattacks when shattered.',
-  'Protección no acumulable:': 'Non-stacking protection:',
-  'Absorbe daño entrante; si ganás otro huevo, reemplaza al actual.': 'Absorbs incoming damage; gaining another egg replaces the current one.',
+  'equivalente a un tercio del golpe infligido (mínimo 1). Dura hasta que se rompa absorbiendo daño rival y, al romperse, contraataca.': 'equal to a third of the damage dealt (at least 1). Lasts until broken absorbing enemy damage, and counterattacks when shattered.',
+  'Protección acumulable:': 'Stacking protection:',
+  'Absorbe daño entrante; cada huevo suma su escudo al que ya tenés (también el de la Gecko Mask).': 'Absorbs incoming damage; each egg adds its shield to the one you already have (Gecko Mask shield too).',
   'Contraataque acumulable:': 'Stackable counterattack:',
   'Cada huevo obtenido acumula +8 de daño fijo para cuando se rompa el escudo.': 'Each egg adds +8 flat damage when the shield breaks.',
   'Requiere conectar daño al atacar (daño > 0).': 'Requires dealing damage when attacking (damage > 0).',
@@ -276,14 +278,14 @@ export const EN_STRINGS = {
   'Al hacer 0 de daño, no hay curación.': 'Dealing 0 damage yields no healing.',
   'Curación': 'Healing',
   'Supervivencia': 'Survival',
-  '+2 hojas (hasta 5). Cada hoja te cura 4 de vida al final del turno': '+2 leaves (up to 5). Each leaf heals 4 HP at end of turn',
+  '+2 hojas (hasta 5). Cada hoja te cura 4 de vida al inicio de tu turno': '+2 leaves (up to 5). Each leaf heals 4 HP at the start of your turn',
   'Al atacar con éxito ganás': 'On a successful attack you gain',
   '2 hojas': '2 leaves',
-  '(acumulables hasta 5). Al final de cada uno de tus turnos,': '(stacking up to 5). At the end of each of your turns,',
+  '(acumulables hasta 5). Al inicio de cada uno de tus turnos, antes de robar,': '(stacking up to 5). At the start of each of your turns, before drawing,',
   'cada hoja te cura 4 de vida y luego se consume una hoja': 'each leaf heals 4 HP and then one leaf is consumed',
   'Podés acumular hasta un máximo de 5 hojas.': 'You can stack up to a maximum of 5 leaves.',
   'Regeneración segura:': 'Guaranteed regen:',
-  'Curan al final del turno incluso si ese turno luego se corta.': 'Heals at turn end even if that turn subsequently busts.',
+  'Curan al inicio del turno, aunque ese turno después se corte.': 'Heals at turn start, even if that turn later busts.',
   'Requiere conectar daño (daño > 0) para ganar hojas nuevas.': 'Requires connecting damage (damage > 0) to gain new leaves.',
   'Regeneración': 'Regeneration',
   'Máx. 5 hojas': 'Max 5 leaves',
@@ -311,22 +313,25 @@ export const EN_STRINGS = {
   'Se duplica a 12 con 4 o más cartas en mesa (los Free Games apilados no cuentan como columna nueva).': "Doubles to 12 with 4 or more cards on field (stacked Free Games don't count as new columns).",
   'Drenaje de vida': 'Life steal',
   'Bonus 4 columnas': '4-column bonus',
-  'Envenena por la mitad de tu golpe; daña cada turno y se reduce a la mitad': 'Poisons for half your damage; bites each turn and halves',
-  'Infecta al oponente con veneno igual a la': 'Infects the opponent with poison equal to',
-  'mitad de tu daño': 'half your damage',
-  '. Al final del turno del rival, el veneno le resta vida y luego se parte a la mitad.': ". At the end of the rival's turn, poison subtracts HP and then halves.",
+  '6 de veneno por frasco; atraviesa el escudo, daña cada turno y se reduce a la mitad': '6 poison per vial; goes through shields, bites each turn and halves',
+  'Cada frasco le pone': 'Each vial gives the opponent',
+  '6 de veneno': '6 poison',
+  'al oponente, pegues lo que pegues. Al final del turno del rival, el veneno le resta vida sin pasar por su escudo y luego se parte a la mitad.': "regardless of your damage. At the end of the rival's turn, poison takes HP ignoring their shield and then halves.",
   'Daño al final de su turno:': 'Damage at turn end:',
   'Muerde restando vida, se divide a la mitad y se disipa si queda en 2 o menos.': 'Bites dealing damage, halves, and dissipates if 2 or less.',
-  'Nuevos venenos se suman al veneno que ya tenga encima el rival.': 'New poison stacks with existing poison on the rival.',
+  'Cada frasco suma 6 al veneno que ya tenga encima el rival.': 'Each vial adds 6 to the poison already on the rival.',
+  'Se aplica siempre que te plantes; si te cortás, no.': "Applies whenever you stand; not if you bust.",
   'Daño continuo': 'Damage over time',
-  'Tope defensivo: el próximo ataque rival no superará los 12 de daño': "Defensive cap: rival's next attack will not exceed 12 damage",
-  'Cubre a tu Axie con un blindaje que absorbe cualquier exceso de daño, limitando el próximo ataque rival que conecte a un': "Covers your Axie with armor that absorbs excess damage, capping the rival's next hit to a",
-  'máximo estricto de 12 de daño': 'strict maximum of 12 damage',
+  '+2 de escudo y el próximo ataque rival te saca 12 de vida como máximo': "+2 shield and the rival's next attack takes at most 12 HP",
+  'Suma': 'Adds',
+  '2 de escudo': '2 shield',
+  'y cubre a tu Axie con un blindaje: lo que el próximo ataque rival deje pasar después del escudo te saca': "and covers your Axie with armor: whatever the rival's next attack gets past the shield takes",
+  '12 de vida como máximo': 'at most 12 HP',
   'Blindaje anti-remates:': 'Anti-finisher armor:',
-  'Aunque el rival conecte un golpe de 40 puntos, solo recibirás 12.': 'Even if the rival lands a 40-point strike, you only take 12.',
-  'Cada piel extra reduce el tope en -2 puntos (hasta un piso mínimo de 6).': 'Each extra mask reduces the cap by -2 (down to a minimum floor of 6).',
+  'Aunque el rival conecte un golpe de 40 puntos, solo perderás 12 de vida.': 'Even if the rival lands a 40-point strike, you only lose 12 HP.',
+  'Cada máscara extra suma 2 de escudo y baja el tope en -2 puntos (hasta un piso mínimo de 6).': 'Each extra mask adds 2 shield and lowers the cap by -2 (down to a minimum floor of 6).',
   'Consumo:': 'Consumption:',
-  'Se gasta únicamente cuando el rival conecta un ataque con daño.': 'Only consumed when the rival connects an attack with damage.',
+  'El tope se gasta cuando un ataque rival pasa el escudo; el escudo dura hasta romperse.': 'The cap is spent when a rival attack gets past the shield; the shield lasts until broken.',
   'Tope de daño': 'Damage cap',
   'Acumulable (piso 6)': 'Stackable (min 6)',
   'Especial Neutral': 'Neutral Special',
@@ -354,7 +359,7 @@ export const EN_STRINGS = {
   'Veneno:': 'Poison:',
   'Daño que morderá al final de su turno': 'Damage that bites at end of their turn',
   'Hoja:': 'Leaf:',
-  'Hojas activas (curan 4 al fin del turno)': 'Active leaves (heal 4 at end of turn)',
+  'Hojas activas (curan 4 al inicio del turno)': 'Active leaves (heal 4 at start of turn)',
   'Piel:': 'Mask:',
   'Tope de daño máximo activo': 'Active damage cap limit',
 
@@ -385,24 +390,24 @@ export const EN_STRINGS = {
   ' y ': ' and ',
 
   // data.js
-  'al pegar, +{gain} hojas (hasta {max}); al final de cada turno tuyo, cada hoja te cura {heal} y se gasta 1':
-    'on hit, +{gain} leaves (up to {max}); at the end of each turn, each leaf heals {heal} and consumes 1',
-  'al pegar, ganás un escudo de la mitad del golpe; si el rival lo rompe, recibe {dmg} de daño':
-    'on hit, gain a shield for half the damage dealt; if broken, the rival takes {dmg} damage',
+  'al pegar, +{gain} hojas (hasta {max}); al inicio de cada turno tuyo, cada hoja te cura {heal} y se gasta 1':
+    'on hit, +{gain} leaves (up to {max}); at the start of each of your turns, each leaf heals {heal} and consumes 1',
+  'al pegar, sumás un escudo de un tercio del golpe (mínimo 1); si el rival lo rompe, recibe {dmg} de daño por cada huevo':
+    'on hit, add a shield of a third of the damage dealt (at least 1); if broken, the rival takes {dmg} damage per egg',
   'apenas la robás, {dmg} de daño directo al rival, aunque después te cortes':
     'as soon as drawn, {dmg} direct damage to the rival, even if you bust later',
   'al plantarte (aunque pegues 0), elegís 1 carta extra del mercado para tu mazo':
     'when standing (even dealing 0), draft 1 extra card from the market for your deck',
   'al pegar, te curás lo mismo que pegaste':
     'on hit, heal for the same amount of damage dealt',
-  'al pegar, envenenás al rival con la mitad del golpe; al final de cada turno suyo le saca eso ':
-    'on hit, poison the rival for half the damage; at each turn end it bites and halves ',
-  'al pegar, envenenás al rival con la mitad del golpe; al final de cada turno suyo le saca eso y se reduce a la mitad':
-    'on hit, poison the rival for half the damage; at each turn end it bites and halves',
+  'al plantarte, le ponés {dose} de veneno al rival (se suma); al final de cada turno suyo le saca eso sin importar su escudo, y se reduce a la mitad':
+    "when you stand, give the rival {dose} poison (stacks); at the end of each of their turns it bites through their shield and halves",
   'al pegar, el próximo ataque del rival hace la mitad de daño':
     "on hit, the rival's next attack deals half damage",
   'al pegar, +{step} de daño en ese ataque y en todos los que siguen':
     'on hit, +{step} damage on this attack and all future attacks',
+  'al aparecer, +{step} permanente de daño':
+    'when drawn, permanent +{step} damage',
   'al pegar, +{step} de daño por cada símbolo de tu racha más larga':
     'on hit, +{step} damage per symbol in your longest chain',
   'al plantarte, la carta que elijas del mercado abre tu próxima ronda':
@@ -415,8 +420,30 @@ export const EN_STRINGS = {
     'on hit, steal {drain} HP from the rival and heal yourself ',
   'al pegar, le sacás {drain} de vida al rival y te los curás ({bonus} con {thresh} o más columnas en mesa)':
     'on hit, steal {drain} HP from the rival and heal yourself ({bonus} with {thresh} or more columns on field)',
-  'al pegar, el próximo golpe del rival te hace {cap} de daño como máximo':
-    "on hit, the rival's next attack deals a maximum of {cap} damage",
+  'en un ataque exitoso, robás {drain} de vida por cada Mantis Dagger en tu cadena':
+    'on a successful attack, steal {drain} HP for each Mantis Dagger in your chain',
+  'al pegar, sumás {shield} de escudo y el próximo golpe del rival te saca {cap} de vida como máximo':
+    "on hit, add {shield} shield and the rival's next attack takes at most {cap} HP from you",
+  '+{gain} hojas: cada una te cura {heal} por turno':
+    '+{gain} leaves: each heals {heal} per turn',
+  'Escudo de un tercio del golpe (mínimo 1); al romperse devuelve {dmg}':
+    'Shield of a third of the attack (at least 1); on break returns {dmg}',
+  '{dmg} de daño directo apenas la robás':
+    '{dmg} direct damage right as you draw it',
+  'Una carta de más del centro': 'One extra card from the center',
+  'Te curás lo que pegás': 'You heal what you hit',
+  '{dose} de veneno que atraviesa el escudo': '{dose} poison that goes through shields',
+  'El próximo ataque rival pega la mitad': 'Next rival attack deals half damage',
+  '+{step} de daño para siempre': '+{step} permanent damage',
+  '+{step} de daño por símbolo de tu mejor racha':
+    '+{step} damage per symbol in your best run',
+  'Tu carta del centro abre la próxima ronda':
+    'Your card from the center opens the next round',
+  'Tu próximo robo se apila sobre una carta':
+    'Your next draw stacks on top of a card',
+  'Robás {drain} de vida al pegar': 'Steal {drain} HP on hit',
+  '+{shield} de escudo; el próximo golpe rival te saca {cap} de vida como máximo':
+    '+{shield} shield; next rival attack takes at most {cap} HP',
   'Poder': 'Power',
   'Cola': 'Tail',
   'Boca': 'Mouth',
@@ -566,10 +593,10 @@ export const EN_STRINGS = {
     'You rend: +{dmg} damage (+{step} × {longest} from your longest chain).',
   '{who} desgarra: +{dmg} de daño (+{step} × {longest} de tu cadena más larga).':
     '{who} rends: +{dmg} damage (+{step} × {longest} from longest chain).',
-  'Vos sumás +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al final del turno.':
-    'You gain +{gain} leaves ({leaf}/{max}): will heal +{heal} HP at end of turn.',
-  '{who} suma +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al final del turno.':
-    '{who} gains +{gain} leaves ({leaf}/{max}): will heal +{heal} HP at end of turn.',
+  'Vos sumás +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al inicio de tu próximo turno.':
+    'You gain +{gain} leaves ({leaf}/{max}): will heal +{heal} HP at the start of your next turn.',
+  '{who} suma +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al inicio de su próximo turno.':
+    '{who} gains +{gain} leaves ({leaf}/{max}): will heal +{heal} HP at the start of their next turn.',
   ' (¡duplicado por tener {count} columnas en mesa!)':
     ' (doubled for having {count} columns on the field!)',
   ' y te curás {got}':
@@ -584,10 +611,10 @@ export const EN_STRINGS = {
     'You drain {drain} HP {target}{bonus}{heal}: {foeEnd}',
   '{who} drena {drain} de vida {target}{bonus}{heal}: {foeEnd}':
     '{who} drains {drain} HP {target}{bonus}{heal}: {foeEnd}',
-  'Vos endurecés su Piel de Escamas: limitará el próximo golpe rival a un máximo de {cap} de daño.':
-    "You harden Gecko Mask: caps the rival's next hit to a maximum of {cap} damage.",
-  '{who} endurece su Piel de Escamas: limitará el próximo golpe rival a un máximo de {cap} de daño.':
-    "{who} hardens Gecko Mask: caps the rival's next hit to a maximum of {cap} damage.",
+  'Vos te ponés la Gecko Mask: +{shield} de escudo, y el próximo golpe rival te saca {cap} de vida como máximo.':
+    "You put on the Gecko Mask: +{shield} shield, and the rival's next hit takes at most {cap} HP.",
+  '{who} se pone la Gecko Mask: +{shield} de escudo, y el próximo golpe rival le saca {cap} de vida como máximo.':
+    "{who} puts on the Gecko Mask: +{shield} shield, and the rival's next hit takes at most {cap} HP.",
   '+{str} de fuerza':
     '+{str} strength',
   '+{brutal} de garra brutal':
@@ -598,9 +625,9 @@ export const EN_STRINGS = {
     'You attack for {swing}: {points} chain {mods}.',
   '{who} ataca por {swing}: {points} de cadena {mods}.':
     '{who} attacks for {swing}: {points} chain {mods}.',
-  'Piel de Escamas tuya frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).':
+  'Tu Gecko Mask frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).':
     'Your Gecko Mask blocks the hit: mitigates {mitigated} damage (maximum cap {cap}).',
-  'Piel de Escamas {owner} frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).':
+  'La Gecko Mask {owner} frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).':
     'Gecko Mask {owner} blocks the hit: mitigates {mitigated} damage (maximum cap {cap}).',
   ' y se rompe: la cáscara le devuelve {thorns} a vos':
     ' and breaks: the shell returns {thorns} to you',
@@ -610,10 +637,10 @@ export const EN_STRINGS = {
     ' and breaks',
   ' y le quedan {egg}':
     ' and has {egg} left',
-  'El huevo tuyo aguanta {blocked}{rest}.':
-    'Your egg shield absorbs {blocked}{rest}.',
-  'El huevo {owner} aguanta {blocked}{rest}.':
-    'The egg shield {owner} absorbs {blocked}{rest}.',
+  'Tu escudo aguanta {blocked}{rest}.':
+    'Your shield absorbs {blocked}{rest}.',
+  'El escudo {owner} aguanta {blocked}{rest}.':
+    'The shield {owner} absorbs {blocked}{rest}.',
   'Vos pegás por {landed}. {who} queda en {hp}.':
     'You strike for {landed}. {who} is at {hp} HP.',
   '{who} pega por {landed}. Vos quedás en {hp}.':
@@ -735,6 +762,11 @@ export const EN_STRINGS = {
 
   // ui.js
   'Alargar columna {n}': 'Extend column {n}',
+  'Elegí una carta': 'Choose a card',
+  'Confirmar selección': 'Confirm selection',
+  'Carta para colocar': 'Card to place',
+  'Elegí qué columna colocar': 'Choose which column to place',
+  '{name} elige la columna': '{name} is choosing the column',
   'Carta de Free Game para colocar': 'Free Game card to place',
   'Free Game — Elegí qué columna colocar': 'Free Game — Choose which column to place',
   'Free Game — {name} elige la columna': 'Free Game — {name} is choosing the column',
@@ -758,14 +790,12 @@ export const EN_STRINGS = {
   '{name}: {bubbles} cartas apiladas abrirán tu próxima ronda como carta gigante':
     '{name}: {bubbles} stacked cards will open your next round as a giant card',
   '{name}: apertura lista para la próxima ronda': '{name}: opener ready for next round',
-  '{name}: 1 hoja (cura +{heal} al final de tu turno y consume 1)':
-    '{name}: 1 leaf (heals +{heal} at the end of your turn and consumes 1)',
-  '{name}: {leaf} hojas (cura +{heal} al final de tu turno y consume 1)':
-    '{name}: {leaf} leaves (heals +{heal} at the end of your turn and consumes 1)',
-  '{name}: limita el próximo ataque rival a máximo {cap} de daño':
-    '{name}: caps next rival attack to a maximum of {cap} damage',
-  'falló': 'failed',
-  '{dealt} de daño': '{dealt} damage',
+  '{name}: 1 hoja (cura +{heal} al inicio de tu turno y consume 1)':
+    '{name}: 1 leaf (heals +{heal} at the start of your turn and consumes 1)',
+  '{name}: {leaf} hojas (cura +{heal} al inicio de tu turno y consume 1)':
+    '{name}: {leaf} leaves (heals +{heal} at the start of your turn and consumes 1)',
+  '{name}: el próximo ataque rival te saca {cap} de vida como máximo':
+    '{name}: next rival attack takes at most {cap} HP',
   'Escudo: aguanta {shield} de daño': 'Shield: absorbs {shield} damage',
   '{raw} de cadena': '{raw} chain',
   'DAÑO': 'DAMAGE',
@@ -794,12 +824,27 @@ export const EN_STRINGS = {
   'No agarrar más': 'Take no more',
   'Cerrá el reparto sin sumar cartas al mazo': 'End the draft without adding cards to your deck',
   '¡Aventura Completada!': 'Adventure Completed!',
-  '¡{name} Superado!': '{name} Cleared!',
   'Nivel': 'Level',
-  'Derrota en la Aventura': 'Adventure Defeat',
   '¡Victoria!': 'Victory!',
+  // La pantalla del final (result.js).
+  'Derrota': 'Defeat',
+  '¡Empate!': 'Draw!',
+  '¡Gana {name}!': '{name} wins!',
+  '¡Nivel superado!': 'Level cleared!',
+  'Contra la CPU · {level}': 'Vs CPU · {level}',
+  'Aventura · {name}': 'Adventure · {name}',
+  'Partida en red': 'Online match',
+  '{name} quedó fuera de combate en la ronda {round}.': '{name} was knocked out in round {round}.',
+  '{name} te ganó en la ronda {round}.': '{name} beat you in round {round}.',
+  'Doble KO en la ronda {round}.': 'Double KO in round {round}.',
+  'Daño hecho': 'Damage dealt',
+  'Mejor golpe': 'Best hit',
+  'Cadena más larga': 'Longest chain',
+  'Rondas': 'Rounds',
+  'Botín': 'Loot',
+  'Ver la mesa': 'View table',
+  'Ver resultado': 'View result',
   'Partida anulada': 'Match voided',
-  'La suerte no estuvo de tu lado…': 'Luck was not on your side…',
   '{gone} abandonó en las primeras {rounds} rondas: no gana nadie.':
     '{gone} forfeited in the first {rounds} rounds: no one wins.',
   '{gone} abandonó la partida.': '{gone} forfeited the match.',
@@ -813,6 +858,14 @@ export const EN_STRINGS = {
   'Jugar de nuevo': 'Play again',
   'Repartiendo…': 'Dealing…',
   '¡ÚLTIMA CHANCE!': 'LAST CHANCE!',
+  'Vos no te podés curar en la última chance: la maceta no cura nada.':
+    "You can't heal during your Last Chance: the pot heals nothing.",
+  '{who} no se puede curar en la última chance: la maceta no cura nada.':
+    "{who} can't heal during a Last Chance: the pot heals nothing.",
+  'Overkill: te pegaron {extra} de más y no tenés última chance.':
+    'Overkill: you took {extra} too much and get no Last Chance.',
+  'Overkill: {who} recibió {extra} de más y no tiene última chance.':
+    'Overkill: {who} took {extra} too much and gets no Last Chance.',
   'Última chance de la CPU: si te deja sin vida, empatan.':
     "CPU's Last Chance: if it leaves you with no HP, it's a draw.",
   'La CPU está cargando su ataque…': 'The CPU is charging its attack…',
@@ -821,6 +874,10 @@ export const EN_STRINGS = {
   '{at}está cargando su ataque…': '{at}is charging their attack…',
   'Robar carta': 'Draw card',
   'Atacar': 'Attack',
+  '✨ Elegí la columna donde colocar {card}':
+    '✨ Choose the column to place {card}',
+  '✨ Robando carta automáticamente…':
+    '✨ Drawing card automatically…',
   '✨ Free Game: elegí la columna donde colocar {card}':
     '✨ Free Game: choose the column to place {card}',
   '✨ Free Game activo: robando carta automáticamente…':
@@ -867,30 +924,65 @@ export const EN_STRINGS = {
   'Salir ✕': 'Exit ✕',
 
   // adventure-levels.js
-  'Aprende los fundamentos del combate, aprovecha la fuerza y la curación, y usá el comodín apilable Free Game.':
-    'Learn combat fundamentals, harness strength and healing, and use the stackable Free Game wildcard.',
+  'Aprendé lo básico: sumá fuerza, curate con la maceta y montá cartas con Free Game. Si te dejan en 0, te queda un último golpe, pero ahí ya no te podés curar.':
+    "Learn the basics: build strength, heal with the pot and stack cards with Free Game. If you drop to 0 you get one last strike, but you can't heal anymore.",
   'Nivel 2: Defensa y Estrategia': 'Level 2: Defense and Strategy',
-  'El combate se intensifica. Protegete con cáscaras de huevo y ralentiza al rival con baba de caracol.':
-    'Combat intensifies. Protect yourself with egg shells and slow the rival with snail slime.',
+  'El combate se intensifica. Juntá escudo con el Secret Egg (cada huevo suma el suyo y su cáscara) y partí al medio el golpe rival con el Lazy Snail.':
+    "Combat intensifies. Build shield with Secret Egg (each egg adds its own shield and shell) and halve the rival's attack with Lazy Snail.",
   'Nivel 3: El Arte del Mercado': 'Level 3: The Art of the Market',
-  'Los 6 poderes clásicos se completan. Reclama cartas extra con el pulpo e inocula veneno mortal.':
-    'The 6 classic powers are complete. Claim extra cards with the octopus and inject deadly poison.',
+  'Los 6 poderes clásicos se completan. Llevate cartas extra con el Sticky Octopus y envenená con el Poison Vial: 6 por frasco, y muerde a través del escudo.':
+    'The 6 classic powers are complete. Grab extra cards with Sticky Octopus and poison with Poison Vial: 6 per vial, and it bites through shields.',
   'Nivel 4: Furia de la Naturaleza': 'Level 4: Nature\'s Fury',
-  'Desata el poder de la garra brutal acumulando bestias y sana progresivamente con hojas de regeneración.':
-    'Unleash the power of the brutal claw by stacking beasts and heal progressively with regeneration leaves.',
+  'Rachas largas y cura lenta: la Energy Drink suma +3 por cada símbolo de tu mejor racha, y el Spring Leaf te cura al empezar cada turno.':
+    'Long chains and slow healing: Energy Drink adds +3 per symbol of your best chain, and Spring Leaf heals you at the start of each turn.',
   'Nivel 5: Sombras y Vuelo': 'Level 5: Shadows and Flight',
-  'Golpes directos desde el aire con plumas sagradas y drenaje voraz de vida con sanguijuela.':
-    'Direct strikes from the air with sacred feathers and voracious life drain with leech.',
+  'Daño que no se puede frenar: el Feather Earring pega apenas sale del mazo y la Mantis Dagger le roba vida al rival.':
+    "Damage you can't stop: Feather Earring hits as soon as it's drawn and Mantis Dagger steals the rival's life.",
   'Nivel 6: Duelo de Maestros': 'Level 6: Duel of Masters',
-  'El desafío definitivo: los 6 poderes avanzados en juego con burbujas estratégicas y piel de escamas impenetrable.':
-    'The ultimate challenge: all 6 advanced powers in play with strategic bubbles and impenetrable scale skin.',
+  'El desafío final: Bubble Paste elige tu apertura y la Gecko Mask suma escudo y topea el golpe que te llega. Cuidado con el overkill: si te pegan más de 30 pasado el cero, no hay última chance.':
+    "The final challenge: Bubble Paste picks your opening and Gecko Mask adds shield and caps the hit you take. Beware overkill: take more than 30 past zero and there's no last chance.",
 
   // index.html (enciclopedia)
   'Hoja': 'Leaf',
   'Fuerza': 'Strength',
   'Veneno': 'Poison',
   'Blindaje': 'Armor',
-  '+2 de daño por cada símbolo de tu cadena más larga':
-    '+2 damage per symbol in your longest chain',
-};
+  '+3 de daño por cada símbolo de tu cadena más larga':
+    '+3 damage per symbol in your longest chain',
 
+  // index.html — Modal de visión del producto
+  'Visión del producto': 'Product Vision',
+  'Un combate táctico 1v1 por turnos que fusiona':
+    'A tactical 1v1 turn-based combat that fuses',
+  ', encadenamiento de símbolos y construcción de mazo en tiempo real. La anatomía NFT del Axie deja de ser una tarjeta de estadísticas fijas: se convierte en la estructura de las cartas con las que jugás, premiando la evolución con mayor estabilidad probabilística.':
+    ", symbol chaining and real-time deckbuilding. Your Axie's NFT anatomy stops being a fixed stat card: it becomes the structure of the cards you play with, rewarding evolution with greater probabilistic stability.",
+  'El motor: apostar con matemática': 'The engine: betting with math',
+  'Cada racha pega por su largo': 'Each run hits for its length',
+  'al cuadrado': 'squared',
+  ', no en línea recta: una racha de 2 vale 4, una de 3 vale 9, una de 4 vale 16. Esa curva es lo que hace que cada carta extra que arriesgás valga sensiblemente más que la anterior — y que un corte de cadena la borre entera. El detalle completo de cadenas y mercado está en':
+    ", not linearly: a run of 2 is worth 4, a run of 3 is worth 9, a run of 4 is worth 16. That curve is what makes every extra card you risk worth noticeably more than the last — and what makes a broken chain wipe it all out. The full detail on chains and the market is in",
+  'Axie Core: tu anatomía es tu mazo': 'Axie Core: your anatomy is your deck',
+  'Cada una de las 6 partes del Axie —Ojos, Orejas, Cuernos, Boca, Espalda y Cola— está ligada a una carta favorable del mazo inicial. Evolucionar una parte le suma a esa carta un tercer símbolo, ampliando sus vías de conexión y bajando la tasa de corte.':
+    "Each of the Axie's 6 parts —Eyes, Ears, Horn, Mouth, Back and Tail— is tied to a favorable card in the starting deck. Evolving a part adds a third symbol to that card, widening its connection paths and lowering its bust rate.",
+  'Hoy esto se simula localmente con las mejoras (+) de la pantalla de elección de Axie: el mismo efecto matemático que tendría leer una Part Evolution real on-chain.':
+    'Today this is simulated locally with the (+) upgrades on the Axie selection screen: the same math effect that reading a real on-chain Part Evolution would have.',
+  'Ya jugable en esta ronda': 'Already playable this round',
+  '— tres dificultades, con una IA que planea varios turnos por delante.':
+    '— three difficulties, with an AI that plans several turns ahead.',
+  '— campaña de 6 niveles contra los starters de Origins.':
+    '— a 6-level campaign against the Origins starters.',
+  '— partidas online por sala con código y QR, sin servidor de costo fijo.':
+    '— online matches in a room with a code and QR, no fixed-cost server.',
+  '— 5 rondas guiadas que enseñan jugando.':
+    '— 5 guided rounds that teach by playing.',
+  '12 poderes de clase': '12 class powers',
+  '— dos por clase, uno sorteado por partida.':
+    '— two per class, one drawn per match.',
+  'Hacia dónde va': "Where it's headed",
+  'Ronda 2:': 'Round 2:',
+  'conectar Ronin Waypoint y la API de Axie Core para leer genes y Part Evolutions reales, acreditación de AXP on-chain y matchmaking en tiempo real.':
+    'connect Ronin Waypoint and the Axie Core API to read real genes and Part Evolutions, on-chain AXP accreditation, and real-time matchmaking.',
+  'Lanzamiento:': 'Launch:',
+  'temporadas competitivas con tablas de clasificación, soporte cosmético para Axies coleccionables (Mystic, Origin, Shiny) y un modo King of the Hill.':
+    'competitive seasons with leaderboards, cosmetic support for collectible Axies (Mystic, Origin, Shiny), and a King of the Hill mode.',
+};

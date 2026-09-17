@@ -2,47 +2,184 @@ import { playCard, scoreChain } from './rules.js';
 import { TUNING } from './data.js';
 
 // El mazo tiene 96 cartas pero solo 41 combinaciones distintas de símbolos.
-// Agrupando por combinación, un lookahead de 3 niveles cuesta ~70k evaluaciones.
+// Agrupando por combinación, un lookahead de 3 niveles cuesta ~70k evaluaciones. El
+// poder entra en la combinación: para "duro" una pluma no es la misma carta que su
+// gemela sin poder.
 function deckProfile(deck) {
   const byKey = new Map();
   for (const card of deck) {
-    const symKey = card.symbols.join('+');
-    const entry = byKey.get(symKey);
+    const key = `${card.symbols.join('+')}|${card.power ?? ''}`;
+    const entry = byKey.get(key);
     if (entry) entry.count++;
-    else byKey.set(symKey, { symbols: card.symbols, count: 1 });
+    else byKey.set(key, { symbols: card.symbols, power: card.power ?? null, count: 1 });
   }
   return [...byKey.values()];
 }
 
+/**
+ * Lo que la carta robada ya dio apenas salió, se corte o no la cadena después: la
+ * pluma pega y el amuleto de fuerza suma. Solo lo cuenta "duro"; `NOTHING` es el
+ * punto de partida de cada turno.
+ */
+const NOTHING = { feather: 0, strength: 0 };
+const afterDraw = (drawn, card) => {
+  if (card.power === 'feather') return { ...drawn, feather: drawn.feather + TUNING.featherDamage };
+  if (card.power === 'strength') return { ...drawn, strength: drawn.strength + TUNING.strengthStep };
+  return drawn;
+};
+
 // Valor de estar en `chain` pudiendo plantarse o seguir robando.
-function chainValue(chain, profile, remaining, depth) {
-  const stand = scoreChain(chain).total;
+function chainValue(chain, profile, remaining, depth, worth, drawn) {
+  const stand = worth(chain, drawn);
   if (depth <= 0 || remaining <= 0) return stand;
-  return Math.max(stand, drawEV(chain, profile, remaining, depth));
+  return Math.max(stand, drawEV(chain, profile, remaining, depth, worth, drawn));
 }
 
-// Lo que se espera ganar robando una carta más: las que cortan aportan 0.
-function drawEV(chain, profile, remaining, depth) {
+// Lo que se espera ganar robando una carta más. La que corta vale lo que `worth` le dé
+// a una cadena cortada: 0 para "normal", y para "duro" lo que la carta ya dio al salir.
+function drawEV(chain, profile, remaining, depth, worth, drawn) {
   let ev = 0;
   for (const entry of profile) {
     if (entry.count === 0) continue;
-    const next = playCard(chain, entry);
-    if (next.busted) continue;
     const p = entry.count / remaining;
+    const got = afterDraw(drawn, entry);
+    const next = playCard(chain, entry);
+    if (next.busted) {
+      ev += p * worth(next, got);
+      continue;
+    }
     entry.count--;
-    ev += p * chainValue(next, profile, remaining - 1, depth - 1);
+    ev += p * chainValue(next, profile, remaining - 1, depth - 1, worth, got);
     entry.count++;
   }
   return ev;
 }
 
-// Profundidad del lookahead y cuánto tiene que superar el EV al puntaje actual.
-// "Fácil" es tímida a propósito: se planta antes de tiempo y deja puntos en la mesa.
-const STYLE = {
-  facil:  { depth: 1, margin: 1.35, playsEndgame: false },
-  normal: { depth: 2, margin: 1.0,  playsEndgame: true },
-  duro:   { depth: 3, margin: 1.0,  playsEndgame: true },
+/** "Fácil" y "normal" miden el ataque por los puntos de la cadena y nada más. */
+const pointsOnly = (chain) => scoreChain(chain).total;
+
+// ---- "duro": el ataque medido contra la partida ------------------------------
+//
+// "Normal" maximiza los puntos de cada turno, y para eso le alcanza mirar una carta:
+// si robar una más no conviene, robar dos tampoco, porque cada carta sube el riesgo de
+// cortarse. Por eso la profundidad nunca cambiaba nada.
+//
+// "Duro" no juega por puntos sino por la partida, y eso cambia qué vale una cadena:
+// - Pega contra la vida que hay: el escudo del rival se come la punta del golpe, la
+//   Gecko Mask la topea, y lo que se pase de la vida no suma —salvo que se pase tanto
+//   que le borre la última chance—.
+// - Dejarlo sin vida vale mucho más que el daño en sí. Esos saltos son los que hacen
+//   que mirar tres cartas adelante sí cambie decisiones.
+// - Cortarse cuesta más que el golpe: se pierden los poderes que ya están en la mesa
+//   (un veneno plantado, un huevo, una maceta) y la mitad del centro.
+// - Si el rival lo va a dejar sin vida en su próximo golpe, lo que rinde después
+//   (hojas, veneno, fuerza, el centro) ya no importa: va a todo o nada.
+// - En su última chance solo cuenta dejarlo en cero: juega a la probabilidad de empatar.
+
+/** Cuánto vale, en puntos de vida, cada cosa que no es daño directo. */
+const DURO = {
+  // Plantarse se lleva dos cartas del centro (o un poder); cortarse, una.
+  stand: 3,
+  // Dejarlo sin vida, con y sin la última chance de por medio.
+  down: 15,
+  knockout: 40,
+  // Un punto de fuerza rinde en cada ataque que queda.
+  strength: 3,
+  // La cáscara del huevo que se rompe le devuelve el golpe: pesa, pero no entero.
+  thorns: 0.5,
+  poison: 9,
+  octopus: 3,
+  bubble: 2,
+  snail: 3,
+  steelskin: 4,
+  eggThorns: 3,
+  // El ataque de la última chance: ganarla lo es todo.
+  lastChance: 100,
 };
+
+/** Lo que "duro" asume de la mesa si no se la pasan: rival entero, nada puesto. */
+const QUIET_VIEW = {
+  strength: 0, weak: false, myHp: 100, myShield: 0, myCap: 0, myPoison: 0,
+  foeHp: 100, foeShield: 0, foeThorns: 0, foeCap: 0, foeStrength: 0, foeWeak: false,
+  lastChance: false,
+};
+
+/** Un golpe bueno del rival, sin contar fuerza: con esto se mide si el próximo lo tumba. */
+const FOE_HIT = 12;
+
+/**
+ * Si el próximo golpe del rival lo deja sin vida: el veneno muerde al terminar este
+ * turno, y después pega el rival contra su escudo y su máscara.
+ */
+function doomedAt(view) {
+  let hit = FOE_HIT + view.foeStrength;
+  if (view.foeWeak) hit = Math.ceil(hit / TUNING.snailShare);
+  hit = Math.max(hit - view.myShield, 0);
+  if (view.myCap > 0) hit = Math.min(hit, view.myCap);
+  return view.myHp - view.myPoison <= hit;
+}
+
+const unstacked = (cards) => cards.flatMap((c) => c.stackedCards || [c]);
+
+/** Valor de plantarse con `chain`, en puntos de vida, para la mesa que describe `view`. */
+function attackWorth(view, chain, drawn) {
+  const foeHp = Math.max(view.foeHp - drawn.feather, 0);
+  const later = view.doomed || view.lastChance ? 0 : 1;
+  const early = drawn.feather + drawn.strength * DURO.strength * later;
+  if (view.lastChance && foeHp <= 0) return DURO.lastChance;
+  if (chain.busted) return view.lastChance ? 0 : early;
+
+  const points = scoreChain(chain).total;
+  const cards = unstacked(chain.cards);
+  const claws = cards.filter((c) => c.power === 'brutal').length;
+  const longest = Math.max(0, ...chain.runs.map((r) => r.length));
+  let swing = points > 0 ? points + view.strength + drawn.strength + claws * TUNING.brutalStep * longest : 0;
+  if (view.weak && swing > 0) swing = Math.ceil(swing / TUNING.snailShare);
+  const blocked = Math.min(view.foeShield, swing);
+  let landed = swing - blocked;
+  if (view.foeCap > 0 && landed > view.foeCap) landed = view.foeCap;
+  const downs = foeHp > 0 && landed >= foeHp;
+
+  if (view.lastChance) return downs ? DURO.lastChance : landed / 100;
+
+  let value = early + Math.min(landed, foeHp) + DURO.stand * later;
+  if (blocked > 0 && blocked === view.foeShield) value -= view.foeThorns * DURO.thorns;
+  if (downs) value += landed - foeHp > TUNING.overkill ? DURO.knockout : DURO.down;
+
+  // Los poderes de la mesa: se cobran plantándose, y se pierden si la cadena se corta.
+  const missing = 100 - view.myHp;
+  for (const { power } of cards) {
+    if (!power || power === 'brutal' || power === 'feather' || power === 'strength') continue;
+    if (power === 'poison') value += DURO.poison * later;
+    else if (power === 'octopus') value += DURO.octopus * later;
+    else if (power === 'bubble') value += DURO.bubble * later;
+    else if (swing <= 0) continue;
+    else if (power === 'snail') value += DURO.snail;
+    else if (power === 'steelskin') value += DURO.steelskin;
+    else if (power === 'egg') value += Math.max(1, Math.floor(swing / TUNING.eggShare)) + DURO.eggThorns;
+    else if (power === 'pot') value += Math.min(swing, missing);
+    else if (power === 'leech') value += TUNING.leechDrain + Math.min(TUNING.leechDrain, missing);
+    else if (power === 'leaf') value += Math.min(TUNING.leafGain * TUNING.leafHeal, missing) * later;
+  }
+  return value;
+}
+
+// Profundidad del lookahead y cuánto tiene que superar el EV a plantarse.
+// - "Fácil" es tímida a propósito: se planta antes de tiempo, no juega el final y
+//   elige mal del centro la mitad de las veces (`sloppy`).
+// - "Normal" maximiza los puntos de cada turno: juega bien, pero no mira la partida.
+// - "Duro" lee la mesa (`reads`: ver `attackWorth`) y mira tres cartas adelante.
+const STYLE = {
+  facil:  { depth: 1, margin: 1.35, playsEndgame: false, sloppy: 0.5 },
+  normal: { depth: 1, margin: 1.0,  playsEndgame: true },
+  duro:   { depth: 3, playsEndgame: true, reads: true },
+};
+
+/** Con qué probabilidad la CPU elige del centro al azar en vez de pensar. */
+export const sloppyDraft = (difficulty) => STYLE[difficulty]?.sloppy ?? 0;
+
+/** Si la CPU usa la renovación del centro cuando puede: "fácil" no se da cuenta. */
+export const renewsMarket = (difficulty) => !STYLE[difficulty]?.sloppy;
 
 /**
  * @param {object} chain      cadena actual de la CPU
@@ -52,10 +189,24 @@ const STYLE = {
  *                                  última chance (ver `cpuNeeds`); null el resto del
  *                                  tiempo
  * @param {string} opts.difficulty
+ * @param {object} [opts.view]  la mesa desde su asiento (ver `attackViewOf` en
+ *                              `game.js`); solo la usa "duro"
  */
-export function decideDraw(chain, deck, { needs = null, difficulty = 'normal' } = {}) {
+export function decideDraw(chain, deck, { needs = null, difficulty = 'normal', view = null } = {}) {
   if (deck.length === 0) return false;
   const style = STYLE[difficulty] ?? STYLE.normal;
+
+  if (style.reads) {
+    // Sin mesa, `needs` hace de vida del rival: es la pared que hay que pasar.
+    const seen = view ?? { ...QUIET_VIEW, foeHp: needs ?? QUIET_VIEW.foeHp, lastChance: needs !== null };
+    const table = { ...seen, doomed: doomedAt(seen) };
+    const worth = (c, drawn) => attackWorth(table, c, drawn);
+    const stand = worth(chain, NOTHING);
+    // Con el empate ya asegurado no hay nada que ganar robando.
+    if (table.lastChance && stand >= DURO.lastChance) return false;
+    return drawEV(chain, deckProfile(deck), deck.length, style.depth, worth, NOTHING) > stand;
+  }
+
   const stand = scoreChain(chain).total;
 
   // La última chance. Si con lo que ya tiene alcanza para empatar, se planta y lo
@@ -67,7 +218,7 @@ export function decideDraw(chain, deck, { needs = null, difficulty = 'normal' } 
   // el golpe final salía en 0 casi siempre. Juega su turno normal y pega lo que pueda.
   if (needs !== null && style.playsEndgame && stand >= needs) return false;
 
-  return drawEV(chain, deckProfile(deck), deck.length, style.depth) > stand * style.margin;
+  return drawEV(chain, deckProfile(deck), deck.length, style.depth, pointsOnly, NOTHING) > stand * style.margin;
 }
 
 // ---- elección de cartas de la reserva ---------------------------------------
@@ -160,7 +311,6 @@ const POWER_WORTH = {
   strength: 1.25,
   brutal: 1.25,
   leaf: 1.2,
-  oak: 1.2,
   snail: 1.15,
   pot: 0.95,
   freegame: 1.2,
@@ -214,6 +364,11 @@ function argmax(items, value, floor = -Infinity) {
  * vale su efecto, convertido a conectividad con el promedio de las dos cartas que
  * estaría resignando. Así la comparación se adapta al mazo: cuando las cartas sin
  * poder enlazan muy bien, el efecto tiene que valer más para ganarles.
+ *
+ * Es la misma para "normal" y "duro". Se probó una elección que leyera la partida
+ * —poderes pesados según la vida de cada uno, y llevarse lo que más le serviría al
+ * rival— y sobre 600 partidas no movió nada (+0.5 ±2.6); negarle cartas al rival
+ * incluso empeoraba. La diferencia de "duro" está en cuándo plantarse.
  *
  * @param {'stand'|'bust'} kind  se plantó (2 sin poder o 1 con poder) o se cortó (1 sin poder)
  */

@@ -168,21 +168,20 @@ const pie = regla('.controls').replace(/\/\*[\s\S]*?\*\//g, '');
 assert.match(pie, /height: var\(--pie\)/,
   'el pie dejó de tener un alto propio: vuelve a medir lo que haya adentro, y la mesa ' +
   'entera sube y baja con cada cierre de turno');
-assert.match(pie, /grid-template-rows: var\(--aviso\) var\(--botones\)/,
-  'los dos casilleros del pie tienen que ser de alto fijo: un `auto` acá es lo mismo ' +
+assert.match(pie, /grid-template-rows: var\(--botones\) var\(--zocalo\)/,
+  'el casillero de botones tiene que ser de alto fijo: un `auto` acá es lo mismo ' +
   'que no tener alto propio');
 assert.ok(!/min-height|max-height|auto/.test(pie),
   `algo en \`.controls\` vuelve a depender del contenido: ${pie}`);
 
-// Y las tres medidas viajan juntas. Cada ventana tiene su pie —el teléfono lo quiere con
+// Y las medidas viajan juntas. Cada ventana tiene su pie —el teléfono lo quiere con
 // botones más grandes, la ventana baja lo quiere al mínimo— y pisar una sola deja los
 // otros casilleros con la medida de otra pantalla.
-const avisos = (css.match(/--aviso:/g) ?? []).length;
 const botones = (css.match(/--botones:/g) ?? []).length;
 const zocalos = (css.match(/--zocalo:/g) ?? []).length;
-assert.ok(avisos === botones && botones === zocalos,
-  `\`--aviso\` se declara ${avisos} veces, \`--botones\` ${botones} y \`--zocalo\` ` +
-  `${zocalos}: las tres son el pie y se pisan juntas o no se pisan`);
+assert.ok(botones === zocalos,
+  `\`--botones\` se declara ${botones} veces y \`--zocalo\` ` +
+  `${zocalos}: las dos son el pie y se pisan juntas o no se pisan`);
 
 // El suelo tiene que llegar al borde de abajo de cualquier ventana. Medido en píxeles
 // fijos se terminaba antes en las ventanas angostas y altas —ahí la línea de las patas
@@ -197,15 +196,12 @@ assert.match(regla('.arena::after'), /--under: max\(\d+px, 100vh\)/,
 // sin estilo, apilado contra la esquina, y la suite sigue en verde — el peor tipo de
 // falla que tiene este proyecto. Estas son las que dibujan pantallas enteras, y salen
 // mitad del HTML y mitad de los módulos que arman su contenido.
-const marcado = ['index.html', 'src/lobby.js', 'src/ui.js', 'src/net.js']
+const marcado = ['index.html', 'src/lobby.js', 'src/ui.js', 'src/net.js', 'src/result.js']
   .map((f) => read(...f.split('/'))).join('\n');
 for (const cls of [
-  'btn-burger', 'hud-menu', 'hud-row', 'hud-vol', 'hud-item',
-  // Los dos casilleros del pie. El de arriba es el que apoya el renglón contra los
-  // botones —sin la regla se centra, y el renglón se corre solo al cambiar de largo—; el
-  // de abajo es el que hace que los dos botones midan lo mismo, que sin él salen sueltos
-  // y cada uno mide lo que dice. Nadie se entera hasta jugar.
-  'controls-say', 'controls-acts',
+  'topbar-cfg-btn', 'hud-menu', 'hud-row', 'hud-vol', 'hud-item',
+  // La caja de los botones: hace que los dos midan lo mismo.
+  'controls-acts',
   'lobby-aside', 'lobby-play--alt', 'loadout-cta', 'loadout-now',
   'lobby-foot', 'lobby-help',
   'lobby-choose', 'choose-bar', 'choose-stage', 'choose-hero', 'choose-arrow',
@@ -220,6 +216,11 @@ for (const cls of [
   'room-no', 'room-id', 'room-seats', 'room-go', 'netbox-count', 'netbox-code',
   'netbox-seats', 'seat-art', 'seat-empty', 'seat-id', 'seat-who', 'seat-state',
   'netbox-you', 'netbox-axie', 'netbox-mine', 'netbox-urls', 'netbox-label',
+  // La pantalla del final (ver `result.js`): la escena, la tela, el escenario, las
+  // marcas, el botín y las puertas.
+  'result-scene', 'result-sky', 'result-vfx', 'result-box', 'result-banner', 'result-cloth',
+  'result-title', 'result-stage', 'result-fighter', 'result-stats', 'result-stat',
+  'result-loot', 'result-item', 'result-acts', 'result-peek', 'result-back',
 ]) {
   assert.match(marcado, new RegExp(`class="[^"]*${cls}`), `nadie usa \`.${cls}\``);
   assert.match(css, new RegExp(`\\.${cls}[\\s,{:.\\[]`), `\`.${cls}\` no está dibujada en el CSS`);
@@ -250,5 +251,36 @@ const colchon = Math.min(...[...css.matchAll(/\.market-row\s*\{[^}]*?padding:\s*
 const brillo = Math.max(...[...tutoCss.matchAll(/(?:\.market-card\.tuto-hl\s*\{|@keyframes tuto-pulse-tight)[^@]*?(?=\n\}|\n@|$)/g)]
   .flatMap((m) => [...m[0].matchAll(/0 0 (\d+)px/g)].map((n) => Number(n[1]))));
 assert.ok(Number.isFinite(brillo) && brillo <= colchon, `el brillo del centro (${brillo}px) se corta contra .market-row (${colchon}px)`);
+
+// ---- la animación de los poderes ------------------------------------------------
+// La marca de la chapa se esconde mientras el amuleto viaja (ver `holdPip` en
+// `power-fx.js`). Sin la regla del CSS no se esconde nada, y sin la de aparecer se queda
+// escondida: ninguna de las dos cosas la ve un DOM de mentira. Lo mismo el gesto de la
+// carta, el brillo del amuleto y el color del cartel de cada poder.
+{
+  const { POWER_FX } = await import('../src/power-fx.js');
+  const has = (rule, why) => assert.ok(css.includes(rule), why);
+  for (const [power, moments] of Object.entries(POWER_FX)) {
+    has(`[data-power="${power}"]`, `${power}: el amuleto no tiene su color`);
+    has(`.dmg[data-kind^="power-${power}"]`, `${power}: el cartel no tiene su color`);
+    for (const [moment, spec] of Object.entries(moments)) {
+      if (['apply', 'draw', 'stand'].includes(moment) && spec.flight) {
+        assert.match(css, new RegExp(`\\.card\\[data-fx="${power}"\\]\\s*\\{[^}]*animation`),
+          `${power}: la carta no tiene su gesto`);
+      }
+      for (const pip of [].concat(spec.pip ?? [])) {
+        const mark = pip === 'shield' ? '.plate-shield' : '.pip-status';
+        has(`.plate[data-fx-wait~="${pip}"] ${mark}[data-pip="${pip}"]`,
+          `${power}: la marca ${pip} no se esconde mientras viaja el amuleto`);
+        has(`.plate[data-fx-pop~="${pip}"] ${mark}[data-pip="${pip}"]`,
+          `${power}: la marca ${pip} no aparece al llegar`);
+      }
+    }
+  }
+  for (const sel of ['.power-fly', '.power-orb', '.hud-tag']) {
+    assert.match(regla(sel), /position:\s*fixed/, `${sel} vuela en coordenadas de la ventana`);
+    assert.match(regla(sel), /pointer-events:\s*none/, `${sel} no se come los clics`);
+  }
+}
 
 console.log(`✓ estilos ok (\`hidden\` oculta, ${remotas.length} texturas del kit con piso propio, tutorial sin scrim)`);

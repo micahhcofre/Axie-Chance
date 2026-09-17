@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Axie Chance</title>
 <link rel="icon" href="Icons/bird-crest.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=Lilita+One&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Lilita+One&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -27,11 +27,9 @@
       <div class="clock" id="clock" role="timer" aria-label="Tiempo que queda" data-on="false"></div>
     </div>
     <div class="topbar-actions">
-      <!-- Las tres rayitas. Todo lo que no es jugar vive detrás de este botón: el
-           sonido, las reglas y la puerta de salida. -->
-      <button class="btn btn-burger" id="hud-btn" aria-expanded="false"
-        aria-controls="hud-menu" aria-label="Menú" title="Menú"
-        ><i></i><i></i><i></i></button>
+      <!-- Botón de configuración / menú: el sonido, el idioma, las reglas y la puerta de salida. -->
+      <button class="lobby-cfg-btn topbar-cfg-btn" id="hud-btn" aria-expanded="false"
+        aria-controls="hud-menu" aria-label="Configuración" title="Configuración"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></button>
     </div>
   </header>
 
@@ -129,10 +127,6 @@
         <div class="odds" id="odds"></div>
       </div>
       <div class="field" id="field"></div>
-      <!-- Cómo terminó la partida, en el medio de la escena y encima de los dos
-           bichos: letra sola, sin caja, para que no se lea como un botón más al lado
-           de los que hay abajo. Vacío y escondido el resto del tiempo. -->
-      <div class="finale" id="finale" role="status" hidden></div>
       <div class="controls" id="controls"></div>
       <!-- El recorrido de la cadena, que se dibuja al soltar el ataque y antes del
            golpe: una línea por símbolo uniendo sus eslabones carta por carta. Va en su
@@ -154,6 +148,12 @@
      alrededor de una elección que se supone que es la única cosa que importa en ese
      momento. Acá afuera tapa la pantalla entera, que es lo que tiene que hacer. -->
 <div class="overlay" id="market" hidden></div>
+
+<!-- La pantalla del final: victoria, derrota o empate, cada una con su escena (ver
+     `result.js`). Vive afuera de la mesa por lo mismo que el centro: tiene que tapar la
+     pantalla entera, barra de arriba incluida. Debajo de la portada y de las salas, que
+     se abren encima desde sus botones. -->
+<div class="result" id="result" role="status" hidden></div>
 
 <!-- La portada. Es lo primero que se ve y lo que hace que esto parezca un juego y no
      una planilla: el terreno de fondo, los Axies del roster dando vueltas por ahí
@@ -221,10 +221,7 @@
               </svg>
             </span>
             <div class="mode-content">
-              <div class="mode-header">
-                <b>Modo Aventura</b>
-                <span class="mode-tag mode-tag--adv">Campaña</span>
-              </div>
+              <b>Modo Aventura</b>
               <span class="mode-desc">Avanzá nivel a nivel desbloqueando los 12 poderes</span>
             </div>
             <span class="mode-arrow" aria-hidden="true">›</span>
@@ -242,28 +239,20 @@
               </svg>
             </span>
             <div class="mode-content">
-              <div class="mode-header">
-                <b>Vs CPU</b>
-                <span class="mode-tag mode-tag--cpu">Duelo</span>
-              </div>
+              <b>Vs CPU</b>
               <span class="mode-desc">Vos contra la máquina, partida libre</span>
             </div>
             <span class="mode-arrow" aria-hidden="true">›</span>
           </button>
 
+          <!-- La dificultad es de este modo y de ningún otro: va colgada de su cartel. Un
+               solo control; el elegido queda en `data-value` (ver `lobby.js`). -->
           <div class="difficulty-shelf" id="difficulty-shelf">
-            <label class="select" id="difficulty-box">
-              <span class="difficulty-title">Dificultad</span>
-              <select id="difficulty">
-                <option value="facil">Fácil</option>
-                <option value="normal" selected>Normal</option>
-                <option value="duro">Duro</option>
-              </select>
-            </label>
-            <div class="diff-pills" role="group" aria-label="Dificultad">
-              <button type="button" class="diff-pill" data-diff="facil">Fácil</button>
-              <button type="button" class="diff-pill is-active" data-diff="normal">Normal</button>
-              <button type="button" class="diff-pill" data-diff="duro">Duro</button>
+            <span class="difficulty-title" id="difficulty-title">Dificultad</span>
+            <div class="diff-pills" id="difficulty" role="radiogroup" aria-labelledby="difficulty-title" data-value="normal">
+              <button type="button" class="diff-pill" role="radio" aria-checked="false" data-diff="facil">Fácil</button>
+              <button type="button" class="diff-pill is-active" role="radio" aria-checked="true" data-diff="normal">Normal</button>
+              <button type="button" class="diff-pill" role="radio" aria-checked="false" data-diff="duro">Duro</button>
             </div>
           </div>
         </div>
@@ -281,20 +270,12 @@
               </svg>
             </span>
             <div class="mode-content">
-              <div class="mode-header">
-                <b>Multijugador</b>
-                <span class="mode-tag mode-tag--net">En Red</span>
-              </div>
+              <b>Multijugador</b>
               <span class="mode-desc" id="lobby-net-note">Contra otra persona, en una sala</span>
             </div>
             <span class="mode-arrow" aria-hidden="true">›</span>
           </button>
         </div>
-      </div>
-      <div class="lobby-menu-foot">
-        <button class="btn btn-ghost lobby-back-btn" id="lobby-back">
-          <span aria-hidden="true">←</span> Volver
-        </button>
       </div>
     </div>
 
@@ -309,7 +290,7 @@
        la elección no pinta nada (ver `.lobby-aside` en el CSS). -->
   <div class="lobby-aside" id="lobby-aside">
     <button class="lobby-play lobby-play--alt" id="lobby-loadout">
-      <span class="loadout-cta">Elegí tu Axie</span>
+      <span class="loadout-cta">AXIES</span>
       <span class="loadout-now" id="lobby-loadout-now"></span>
     </button>
   </div>
@@ -325,6 +306,7 @@
     <button class="btn btn-ghost lobby-help" id="lobby-tutorial">Tutorial</button>
     <button class="btn btn-ghost lobby-help" id="lobby-rules">Cómo se juega</button>
     <button class="btn btn-ghost lobby-help" id="lobby-symbols">Símbolos especiales</button>
+    <button class="btn btn-ghost lobby-help" id="lobby-vision">Visión del producto</button>
   </div>
 
   <!-- Con quién. Es la última pregunta antes del combate y la que hace que la partida
@@ -567,24 +549,63 @@
   <div class="example">
     <div class="muted"><b>«Al pegar»</b> es plantarte con un ataque que haga daño. Si te cortás, esos poderes no salen.</div>
     <hr>
-    <div><img class="power power--sm" src="Icons/power-strength.png" alt=""> <b>Charm of Power</b> (Bestia) — Al pegar, +1 de daño en ese ataque y en todos los que siguen.</div>
-    <div><img class="power power--sm" src="Icons/power-brutal.png" alt=""> <b>Energy Drink M</b> (Bestia) — Al pegar, +2 de daño por cada símbolo de tu racha más larga.</div>
+    <div><img class="power power--sm" src="Icons/power-strength.png" alt=""> <b>Charm of Power</b> (Bestia) — Al aparecer, +1 de daño permanente.</div>
+    <div><img class="power power--sm" src="Icons/power-brutal.png" alt=""> <b>Energy Drink M</b> (Bestia) — Al pegar, +3 de daño por cada símbolo de tu racha más larga.</div>
     <div><img class="power power--sm" src="Icons/power-octopus.png" alt=""> <b>Sticky Octopus</b> (Pez) — Al plantarte (aunque pegues 0), elegís 1 carta extra del mercado para tu mazo.</div>
     <div><img class="power power--sm" src="Icons/power-bubble.png" alt=""> <b>Bubble Paste</b> (Pez) — Al plantarte, la carta que elijas del mercado abre tu próxima ronda.</div>
-    <div><img class="power power--sm" src="Icons/power-egg.png" alt=""> <b>Secret Egg</b> (Pájaro) — Al pegar, ganás un escudo de la mitad del golpe; si el rival lo rompe, recibe 8 de daño.</div>
+    <div><img class="power power--sm" src="Icons/power-egg.png" alt=""> <b>Secret Egg</b> (Pájaro) — Al pegar, sumás un escudo de un tercio del golpe (mínimo 1); si el rival lo rompe, recibe 8 de daño por cada huevo.</div>
     <div><img class="power power--sm" src="Icons/power-feather.png" alt=""> <b>Feather Earring</b> (Pájaro) — Apenas la robás, 5 de daño directo al rival, aunque después te cortes.</div>
     <div><img class="power power--sm" src="Icons/power-pot.png" alt=""> <b>Leafy Pot</b> (Planta) — Al pegar, te curás lo mismo que pegaste.</div>
-    <div><img class="power power--sm" src="Icons/power-leaf.png" alt=""> <b>Spring Leaf</b> (Planta) — Al pegar, +2 hojas (hasta 5); al final de cada turno tuyo, cada hoja te cura 4 y se gasta 1.</div>
+    <div><img class="power power--sm" src="Icons/power-leaf.png" alt=""> <b>Spring Leaf</b> (Planta) — Al pegar, +2 hojas (hasta 5); al inicio de cada turno tuyo, cada hoja te cura 4 y se gasta 1.</div>
     <div><img class="power power--sm" src="Icons/power-snail.png" alt=""> <b>Lazy Snail</b> (Bicho) — Al pegar, el próximo ataque del rival hace la mitad de daño.</div>
-    <div><img class="power power--sm" src="Icons/power-leech.png" alt=""> <b>Mantis Dagger</b> (Bicho) — Al pegar, le sacás 6 de vida al rival y te los curás (12 con 4 o más columnas en mesa).</div>
-    <div><img class="power power--sm" src="Icons/power-poison.png" alt=""> <b>Poison Vial</b> (Reptil) — Al pegar, envenenás al rival con la mitad del golpe; al final de cada turno suyo le saca eso y se reduce a la mitad.</div>
-    <div><img class="power power--sm" src="Icons/power-steelskin.png" alt=""> <b>Gecko Mask</b> (Reptil) — Al pegar, el próximo golpe del rival te hace 12 de daño como máximo.</div>
+    <div><img class="power power--sm" src="Icons/power-leech.png" alt=""> <b>Mantis Dagger</b> (Bicho) — En un ataque exitoso, robás 5 de vida al rival por cada Mantis Dagger en tu cadena.</div>
+    <div><img class="power power--sm" src="Icons/power-poison.png" alt=""> <b>Poison Vial</b> (Reptil) — Al plantarte, le ponés 6 de veneno al rival (se suma); al final de cada turno suyo le saca eso sin importar su escudo, y se reduce a la mitad.</div>
+    <div><img class="power power--sm" src="Icons/power-steelskin.png" alt=""> <b>Gecko Mask</b> (Reptil) — Al pegar, sumás 2 de escudo y el próximo golpe del rival te saca 12 de vida como máximo.</div>
     <hr>
     <div><img class="power power--sm" src="Icons/power-freegame.png" alt=""> <b>Rocket Stamp</b> (Comodín) — Si comparte un símbolo con tu cadena, tu próximo robo se monta sobre una carta de la mesa y le suma sus símbolos.</div>
   </div>
 
   <h3>Modo Aventura</h3>
   <p>Campaña de 6 niveles progresivos donde se desbloquean 2 nuevos poderes de clase por nivel. En el <b>Nivel 1: Primeros Pasos</b> ya están activos <b>Charm of Power</b> (Bestia), <b>Leafy Pot</b> (Planta) y las 15 cartas comodín neutrales <b>Rocket Stamp</b>.</p>
+
+  <form method="dialog"><button class="btn btn-primary">Entendido</button></form>
+</dialog>
+
+<dialog class="modal o-panel" id="vision-modal">
+  <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
+  <h2 class="o-banner">Visión del producto</h2>
+  <p>Un combate táctico 1v1 por turnos que fusiona <b>push-your-luck</b>, encadenamiento de símbolos y construcción
+     de mazo en tiempo real. La anatomía NFT del Axie deja de ser una tarjeta de estadísticas fijas: se convierte en
+     la estructura de las cartas con las que jugás, premiando la evolución con mayor estabilidad probabilística.</p>
+
+  <h3>El motor: apostar con matemática</h3>
+  <p>Cada racha pega por su largo <b>al cuadrado</b>, no en línea recta: una racha de 2 vale 4, una de 3 vale 9, una
+     de 4 vale 16. Esa curva es lo que hace que cada carta extra que arriesgás valga sensiblemente más que la
+     anterior — y que un corte de cadena la borre entera. El detalle completo de cadenas y mercado está en
+     <b>Cómo se juega</b>.</p>
+
+  <h3>Axie Core: tu anatomía es tu mazo</h3>
+  <p>Cada una de las 6 partes del Axie —Ojos, Orejas, Cuernos, Boca, Espalda y Cola— está ligada a una carta
+     favorable del mazo inicial. Evolucionar una parte le suma a esa carta un tercer símbolo, ampliando sus vías de
+     conexión y bajando la tasa de corte.</p>
+  <p class="muted">Hoy esto se simula localmente con las mejoras (+) de la pantalla de elección de Axie: el mismo
+     efecto matemático que tendría leer una Part Evolution real on-chain.</p>
+
+  <h3>Ya jugable en esta ronda</h3>
+  <div class="example">
+    <div><b>Vs CPU</b> — tres dificultades, con una IA que planea varios turnos por delante.</div>
+    <div><b>Aventura</b> — campaña de 6 niveles contra los starters de Origins.</div>
+    <div><b>Multijugador</b> — partidas online por sala con código y QR, sin servidor de costo fijo.</div>
+    <div><b>Tutorial</b> — 5 rondas guiadas que enseñan jugando.</div>
+    <div><b>12 poderes de clase</b> — dos por clase, uno sorteado por partida.</div>
+  </div>
+
+  <h3>Hacia dónde va</h3>
+  <p><b>Ronda 2:</b> conectar Ronin Waypoint y la API de Axie Core para leer genes y Part Evolutions reales,
+     acreditación de AXP on-chain y matchmaking en tiempo real.</p>
+  <p><b>Lanzamiento:</b> temporadas competitivas con tablas de clasificación, soporte cosmético para Axies
+     coleccionables (Mystic, Origin, Shiny) y un modo King of the Hill.</p>
+  <p class="muted">Track: Axie Infinity Vibeathon — Round 1.</p>
 
   <form method="dialog"><button class="btn btn-primary">Entendido</button></form>
 </dialog>
@@ -644,7 +665,7 @@
         Aumenta tu estadística de daño de forma permanente. Cada carta jugada añade <b>+1 de daño</b> a este ataque y a todos los que hagas en el resto de la partida.
       </p>
       <ul class="symbol-points">
-        <li><b>Activación:</b> Al conectar tu ataque con éxito (daño &gt; 0).</li>
+        <li><b>Activación:</b> Al aparecer en mesa al robarla o montarla.</li>
         <li><b>Permanente:</b> Se conserva para toda la partida (no se pierde si te cortás después).</li>
         <li><b>Acumulable:</b> Cada carta suma otro +1 permanente.</li>
       </ul>
@@ -667,9 +688,9 @@
           <h3 class="symbol-name">Energy Drink M</h3>
         </div>
       </div>
-      <div class="symbol-highlight">+2 de daño por cada símbolo de tu cadena más larga</div>
+      <div class="symbol-highlight">+3 de daño por cada símbolo de tu cadena más larga</div>
       <p class="symbol-desc">
-        Potencia tu golpe según el tamaño de tu mejor racha. Al atacar, suma <b>+2 de daño adicional</b> por cada símbolo que tenga tu cadena más larga.
+        Potencia tu golpe según el tamaño de tu mejor racha. Al atacar, suma <b>+3 de daño adicional</b> por cada símbolo que tenga tu cadena más larga.
       </p>
       <ul class="symbol-points">
         <li><b>Activación:</b> Se activa siempre que conectes el ataque (daño &gt; 0).</li>
@@ -751,12 +772,12 @@
           <h3 class="symbol-name">Secret Egg</h3>
         </div>
       </div>
-      <div class="symbol-highlight">Escudo de medio golpe; al romperse devuelve 8 de daño</div>
+      <div class="symbol-highlight">Escudo de un tercio del golpe; al romperse devuelve 8 de daño por huevo</div>
       <p class="symbol-desc">
-        Genera un <b>escudo protector</b> equivalente a la mitad del golpe infligido. Dura hasta que se rompa absorbiendo daño rival y, al romperse, contraataca.
+        Genera un <b>escudo protector</b> equivalente a un tercio del golpe infligido (mínimo 1). Dura hasta que se rompa absorbiendo daño rival y, al romperse, contraataca.
       </p>
       <ul class="symbol-points">
-        <li><b>Protección no acumulable:</b> Absorbe daño entrante; si ganás otro huevo, reemplaza al actual.</li>
+        <li><b>Protección acumulable:</b> Absorbe daño entrante; cada huevo suma su escudo al que ya tenés (también el de la Gecko Mask).</li>
         <li><b>Contraataque acumulable:</b> Cada huevo obtenido acumula +8 de daño fijo para cuando se rompa el escudo.</li>
         <li><b>Activación:</b> Requiere conectar daño al atacar (daño &gt; 0).</li>
       </ul>
@@ -835,13 +856,13 @@
           <h3 class="symbol-name">Spring Leaf</h3>
         </div>
       </div>
-      <div class="symbol-highlight">+2 hojas (hasta 5). Cada hoja te cura 4 de vida al final del turno</div>
+      <div class="symbol-highlight">+2 hojas (hasta 5). Cada hoja te cura 4 de vida al inicio de tu turno</div>
       <p class="symbol-desc">
-        Al atacar con éxito ganás <b>2 hojas</b> (acumulables hasta 5). Al final de cada uno de tus turnos, <b>cada hoja te cura 4 de vida y luego se consume una hoja</b>.
+        Al atacar con éxito ganás <b>2 hojas</b> (acumulables hasta 5). Al inicio de cada uno de tus turnos, antes de robar, <b>cada hoja te cura 4 de vida y luego se consume una hoja</b>.
       </p>
       <ul class="symbol-points">
         <li><b>Acumulable:</b> Podés acumular hasta un máximo de 5 hojas.</li>
-        <li><b>Regeneración segura:</b> Curan al final del turno incluso si ese turno luego se corta.</li>
+        <li><b>Regeneración segura:</b> Curan al inicio del turno, aunque ese turno después se corte.</li>
         <li><b>Activación:</b> Requiere conectar daño (daño &gt; 0) para ganar hojas nuevas.</li>
       </ul>
       <div class="symbol-chips">
@@ -892,18 +913,18 @@
           <h3 class="symbol-name">Mantis Dagger</h3>
         </div>
       </div>
-      <div class="symbol-highlight">Robás 6 de vida al rival (se duplica a 12 con 4 columnas en mesa)</div>
+      <div class="symbol-highlight">Robás 5 de vida al rival por cada Mantis Dagger en tu cadena</div>
       <p class="symbol-desc">
-        Al conectar tu ataque, <b>le roba 6 de vida al rival y te los cura a vos</b>. Si tenés <b>4 o más columnas en mesa</b>, ¡el drenaje se duplica a <b>12 de vida</b>!
+        En un ataque exitoso, <b>le roba 5 de vida al rival y te los cura a vos</b> por cada carta de Mantis Dagger en tu cadena (por ejemplo, con 2 robás 10).
       </p>
       <ul class="symbol-points">
-        <li><b>Drenaje doble:</b> Le resta vida al oponente y cura a tu Axie en la misma cantidad.</li>
-        <li><b>Bonus de 4 columnas:</b> Se duplica a 12 con 4 o más cartas en mesa (los Free Games apilados no cuentan como columna nueva).</li>
-        <li><b>Activación:</b> Requiere conectar daño al plantarte (daño &gt; 0).</li>
+        <li><b>Drenaje de vida:</b> Le resta 5 de vida al oponente y cura a tu Axie en la misma cantidad por cada Mantis Dagger.</li>
+        <li><b>Acumulable:</b> Cada carta de Mantis Dagger en la cadena roba 5 (2 en cadena roban 10).</li>
+        <li><b>Activación:</b> Requiere conectar un ataque con éxito (daño &gt; 0).</li>
       </ul>
       <div class="symbol-chips">
         <span class="sym-chip">Drenaje de vida</span>
-        <span class="sym-chip sym-chip--cond">Bonus 4 columnas</span>
+        <span class="sym-chip sym-chip--stack">Acumulable</span>
       </div>
     </article>
 
@@ -920,14 +941,14 @@
           <h3 class="symbol-name">Poison Vial</h3>
         </div>
       </div>
-      <div class="symbol-highlight">Envenena por la mitad de tu golpe; daña cada turno y se reduce a la mitad</div>
+      <div class="symbol-highlight">6 de veneno por frasco; atraviesa el escudo, daña cada turno y se reduce a la mitad</div>
       <p class="symbol-desc">
-        Infecta al oponente con veneno igual a la <b>mitad de tu daño</b>. Al final del turno del rival, el veneno le resta vida y luego se parte a la mitad.
+        Cada frasco le pone <b>6 de veneno</b> al oponente, pegues lo que pegues. Al final del turno del rival, el veneno le resta vida sin pasar por su escudo y luego se parte a la mitad.
       </p>
       <ul class="symbol-points">
         <li><b>Daño al final de su turno:</b> Muerde restando vida, se divide a la mitad y se disipa si queda en 2 o menos.</li>
-        <li><b>Acumulable:</b> Nuevos venenos se suman al veneno que ya tenga encima el rival.</li>
-        <li><b>Activación:</b> Requiere conectar daño al plantarte (daño &gt; 0).</li>
+        <li><b>Acumulable:</b> Cada frasco suma 6 al veneno que ya tenga encima el rival.</li>
+        <li><b>Activación:</b> Se aplica siempre que te plantes; si te cortás, no.</li>
       </ul>
       <div class="symbol-chips">
         <span class="sym-chip">Daño continuo</span>
@@ -948,16 +969,17 @@
           <h3 class="symbol-name">Gecko Mask</h3>
         </div>
       </div>
-      <div class="symbol-highlight">Tope defensivo: el próximo ataque rival no superará los 12 de daño</div>
+      <div class="symbol-highlight">+2 de escudo y el próximo ataque rival te saca 12 de vida como máximo</div>
       <p class="symbol-desc">
-        Cubre a tu Axie con un blindaje que absorbe cualquier exceso de daño, limitando el próximo ataque rival que conecte a un <b>máximo estricto de 12 de daño</b>.
+        Suma <b>2 de escudo</b> y cubre a tu Axie con un blindaje: lo que el próximo ataque rival deje pasar después del escudo te saca <b>12 de vida como máximo</b>.
       </p>
       <ul class="symbol-points">
-        <li><b>Blindaje anti-remates:</b> Aunque el rival conecte un golpe de 40 puntos, solo recibirás 12.</li>
-        <li><b>Acumulable:</b> Cada piel extra reduce el tope en -2 puntos (hasta un piso mínimo de 6).</li>
-        <li><b>Consumo:</b> Se gasta únicamente cuando el rival conecta un ataque con daño.</li>
+        <li><b>Blindaje anti-remates:</b> Aunque el rival conecte un golpe de 40 puntos, solo perderás 12 de vida.</li>
+        <li><b>Acumulable:</b> Cada máscara extra suma 2 de escudo y baja el tope en -2 puntos (hasta un piso mínimo de 6).</li>
+        <li><b>Consumo:</b> El tope se gasta cuando un ataque rival pasa el escudo; el escudo dura hasta romperse.</li>
       </ul>
       <div class="symbol-chips">
+        <span class="sym-chip">Escudo</span>
         <span class="sym-chip">Tope de daño</span>
         <span class="sym-chip sym-chip--stack">Acumulable (piso 6)</span>
       </div>
@@ -1015,10 +1037,10 @@
       </div>
       <div class="status-badge-item">
         <img src="Icons/status-leaf.png" alt="Regeneración" class="pip-img">
-        <div><b>Hoja:</b> Hojas activas (curan 4 al fin del turno)</div>
+        <div><b>Hoja:</b> Hojas activas (curan 4 al inicio del turno)</div>
       </div>
       <div class="status-badge-item">
-        <img src="Icons/power-steelskin.png" alt="Blindaje" class="pip-img">
+        <img src="Icons/status-steelskin.png" alt="Blindaje" class="pip-img">
         <div><b>Piel:</b> Tope de daño máximo activo</div>
       </div>
     </div>

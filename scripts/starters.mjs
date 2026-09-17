@@ -42,7 +42,7 @@ const RAD = Math.PI / 180;
 // ---------- PNG ----------
 
 /** Un PNG de 8 bits, RGB o RGBA y sin entrelazar —lo que exporta Spine—, a RGBA. */
-function decodePng(buf) {
+export function decodePng(buf) {
   let pos = 8;
   let head = null;
   const idat = [];
@@ -115,7 +115,7 @@ function chunk(kind, data) {
  * siempre: la menor suma de diferencias—, porque estos PNG terminan en base64 adentro
  * del build y ahí cada byte cuenta cuatro tercios.
  */
-function encodePng({ width, height, px }) {
+export function encodePng({ width, height, px }) {
   const stride = width * 4;
   const out = Buffer.alloc((stride + 1) * height);
   const zero = Buffer.alloc(stride);
@@ -162,7 +162,7 @@ function encodePng({ width, height, px }) {
  * (`xy`, `size`), si está acostada (`rotate`) y cuánto transparente le recortaron
  * alrededor (`orig`, `offset`).
  */
-function parseAtlas(text) {
+export function parseAtlas(text) {
   const regions = {};
   let page = null;
   let cur = null;
@@ -199,7 +199,7 @@ function parseAtlas(text) {
  * girada 90° en contra del reloj. Y les recorta el transparente de alrededor: `offset`
  * dice dónde va lo que quedó dentro de `orig`, contado desde abajo a la izquierda.
  */
-function regionImage(page, r) {
+export function regionImage(page, r) {
   const [w, h] = r.size;
   const [ow, oh] = r.orig;
   const left = r.offset[0];

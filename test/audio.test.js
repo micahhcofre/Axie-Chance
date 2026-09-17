@@ -151,6 +151,32 @@ function fakeContext() {
   assert.equal(started.length, antes, 'apagado no se larga ni una fuente');
   audio.setSfx(true);
 
+  // El toque de los botones se sintetiza: sale en el acto, sin pedir nada al CDN, por
+  // el bus de efectos —así lo calla el interruptor— y corto.
+  const osciladores = [];
+  ctx.createOscillator = () => {
+    const osc = {
+      frequency: new FakeParam(0),
+      connect(to) { osc.to = to; return to; },
+      start(at) { osc.start = at; },
+      stop(at) { osc.stop = at; },
+    };
+    osc.frequency.exponentialRampToValueAtTime = osc.frequency.linearRampToValueAtTime;
+    osciladores.push(osc);
+    return osc;
+  };
+  FakeParam.prototype.exponentialRampToValueAtTime = FakeParam.prototype.linearRampToValueAtTime;
+  const bajadosAntes = pedidos.length;
+  audio.press();
+  assert.equal(osciladores.length, 2, 'un chasquido y su cuerpo');
+  assert.equal(pedidos.length, bajadosAntes, 'no baja ningún archivo');
+  assert.ok(osciladores.every((o) => o.to.to === sfxBus), 'va por el bus de efectos');
+  assert.ok(osciladores.every((o) => o.stop - ctx.currentTime <= 0.1), 'y dura menos de 100 ms');
+  audio.setSfx(false);
+  audio.press();
+  assert.equal(osciladores.length, 2, 'con los efectos apagados, no suena');
+  audio.setSfx(true);
+
   // La perilla es un multiplicador sobre la mezcla del juego, no un volumen absoluto:
   // al 100% suena como está medido, que es como tiene que sonar.
   assert.equal(audio.sfxVol, 1, 'de fábrica, la perilla arriba de todo');
@@ -205,7 +231,6 @@ function fakeContext() {
 
 const { createGame, TARGET, hpOf } = await import('../src/game.js');
 const { emptyChain, playCard } = await import('../src/rules.js');
-const { hitDelay } = await import('../src/vfx.js');
 const { createCues } = await import('../src/audio-cues.js');
 
 let uid = 90_000;
@@ -287,13 +312,17 @@ async function listening(seed = 3) {
   assert.equal(heard.filter((h) => h.key === 'bust').length, 1, 'y suena una sola vez');
 }
 
-// El ataque: los poderes esperan a que el golpe llegue, y salen de a uno.
+// El ataque: los poderes no suenan desde acá. Cada uno tiene su animación y suena con
+// ella, cuando su amuleto llega (ver `power-fx.js`): sonando también acá se oirían dos
+// veces, y la primera antes de verse.
 {
   const { game, heard } = await listening();
   game.state.chains.p1 = chainOf(
     card(['aquatic', 'bird']),
-    card(['aquatic', 'plant'], 'strength'),
-    card(['aquatic', 'reptile'], 'poison'),
+    card(['aquatic', 'plant'], 'octopus'),
+    card(['aquatic', 'reptile'], 'snail'),
+    card(['aquatic', 'beast'], 'egg'),
+    card(['aquatic', 'bug'], 'poison'),
   );
   // La cadena se puso a mano, sin pasar por el mazo: se repinta para que la foto de
   // referencia sea esta y no la de antes de armarla.
@@ -301,12 +330,9 @@ async function listening(seed = 3) {
   heard.length = 0;
   await game.stand();
 
-  const impacto = hitDelay('aquatic');
-  const fuerza = heard.find((h) => h.key === 'strength');
-  const veneno = heard.find((h) => h.key === 'poison');
-  assert.ok(fuerza && veneno, 'los dos poderes suenan');
-  assert.ok(fuerza.delay >= impacto, 'ninguno se adelanta al golpe');
-  assert.ok(veneno.delay > fuerza.delay, 'y salen de a uno, no todos juntos');
+  const poderes = ['strength', 'brutal', 'octopus', 'bubble', 'egg', 'pot', 'leaf', 'snail', 'leech', 'poison'];
+  assert.equal(heard.filter((h) => poderes.includes(h.key)).length, 0,
+    'los poderes suenan con su animación, no desde acá');
   // El golpe en sí no sale de acá: lo larga `playHit`, que sabe cuándo conecta.
   assert.equal(heard.filter((h) => h.key === 'aquatic').length, 0);
 
@@ -335,10 +361,9 @@ async function listening(seed = 3) {
   for (let i = 0; i < 400 && game.state.phase !== 'matchEnd'; i++) await idle();
   assert.equal(game.state.phase, 'matchEnd', 'la partida se cerró');
   assert.equal(heard[heard.length - 1].music, null, 'la música se apaga para el remate');
-  const remate = heard.find((h) => h.key === 'win' || h.key === 'lose');
-  assert.ok(remate, 'y suena el resultado');
-  assert.equal(remate.key, hpOf(game.state, 'p1') > 0 ? 'win' : 'lose');
-  assert.ok(remate.delay > 0, 'después del último golpe, no encima');
+  // El remate lo larga la pantalla del final, con su efecto (ver `test/result.test.js`).
+  assert.equal(heard.filter((h) => ['win', 'lose', 'tie'].includes(h.key)).length, 0,
+    'el resultado no suena desde las señales');
 }
 
 console.log('✓ señales ok');
