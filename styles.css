@@ -39,12 +39,12 @@ body {
 
 /* Los números del juego: marcador, rachas, probabilidades, vida. Con contorno oscuro,
    como los del Origins, para que se despeguen de cualquier dibujo del terreno. */
-.sb-round, .swing-dmg, .swing-cap, .swing-mods, .plate-hp b, .pip-status,
+.sb-round, .swing-dmg, .swing-cap, .plate-hp b, .pip-status,
 .odds-pct, .deck, .run {
   font-family: var(--num);
   font-variant-numeric: tabular-nums;
 }
-.sb-round, .swing-dmg, .swing-cap, .plate-hp b, .odds-pct, .clock b {
+.sb-round, .swing-dmg, .swing-cap, .plate-hp b, .pip-status b, .odds-pct, .clock b {
   -webkit-text-stroke: .1em rgba(8, 10, 24, .85); paint-order: stroke fill;
 }
 
@@ -116,7 +116,7 @@ body {
      partir del tamaño de la carta, agrandar las cartas sube la línea sin que haya que
      tocar nada más. */
   --mitad: 56vh;
-  --frente: calc(var(--mesa) + var(--resto, 195px));
+  --frente: calc(var(--mesa) + var(--resto, 195px) + var(--aire-mesa, 0px));
   --patas: clamp(150px, var(--mitad), calc(100vh - var(--frente)));
 
   /* El tamaño de la carta, del que cuelga todo lo de abajo: lo que mide el símbolo
@@ -161,6 +161,16 @@ body {
      medidas elegidas y ninguna depende del contenido. */
   --zocalo: 14px;
   --pie: calc(var(--botones) + var(--zocalo));
+
+  /* Y el aire entre la mesa y los botones. Acostado va en cero: ahí el alto es lo que
+     falta y las cartas tienen que apoyar lo más cerca posible de lo que se aprieta.
+     Parado sobra alto y pasa lo contrario —las cartas quedan pegadas a los botones y la
+     mano que va a apretar tapa justo la cadena—, así que ahí se abre (ver el `@media`
+     de `orientation: portrait`). Sube la mesa porque la fila vacía de arriba es la que
+     paga: ella se lleva lo que sobra y esto se lo saca. Lo miran los tres lugares donde
+     la mesa se mide: `--frente` para saber cuánto hay que dejar libre debajo de las
+     patas, y el margen y el tope de alto de `.field`. */
+  --aire-mesa: 0px;
 
   /* El renglón de las rachas, debajo de las cartas. Son tres chapitas como mucho —una
      por símbolo de la primera carta— así que nunca se parte en dos renglones, y por eso
@@ -247,7 +257,7 @@ body {
    de la barra, y va a la altura de los botones de al lado para que el renglón no se
    agrande solo por él. */
 .brand-logo {
-  display: block; height: 46px; width: auto;
+  display: block; height: 56px; width: auto;
   filter: drop-shadow(0 3px 10px rgba(0, 0, 0, .8))
           drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
 }
@@ -274,7 +284,7 @@ body {
   text-align: center;
 }
 .sb-round {
-  font-size: 20px; text-transform: uppercase; letter-spacing: .08em;
+  font-size: 26px; text-transform: uppercase; letter-spacing: .08em;
   /* El espaciado se reparte a los dos costados de cada letra, así que el último hueco
      cae después de la última: sin esto la palabra queda medio hueco corrida a la
      izquierda de un centro que es exacto por todos lados menos por el ojo. */
@@ -304,8 +314,11 @@ body {
 }
 .clock-bar i {
   display: block; height: 100%; border-radius: inherit;
-  width: calc(var(--p, 1) * 100%);
+  width: calc(var(--left, 1) * 100%);
   background: var(--c, var(--accent));
+  /* El reloj retoca `--left` cada 200 ms: la transición, del mismo largo y lineal,
+     cose un toque con el siguiente y la rayita corre en vez de saltar. */
+  transition: width .2s linear, background-color .3s ease;
 }
 .clock[data-low="true"] b { color: var(--danger); animation: clock-low 1s ease-in-out infinite; }
 .clock[data-low="true"] .clock-bar i { background: var(--danger); }
@@ -927,25 +940,74 @@ body {
       rgba(6, 9, 22, .87) calc(var(--air) + 200px * var(--caida)));
 }
 
-/* El sacudón del golpe. Se mueve el arena entero —fondo, Axies, cartas y todo— porque
-   lo que tiembla cuando pega algo fuerte no es el que lo recibe: es la cámara. El
-   `scale` de más está para que el corrimiento nunca destape el borde del cuadro, que
-   con `overflow: hidden` dejaría ver la página de atrás por un costado.
+/* La cámara (ver `camera.js`). Se mueve el **mundo** —el terreno, el piso y los dos
+   peleadores— y no la pantalla: las cartas, el número y los botones se quedan quietos,
+   que son lo que hay que leer y apretar mientras la escena se acerca y tiembla.
 
-   Solo lo dispara `playHit` y solo con los golpes que duelen: ver el detalle en
-   `shakeOf`, en `ui.js`. */
-.arena[data-shake="soft"], .arena[data-shake="hard"] {
-  animation: arena-shake .36s cubic-bezier(.36, .07, .19, .97);
+   Las cuatro capas se agrandan alrededor del **mismo** punto de la pantalla, o dejarían
+   de calzar: el piso se despegaría de las patas. Ese punto es el centro del arena, a
+   `--cam-k` por encima de la línea de piso —más o menos a la altura de los Axies—, y
+   cada capa lo escribe desde su propia caja: el terreno termina justo en la línea, el
+   piso empieza `--air` por encima de ella y cada peleador llega hasta la mitad del
+   arena (más el hueco que le deja el `@media` apaisado, `--cam-in`).
+
+   Van en `scale` y `translate` sueltos y no en `transform`, así no le pisan nada a lo
+   que ya se anima con `transform` adentro de cada capa.
+
+   El sacudón viejo movía el arena entero con un `scale(1.022)` que entraba de golpe al
+   empezar y se iba de golpe al terminar: la escena saltaba dos veces por golpe, y eso
+   era la vibración rara. Ahora la escala la lleva la cámara con resortes, y sube lo
+   justo para que el corrimiento no destape el borde. */
+.arena {
+  --cam-s: 1; --cam-x: 0px; --cam-y: 0px;
+  --cam-k: calc(var(--escena) * .42);
 }
-.arena[data-shake="soft"] { --amp: 3px; }
-.arena[data-shake="hard"] { --amp: 7px; animation-duration: .46s; }
-@keyframes arena-shake {
-  0%, 100% { transform: translate(0, 0) scale(1.022); }
-  14% { transform: translate(calc(var(--amp) * -1), calc(var(--amp) * .4)) scale(1.022); }
-  31% { transform: translate(calc(var(--amp) * .82), calc(var(--amp) * -.32)) scale(1.022); }
-  49% { transform: translate(calc(var(--amp) * -.5), calc(var(--amp) * .18)) scale(1.022); }
-  68% { transform: translate(calc(var(--amp) * .3), 0) scale(1.022); }
-  85% { transform: translate(calc(var(--amp) * -.14), 0) scale(1.022); }
+.arena-art, .arena::after, .fighter {
+  scale: var(--cam-s);
+  translate: var(--cam-x) var(--cam-y);
+}
+.arena-art { transform-origin: 50% calc(100% - var(--cam-k)); }
+.arena::after { transform-origin: 50% calc(var(--air) - var(--cam-k)); }
+.fighter { --cam-in: 0px; container-type: inline-size; }
+.fighter[data-side="left"]  { transform-origin: calc(100% + var(--cam-in)) calc(100% - var(--cam-k)); }
+.fighter[data-side="right"] { transform-origin: calc(0% - var(--cam-in)) calc(100% - var(--cam-k)); }
+
+/* La chapa viaja con su peleador pero es pantalla, no mundo: tiene que poder leerse y
+   no salirse por el costado —en un teléfono ocupa la columna entera, y agrandada con
+   la escena se cortaba contra el borde—. Así que deshace la cámara: se achica lo que
+   la escena se agranda, alrededor del mismo punto a lo ancho (la mitad del arena, que
+   desde la chapa queda a media columna, `50cqw`, más el hueco apaisado), y se corre al
+   revés de lo que se corre la escena. A lo alto se deja acompañar a su Axie: sube un
+   poco cuando la cámara se acerca, que es lo que haría algo colgado sobre su cabeza. */
+.plate {
+  scale: calc(1 / var(--cam-s));
+  translate: calc(var(--cam-x) / var(--cam-s) * -1) calc(var(--cam-y) / var(--cam-s) * -1);
+}
+.fighter[data-side="left"] .plate  { transform-origin: calc(50cqw + var(--cam-in)) 50%; }
+.fighter[data-side="right"] .plate { transform-origin: calc(-50cqw - var(--cam-in)) 50%; }
+
+/* El golpe que duele, del lado del que lo recibe: el borde de la pantalla se enciende
+   en rojo y se apaga. Va debajo de los Axies, de las cartas y de los efectos del kit: es
+   la luz del borde de la escena, no algo que tape lo que pasa.
+
+   `--hurt` es cuánto: lo pone `ui.js` según el daño. */
+.hurtfx {
+  position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  opacity: 0;
+  --hurt: .6;
+}
+.hurtfx[data-hurt="left"] {
+  background: radial-gradient(55% 95% at 0% 55%, rgba(236, 42, 52, .75), rgba(236, 42, 52, .22) 55%, transparent 100%);
+  animation: hurt-flash .7s ease-out;
+}
+.hurtfx[data-hurt="right"] {
+  background: radial-gradient(55% 95% at 100% 55%, rgba(236, 42, 52, .75), rgba(236, 42, 52, .22) 55%, transparent 100%);
+  animation: hurt-flash .7s ease-out;
+}
+@keyframes hurt-flash {
+  0% { opacity: 0; }
+  12% { opacity: var(--hurt); }
+  100% { opacity: 0; }
 }
 
 /* Los efectos del Origins Asset Kit. Van capturados sobre negro, así que se suman a
@@ -1018,8 +1080,8 @@ body {
 .plate {
   position: absolute; z-index: 4;
   left: 50%; transform: translateX(-50%);
-  bottom: min(calc(100% - 56px), calc(var(--axie-h) + 30px));
-  display: grid; gap: 5px; width: min(100%, 236px);
+  bottom: min(calc(100% - 104px), calc(var(--axie-h) + 30px));
+  display: grid; gap: 5px; width: min(100%, 252px);
   padding: 7px 11px 8px;
   background: rgba(9, 13, 30, .58);
   -webkit-backdrop-filter: blur(10px);
@@ -1224,7 +1286,11 @@ body {
 
 /* La barrita. En rojo cuando queda un cuarto, que es cuando conviene arriesgar. */
 .plate-hp { display: flex; align-items: center; gap: 8px; }
-.plate-hp > b { font-size: 16px; width: 30px; text-align: right; }
+/* La vida es el número que se mira de reojo mientras se decide si robar otra carta, así
+   que se lee de lejos: entra en el mismo cuerpo que el daño de la mesa. El ancho fijo
+   —tres cifras y el tabular-nums de arriba— es para que la barrita no se corra sola
+   cuando la vida pasa de 100 a 99. */
+.plate-hp > b { font-size: 22px; width: 42px; text-align: right; line-height: 1; }
 .plate-hp[data-low="true"] > b { color: var(--danger); }
 .plate-shield {
   display: inline-flex; align-items: center; gap: 3px;
@@ -1241,12 +1307,12 @@ body {
   to { transform: scale(1); opacity: 1; }
 }
 .plate-shield .shield-icon {
-  width: 14px; height: 14px; display: block;
+  width: 18px; height: 18px; display: block;
   object-fit: contain;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
 }
 .plate-shield b {
-  font-size: 12px; font-weight: 700;
+  font-size: 16px; font-weight: 700;
   color: #70d0ff; width: auto; text-align: left;
 }
 /* El canal es el del Origins: `BattleHud/HpBar2/hp-bar-big.png` del asset kit —la
@@ -1479,46 +1545,68 @@ body {
   color: var(--ink-dim);
   text-shadow: 0 1px 8px rgba(0, 0, 0, .9);
 }
-/* De dónde sale el número grande cuando no es solo la cadena. Renglón propio, y el
-   único de la columna que se permite ser más ancho que la rueda: el desglose largo —el
-   del caracol— en 122 px entraría en seis renglones.
-
-   El 1,6 es hasta dónde puede ensancharse sin chocar con nada. La columna vive en el
-   hueco que dejan las dos chapas de vida, y ese hueco es lo más angosto justo antes de
-   que la columna se baje al costado de la mesa (940 px de ventana): ahí la chapa mide
-   236 px de tope y sobran 218 en el medio, contra los 195 que llega a medir esto. */
-.swing-mods {
-  margin-top: 4px; max-width: calc(var(--dial) * 1.6);
-  text-align: center; text-wrap: balance;
-  font-size: 12px; line-height: 1.35;
-  color: var(--ink-dim); text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
-}
-
 /* ---------- lo que tiene de seguir: el medidor de la próxima carta ---------- */
 
 /* El aro. Solo existe mientras te toca decidir: cuando juega la CPU no hay nada que
    medir, y un aro apagado en el medio de la pantalla sería un adorno. */
 .odds {
   display: flex; flex-direction: column; align-items: center; gap: 7px;
-  /* Sin turno propio `oddsHtml` no devuelve nada, y el aro desaparece: es correcto —no
-     hay nada que medir— pero el lugar se queda. Antes el hueco se cerraba
-     (`.odds:empty { display: none }`) y la columna entera se reacomodaba dos veces por
-     turno: el número grande caía medio aro cuando empezaba a jugar la CPU y volvía a
-     subir cuando te tocaba. Lo que se ve prendido y apagado es el aro; el instrumento
-     no se mueve. El renglón de arriba entra en la cuenta porque también se va con él. */
+  /* El lugar se queda siempre, con aro o sin él: si el hueco se cerrara
+     (`.odds:empty { display: none }`) la columna entera se reacomodaría dos veces por
+     turno —el número grande caía medio aro cuando empezaba a jugar la CPU y volvía a
+     subir cuando te tocaba—. El renglón de arriba entra en la cuenta porque también
+     se iba con él. */
   min-height: calc(var(--dial) + 20px);
   border-radius: 14px;
 }
 
-/* Aparece y desaparece con el turno, así que entra como los botones: con ellos y con
-   la misma marca (ver `.controls[data-enter]`). Lo que se enciende junto se lee como
-   una sola cosa que se enciende —"te toca"— y no como tres cosas sueltas. */
+/* El aro nace una sola vez por partida, y esa vez sube con los botones del turno: con
+   ellos y con la misma marca (ver `.controls[data-enter]`). Lo que se enciende junto
+   se lee como una sola cosa que se enciende —"te toca"— y no como tres cosas sueltas. */
 .odds[data-enter="turn"] {
   animation: gauge-in .4s cubic-bezier(.2, .9, .3, 1.14) backwards;
 }
 @keyframes gauge-in {
   from { opacity: 0; transform: translateY(10px) scale(.86); }
   to   { opacity: 1; transform: none; }
+}
+
+/* Registrar `--p` es lo único que hace falta para que el anillo se mueva. Un
+   `conic-gradient` no se anima porque el navegador no sabe interpolar la receta del
+   degradé; sí sabe interpolar un número, y acá `--p` **es** un número declarado, con
+   lo cual el degradé se vuelve a dibujar en cada cuadro con el valor del medio. Donde
+   `@property` no exista, la marca salta —que es exactamente lo que hacía antes—. */
+@property --p {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/* Dormido. No hay decisión que medir —está pegando alguien, o eligiendo del centro—,
+   así que el aro se apaga, pero se apaga *donde está*: se achica un poco, pierde el
+   color y se queda con lo último que marcó. Esa marca vieja es de dónde va a salir el
+   barrido del turno que viene, que es todo el punto de no tirarlo. */
+.odds[data-live="false"] .odds-dial {
+  opacity: .34;
+  transform: scale(.88);
+  filter: saturate(.2);
+  box-shadow: 0 8px 22px -12px rgba(0, 0, 0, .7);
+}
+.odds[data-live="false"] .odds-pct { opacity: .45; }
+
+/* El despertar: el aro vuelve a tamaño pasándose un poco de largo, y un halo de su
+   color se abre y se apaga. Dura lo que el barrido del anillo, así que lo que se ve es
+   una sola cosa —el instrumento prendiéndose y midiendo— y no dos animaciones. */
+.odds[data-wake="turn"] .odds-dial { animation: dial-wake .7s cubic-bezier(.2, .9, .3, 1.2); }
+.odds[data-wake="turn"] .odds-dial::after { animation: dial-halo .7s ease-out; }
+@keyframes dial-wake {
+  from { transform: scale(.88); }
+  45%  { transform: scale(1.05); }
+  to   { transform: scale(1); }
+}
+@keyframes dial-halo {
+  from { opacity: .5; transform: scale(.88); }
+  to   { opacity: 0; transform: scale(1.2); }
 }
 
 /* El aro es un `conic-gradient` cortado por un disco: el degradé cónico pinta la
@@ -1528,15 +1616,38 @@ body {
 .odds-dial {
   width: var(--dial); height: var(--dial);
   display: grid; place-content: center; justify-items: center;
+  position: relative;
   border-radius: 50%;
+  /* La punta del anillo no termina en un filo: los tres grados que siguen a la marca
+     van con el mismo color al 28%, que es la estela de lo que se está moviendo. Con el
+     anillo quieto casi no se nota; barriendo, es lo que le da dirección. */
   background:
     radial-gradient(closest-side, rgba(9, 12, 26, .84) 84%, transparent 85%),
-    conic-gradient(currentColor calc(var(--p) * 1%), rgba(7, 10, 24, .6) 0);
+    conic-gradient(currentColor calc(var(--p) * 1%),
+      color-mix(in srgb, currentColor 28%, transparent) 0 calc(var(--p) * 1% + 3%),
+      rgba(7, 10, 24, .6) 0);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   box-shadow:
     0 10px 28px -8px rgba(0, 0, 0, .8),
     0 0 22px -4px color-mix(in srgb, currentColor 40%, transparent);
+  /* Todo lo que el aro puede cambiar, cambia caminando: la marca (`--p`), el color del
+     semáforo —que arrastra con él el anillo y el resplandor, los dos son
+     `currentColor`— y el prendido y apagado del turno. El barrido dura lo mismo que el
+     conteo del número (`ODDS_ROLL` en `ui.js`): salen juntos y llegan juntos. */
+  transition:
+    --p .46s cubic-bezier(.32, .9, .28, 1),
+    color .4s ease,
+    opacity .4s ease,
+    filter .4s ease,
+    transform .45s cubic-bezier(.2, .9, .3, 1.1),
+    box-shadow .4s ease;
+}
+/* El halo del despertar, apagado salvo mientras corre su animación. */
+.odds-dial::after {
+  content: ''; position: absolute; inset: -5px;
+  border: 2px solid currentColor; border-radius: 50%;
+  opacity: 0; pointer-events: none;
 }
 /* El mismo semáforo de siempre: verde mientras la cadena aguanta, rojo cuando la
    próxima carta es una apuesta. El color lo lleva `currentColor`, así que lo toman de
@@ -1549,10 +1660,24 @@ body {
 .odds-pct {
   font-size: calc(var(--dial) * .29); line-height: 1;
   color: var(--ink);
+  transition: opacity .4s ease;
+  /* El número se cuenta cifra por cifra (ver `rollOdds`), y con tipografía de ancho
+     variable un 8 mide más que un 1: sin esto el "%" de al lado bailaría en cada
+     cuadro. Tabular es la misma caja para los diez dígitos. */
+  font-variant-numeric: tabular-nums;
 }
 .odds-pct i {
   font-style: normal; font-size: .45em; font-weight: 500;
   margin-left: 1px; color: var(--ink-faint);
+}
+
+/* Sin movimiento el aro marca y nada más: el número está, el color está, y lo que se
+   saca es el viaje entre un valor y el otro. */
+@media (prefers-reduced-motion: reduce) {
+  .odds-dial, .odds-pct { transition: none; }
+  .odds[data-enter="turn"],
+  .odds[data-wake="turn"] .odds-dial,
+  .odds[data-wake="turn"] .odds-dial::after { animation: none; }
 }
 /* ---------- la mesa, que es de los dos ---------- */
 
@@ -1573,7 +1698,11 @@ body {
      línea donde descansan las cartas es siempre la misma y la cadena crece hacia
      arriba, que es de donde vienen. */
   justify-content: flex-end;
-  max-height: calc(100vh - var(--barra) - var(--escena) - var(--pie) - 16px);
+  /* El aire de abajo, el que la separa de los botones: cero acostado, abierto parado
+     (ver `--aire-mesa`). Se lo descuenta también el tope de alto, porque lo que la mesa
+     puede medir es lo que queda de ventana una vez sacado todo lo demás. */
+  margin-bottom: var(--aire-mesa, 0px);
+  max-height: calc(100vh - var(--barra) - var(--escena) - var(--pie) - var(--aire-mesa, 0px) - 16px);
 }
 
 /* La mesa es de los dos y cambia de mano en cada turno: las cartas del que atacaba se
@@ -3092,16 +3221,19 @@ body {
 
 /* Lo que quedó puesto encima de un Axie: el huevo, el veneno, el caracol, la fuerza.
    Van en la chapa porque son estado, no evento: duran hasta que se gastan. */
-.plate-status { display: flex; flex-wrap: wrap; gap: 5px; }
+.plate-status { display: flex; flex-wrap: wrap; gap: 6px; }
+/* El número dice cuánto falta —cuánto veneno queda, cuántas hojas, cuántos huevos— y
+   decide si conviene plantarse: se lee del mismo tamaño que la vida, no como una nota
+   al pie. El dibujito lo acompaña; el que manda es el número. */
 .pip-status {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 1px 6px 1px 3px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px 2px 4px; border-radius: 999px;
   background: rgba(5, 8, 20, .6);
   border: 1px solid rgba(255, 255, 255, .16);
-  font-size: 11px; font-variant-numeric: tabular-nums;
+  font-size: 15px; font-variant-numeric: tabular-nums;
 }
-.pip-status img { width: 15px; height: 15px; display: block; }
-.pip-status b { font-weight: 400; font-size: 12px; }
+.pip-status img { width: 20px; height: 20px; display: block; }
+.pip-status b { font-weight: 700; font-size: 17px; line-height: 1; }
 
 /* ---------- la animación de cada poder (ver `power-fx.js`) ---------- */
 
@@ -3818,6 +3950,22 @@ body {
   float: right; height: 0; overflow: visible;
   margin: 0; padding: 0; line-height: 0;
 }
+/* La cruz de un modal es más chica que la de la mesa: acá no se toca en el medio de un
+   turno —se lee un texto y se cierra cuando se terminó—, y a 46 px le peleaba el tamaño
+   al cartel del título, que es lo que tiene que mandar en esa franja. */
+.modal-close .o-x {
+  width: 32px; height: 32px; border-radius: 10px;
+  box-shadow: 0 3px 0 -1px var(--madera-sombra), 0 8px 14px -9px rgba(0, 0, 0, .85);
+}
+.modal-close .o-x::before { width: 16px; height: 16px; }
+.modal-close .o-x:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 -1px var(--madera-sombra), 0 4px 8px -7px rgba(0, 0, 0, .9);
+}
+/* Un modal se abre con el foco puesto en su cruz, y el aro dorado del panel ahí arriba
+   parece un recuadro que alguien eligió, no un foco: como en el panel de configuración,
+   el anillo de la cruz es de tinta y fino (ver el `:focus-visible` de `.o-panel`). */
+.modal-close .o-x:focus-visible { outline: 2px solid rgba(43, 24, 9, .55); outline-offset: 2px; }
 
 .modal .o-banner {
   margin: 0 auto 16px;
@@ -3852,6 +4000,62 @@ body {
 }
 .example .muted { color: var(--tinta-dim); font-size: 13px; }
 .example .total { margin-top: 6px; font-weight: 700; color: var(--tinta); }
+
+/* ── Modal de Visión del producto ────────────────────────────────────────── */
+
+/* El pitch es un documento largo: va más ancho que las reglas para que los párrafos
+   no queden en columnas de cinco palabras, y scrollea adentro del panel como el resto. */
+.modal--vision {
+  width: min(100% - 24px, 680px);
+  max-height: min(90vh, 900px);
+}
+/* La ficha de arriba —track, plataforma, duración— en chico y espaciado, como un pie
+   de cartel: informa sin competir con el título. */
+.modal--vision .vision-meta {
+  margin: -6px 0 4px; text-align: center;
+  font-size: 12px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--tinta-dim);
+}
+/* La primera frase es el pitch entero: entra más grande que el cuerpo y con la barra
+   de tinta al costado para que sea lo primero que se lee del panel. */
+.modal--vision .vision-lead {
+  margin: 12px 0 4px; padding-left: 12px;
+  border-left: 3px solid var(--madera-borde);
+  font-size: 15px; line-height: 1.55; font-weight: 600;
+}
+/* Los remates —las frases que cierran una sección— van centradas y en itálica: son la
+   línea que uno se lleva puesta, no un párrafo más. */
+.modal--vision .vision-punch {
+  margin: 10px 0 4px; text-align: center;
+  font-style: italic; color: var(--tinta);
+}
+.modal h4 {
+  margin: 16px 0 6px;
+  font-family: var(--title); font-size: 13px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--tinta-dim);
+}
+/* Los golpes de "por qué es divertido" son párrafos, no renglones de lista: no entran
+   en `.example` (que está hecho para líneas sueltas) y llevan su propia sangría con
+   un punteado al costado que los agrupa sin encerrarlos en una caja. */
+.modal--vision .vision-beats {
+  margin: 8px 0 12px; padding-left: 12px;
+  border-left: 1px dashed rgba(94, 58, 34, .45);
+}
+.modal--vision .vision-beats p { margin: 0 0 10px; font-size: 14px; }
+/* `.example` nació para renglones sueltos —una línea, un poder— y con interlineado 1.9
+   los ítems de acá, que ocupan tres renglones cada uno, se pisan entre sí: no se ve
+   dónde termina uno y empieza el otro. Adentro del pitch se aprieta la línea y se
+   separan los ítems, que es lo que los vuelve una lista otra vez. */
+.modal--vision .example { line-height: 1.55; color: var(--tinta); }
+.modal--vision .example > div { margin: 0 0 9px; }
+.modal--vision .example > div:last-child { margin-bottom: 0; }
+.modal--vision .vision-beats p:last-child { margin-bottom: 0; }
+.modal--vision .vision-steps {
+  margin: 8px 0 12px; padding-left: 22px;
+  font-size: 14px; line-height: 1.55; color: var(--tinta);
+}
+.modal--vision .vision-steps li { margin: 0 0 6px; }
+.modal--vision .vision-steps li::marker { font-family: var(--num); color: var(--tinta-dim); }
 
 /* ── Modal de Símbolos Especiales ────────────────────────────────────────── */
 
@@ -4226,14 +4430,19 @@ body {
        más alta que una de dos, y una cadena larga achica todas—: centrado ahí adentro,
        el instrumento subía y bajaba con cada carta que salía. La cuenta es lo que hay
        debajo de las cartas dentro de la mesa: el renglón de las rachas y el aire que lo
-       separa (el `gap` de `.field`). */
+       separa (el `gap` de `.field`).
+
+       Y el aire de abajo va también acá: el instrumento y la mesa comparten la fila
+       pero son dos cajas distintas, así que lo que sube a una no sube a la otra. Sin
+       esto, parada la pantalla, la mesa se despegaba de los botones (ver `--aire-mesa`)
+       y el aro se quedaba abajo solo, desalineado de las cartas contra las que se
+       apoya. */
     justify-self: end; align-self: end;
-    margin-bottom: calc(var(--rachas) + 7px);
+    margin-bottom: calc(var(--rachas) + 7px + var(--aire-mesa, 0px));
     --dial: 84px;
   }
   /* Acá el aro va sin su renglón, así que lo que reserva es el aro y nada más. */
   .odds { min-height: var(--dial); }
-  .swing-mods { display: none; }
   .field { padding-right: 96px; }
   .plate { padding: 6px 9px; }
   .plate-name { font-size: 16px; }
@@ -4249,9 +4458,9 @@ body {
      Esto es el teléfono **acostado**: angosto y bajo al mismo tiempo, donde cada píxel
      de barra se lo saca a la pelea. Parado manda el bloque de `orientation: portrait`
      de más abajo, que va al revés —ahí sobra alto y la barra crece—. */
-  :root { --barra: 112px; }
-  .brand-logo { height: 32px; }
-  .sb-round { font-size: 14px; letter-spacing: .16em; text-indent: .16em; }
+  :root { --barra: 124px; }
+  .brand-logo { height: 40px; }
+  .sb-round { font-size: 18px; letter-spacing: .16em; text-indent: .16em; }
   .topbar { gap: 8px; padding: 8px 10px 10px; }
   .topbar .btn-ghost { padding: 6px 9px; font-size: 12px; }
   .btn-sound { padding: 6px 8px; font-size: 14px; }
@@ -4340,6 +4549,13 @@ body {
 @media (orientation: portrait) {
   :root { --recorte: 2.4; }
 
+  /* Y la mesa se despega del pie. Parada la pantalla las cartas quedaban apoyadas
+     encima de los botones, sin nada en el medio: el pulgar que va a apretar entra por
+     abajo y tapa justo la cadena, que es lo que hay que mirar para decidir. El aire
+     sale de la fila vacía de arriba —la que se lleva lo que sobra— así que sube la mesa
+     y no baja nada: los Axies, el terreno y los botones se quedan donde están. */
+  :root { --aire-mesa: clamp(16px, 5vh, 46px); }
+
   /* Y los dos suben un escalón. Parada la pantalla el cielo es lo que sobra: entre las
      chapas de vida —clavadas debajo de la barra— y las cabezas quedaba un hueco de
      terreno vacío del alto de un Axie, y la pelea se leía apoyada en el borde de abajo
@@ -4349,11 +4565,11 @@ body {
   /* Los Axies y el terreno suben a la parte superior para dar más espacio a las cartas en teléfono */
   :root { --mitad: 34vh; }
 
-  :root { --barra: clamp(66px, 16vw, 88px); }
+  :root { --barra: clamp(76px, 19vw, 104px); }
   .topbar { padding: clamp(8px, 2vw, 14px) clamp(12px, 3.5vw, 24px) 8px; }
-  .brand-logo { height: clamp(28px, 7vw, 42px); }
+  .brand-logo { height: clamp(36px, 9vw, 54px); }
   .sb-round {
-    font-size: clamp(14px, 3.4vw, 18px);
+    font-size: clamp(18px, 4.4vw, 24px);
     letter-spacing: .16em; text-indent: .16em;
   }
 
@@ -4398,11 +4614,14 @@ body {
    centra en él, se va con su Axie. El tamaño del Axie en pantalla ancha va más abajo,
    después de los `@media` de alto (ver «La cuenta de abajo, apaisado»). */
 @media (orientation: landscape) {
-  :root { --barra: clamp(52px, 10vh, 74px); }
+  :root { --barra: clamp(58px, 11.5vh, 88px); }
   .board-axie { min-height: clamp(54px, 14vh, 90px); }
   .fighter { --axie-w: min(100%, clamp(120px, 26vh, 200px)); }
   .fighter[data-side="left"]  { margin-right: clamp(0px, 14vw - 80px, 180px); }
   .fighter[data-side="right"] { margin-left: clamp(0px, 14vw - 80px, 180px); }
+  /* Ese hueco es lo que le falta al peleador para llegar a la mitad del arena, que es
+     donde está el punto de la cámara (ver `.fighter[data-side]` más arriba). */
+  .fighter { --cam-in: clamp(0px, 14vw - 80px, 180px); }
   .arena {
     grid-template-rows: var(--escena) 1fr auto var(--pie);
     gap: clamp(4px, 1.2vh, 10px) 0;
@@ -4410,6 +4629,33 @@ body {
   .field {
     margin-top: clamp(4px, 1vh, 10px);
   }
+
+  /* Acostada la ventana sobra ancho —cada peleador tiene media pantalla y la chapa
+     apenas usaba 252px—, así que la vida y los estados crecen hasta donde se leen de
+     una sin acercarse: es la información que se mira mientras se decide si robar otra
+     carta. El alto no cambia, que es lo que escasea apaisado: los números crecen a lo
+     ancho de la chapa, no hacia el Axie. */
+  /* Y la chapa se acomoda a lo ancho: el nombre y la vida comparten renglón y los
+     estados quedan abajo. Con los números grandes tres renglones medían 107px y en una
+     ventana apaisada —que es baja por definición— eso le tapaba la cabeza al Axie;
+     dos renglones miden 75 y el bicho se ve entero. El lugar que se ahorra por alto es
+     el que sobra por ancho. */
+  .plate {
+    width: min(100%, 360px);
+    grid-template-columns: auto minmax(120px, 1fr);
+    align-items: center;
+    column-gap: 10px;
+    bottom: min(calc(100% - 78px), calc(var(--axie-h) + 30px));
+  }
+  .plate-top { grid-column: 1; }
+  .plate-hp { grid-column: 2; }
+  .plate-status { grid-column: 1 / -1; }
+  .plate-hp > b { font-size: 26px; width: 50px; }
+  .plate-shield .shield-icon { width: 20px; height: 20px; }
+  .plate-shield b { font-size: 18px; }
+  .pip-status { font-size: 17px; padding: 2px 9px 2px 5px; }
+  .pip-status img { width: 22px; height: 22px; }
+  .pip-status b { font-size: 19px; }
 }
 
 /* Una ventana baja es el caso que se puso delicado al clavar la mesa a la pantalla:
@@ -4451,20 +4697,25 @@ body {
    cielo que la barra de arriba recién había ganado. */
 @media (max-width: 640px) and (orientation: portrait) {
   :root { --mitad: 32vh; }
-  :root { --barra: clamp(58px, 14vw, 74px); }
+  :root { --barra: clamp(68px, 16.5vw, 86px); }
   .board-axie { min-height: 60px; }
   .fighter { --axie-w: min(100%, 34vw, 150px); gap: 6px; }
   .plate {
-    width: min(calc(100% - 6px), 170px);
+    width: min(calc(100% - 6px), 186px);
     gap: 3px; padding: 4px 7px 5px; border-radius: 9px;
-    bottom: min(calc(100% - 44px), calc(var(--axie-h) + 8px));
+    bottom: min(calc(100% - 78px), calc(var(--axie-h) + 8px));
   }
   .plate-top { gap: 4px; }
   .plate-top .crest { width: 14px; height: 14px; }
   .plate-name { font-size: 15px; }
   .plate-hp { gap: 5px; }
-  .plate-hp > b { font-size: 12px; width: 24px; }
-  .plate-shield b { width: auto; font-size: 10px; }
+  .plate-hp > b { font-size: 19px; width: 35px; }
+  .plate-shield .shield-icon { width: 16px; height: 16px; }
+  .plate-shield b { width: auto; font-size: 14px; }
+  .plate-status { gap: 4px; }
+  .pip-status { font-size: 14px; padding: 1px 7px 1px 3px; gap: 3px; }
+  .pip-status img { width: 18px; height: 18px; }
+  .pip-status b { font-size: 16px; }
   .hpbar { height: 10px; padding: 2px 5px 2px 3px; }
 
   /* El reloj crece con la barra, que parada también crece (ver el `@media` de
@@ -4478,13 +4729,15 @@ body {
    renglones y hace falta el lugar. Sin esta condición el `@media` de alto —que va
    después— se la comería, y la chapa del Axie terminaría debajo de la barra. */
 @media (max-height: 760px) and (min-width: 941px) {
-  :root { --barra: 78px; }
-  .brand-logo { height: 38px; }
+  :root { --barra: 86px; }
+  .brand-logo { height: 48px; }
+  .sb-round { font-size: 23px; }
   .gauge { --dial: 96px; }
 }
 @media (max-height: 600px) and (min-width: 941px) {
-  :root { --barra: 66px; }
-  .brand-logo { height: 32px; }
+  :root { --barra: 74px; }
+  .brand-logo { height: 40px; }
+  .sb-round { font-size: 21px; }
   .gauge { --dial: 76px; }
 }
 
@@ -4515,19 +4768,33 @@ body {
    a la ventana y compacta la barra, los Axies y el pie para que las cartas y los botones
    de acción queden siempre visibles y pulsables. */
 @media (max-height: 540px) and (max-width: 940px) {
-  :root { --barra: 40px; }
+  :root { --barra: 48px; }
   .topbar {
     padding: 3px 12px;
   }
-  .brand-logo { height: 24px; }
+  .brand-logo { height: 32px; }
   .topbar-cfg-btn { height: 30px; min-width: 36px; padding: 0 6px; }
-  .sb-round { font-size: 13px; letter-spacing: .12em; }
+  .sb-round { font-size: 17px; letter-spacing: .12em; }
   :root { --mitad: 28vh; --patas: clamp(75px, 28vh, 120px); }
   .board-axie { min-height: 44px; }
   .fighter { --axie-w: min(100%, clamp(90px, 20vh, 130px)); gap: 4px; }
-  .plate { padding: 3px 6px; gap: 2px; border-radius: 7px; }
+  /* Poco alto pero ancho de sobra: la chapa se aplasta —menos relleno, menos aire
+     entre renglones— y aun así los números se quedan grandes, que es lo único que hay
+     que poder leer sin despegar la vista de las cartas. */
+  /* El acomodo de dos renglones ya viene del apaisado de arriba; acá solo se aprieta. */
+  .plate {
+    padding: 3px 8px; gap: 2px 8px; border-radius: 7px; width: min(100%, 330px);
+    grid-template-columns: auto minmax(96px, 1fr);
+    bottom: min(calc(100% - 58px), calc(var(--axie-h) + 6px));
+  }
   .plate-name { font-size: 13px; }
-  .plate-hp > b { font-size: 11px; }
+  .plate-hp > b { font-size: 24px; width: 46px; }
+  .plate-shield .shield-icon { width: 18px; height: 18px; }
+  .plate-shield b { font-size: 16px; }
+  .plate-status { gap: 4px; }
+  .pip-status { font-size: 16px; padding: 0 8px 0 4px; }
+  .pip-status img { width: 20px; height: 20px; }
+  .pip-status b { font-size: 18px; }
   .hpbar { height: 8px; }
   :root { --carta: clamp(38px, 9vh, 50px); }
   .arena { --pad: 8px; gap: 4px 0; grid-template-rows: var(--escena) 1fr auto var(--pie); }
@@ -5474,30 +5741,30 @@ body .topbar-actions .topbar-cfg-btn {
 
 /* No es un cartel más apoyado en una esquina: es una pantalla, y ocupa la escena
    entera. Elegir un Axie es elegir el mazo con el que vas a jugar —la clase es el
-   mazo—, así que la pregunta se hace en grande: el bicho de un lado, sus diez cartas
-   del otro, y la cuenta de cada símbolo debajo.
+   mazo—, así que la pregunta se hace en grande.
 
-   Cuatro zonas y una grilla: la barra de arriba cruza las dos columnas, el Axie se
-   queda con la columna izquierda entera y a la derecha van las cartas arriba y el
-   botón abajo. */
+   Dos mitades: la colección a la izquierda, que se come todo el ancho que sobra porque
+   los Axies de un jugador pueden ser decenas, y la ficha del que tocaste a la derecha,
+   con un ancho fijo que alcanza para sus diez cartas en dos filas de cinco. Parada, la
+   pantalla apila: la colección arriba y la ficha abajo, con el botón al alcance del
+   pulgar (ver las `@media` del final del bloque). */
 .lobby-choose {
   position: absolute; inset: 0; z-index: 4;
   display: grid;
-  grid-template-columns: minmax(210px, 30%) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 36vw, 520px);
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
-    "bar   bar"
-    "stage sheet"
-    "stage actions";
-  gap: clamp(8px, 1.6vh, 20px) clamp(12px, 2.4vw, 34px);
-  padding: clamp(10px, 2.2vh, 26px) clamp(14px, 3vw, 44px);
+    "bar    bar"
+    "roster sheet";
+  gap: clamp(8px, 1.6vh, 18px) clamp(10px, 1.8vw, 24px);
+  padding: clamp(8px, 2vh, 24px) clamp(12px, 2.6vw, 40px);
   /* La escena sigue atrás pero deja de competir: es el escenario de la elección, no
      lo que hay que mirar. */
   background: rgba(6, 9, 20, .62);
   animation: lobby-menu-in .22s cubic-bezier(.2, .9, .3, 1) backwards;
 }
 /* Con la elección puesta, la portada se guarda entera: el logo grande y los que se
-   pasean sobrarían al lado de un Axie de medio metro. */
+   pasean sobrarían al lado de la colección. */
 .lobby[data-view="choose"] .lobby-head,
 .lobby[data-view="choose"] .lobby-cast { display: none; }
 
@@ -5529,79 +5796,190 @@ body .topbar-actions .topbar-cfg-btn {
   text-shadow: 0 3px 0 rgba(43, 24, 9, .55);
 }
 
-/* ---- el Axie, con una flecha de cada lado ---- */
+/* ---- la colección ---- */
 
-.choose-stage {
-  grid-area: stage; min-height: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: clamp(6px, 1.4vh, 16px);
+.choose-roster {
+  grid-area: roster; min-height: 0;
+  display: flex; flex-direction: column; gap: clamp(6px, 1.2vh, 10px);
+  padding: clamp(8px, 1.6vh, 16px) clamp(8px, 1.4vw, 16px);
 }
-.choose-hero { display: flex; align-items: center; justify-content: center; width: 100%; gap: 4px; }
-/* El dibujo manda el tamaño y las flechas se acomodan a los costados. La sombra va
-   como `drop-shadow` y no como `box-shadow` porque sigue el contorno del bicho. */
-.choose-art {
-  flex: 0 1 clamp(130px, 19vw, 280px); min-width: 0;
-  filter: drop-shadow(0 14px 26px rgba(3, 5, 14, .8));
+.choose-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Sin filtros ni buscador (pocos Axies) la fila no ocupa ni su hueco. */
+.choose-tools:not(:has(> :not([hidden]))) { display: none; }
+/* Las clases en un renglón que se corre de costado si no entra, en vez de partirse en
+   dos y robarle una fila a la grilla. */
+.choose-filters {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; gap: 6px; padding: 2px;
+  overflow-x: auto; scrollbar-width: none;
 }
-.choose-arrow {
-  flex: 0 0 auto; width: 44px; height: 44px; padding: 0;
-  display: grid; place-items: center;
-  border-radius: 13px; border: 0;
-  font-family: var(--title); font-size: 32px; line-height: 1; font-weight: 400;
-  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
-  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
-  box-shadow: 0 4px 0 -1px var(--madera-sombra), 0 12px 20px -10px rgba(0, 0, 0, .8);
+.choose-filters::-webkit-scrollbar { display: none; }
+.choose-chip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  height: 34px; padding: 0 12px 0 8px; border-radius: 999px;
+  border: 1.5px solid rgba(94, 58, 34, .5);
+  background: rgba(58, 32, 14, .14);
+  font: 400 15px/1 var(--num); color: var(--tinta);
   cursor: pointer;
-  transition: filter .15s ease, transform .08s ease, box-shadow .08s ease;
+  transition: background .12s ease, color .12s ease;
 }
-.choose-arrow:hover { filter: brightness(1.14) saturate(1.05); }
-.choose-arrow:active { transform: translateY(3px); box-shadow: 0 1px 0 -1px var(--madera-sombra), 0 6px 12px -8px rgba(0, 0, 0, .8); }
+.choose-chip span { padding-left: 4px; font-family: var(--btn); }
+.choose-chip b { font-weight: 400; color: var(--tinta-dim); opacity: .8; }
+.choose-chip .crest--sm { width: 22px; height: 22px; vertical-align: 0; }
+.choose-chip:hover { background: rgba(58, 32, 14, .26); }
+/* La elegida, rellena de la cinta de madera de los botones. */
+.choose-chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+  box-shadow: 0 2px 0 -1px var(--madera-sombra);
+}
+.choose-chip[aria-pressed="true"] b { color: #ffe3b8; opacity: 1; }
+.choose-search {
+  flex: 0 1 220px; min-width: 110px; height: 34px; padding: 0 14px;
+  border-radius: 999px; border: 1.5px solid rgba(94, 58, 34, .5);
+  background: rgba(255, 244, 225, .5);
+  font: 600 14px var(--display); color: var(--tinta);
+}
+.choose-search::placeholder { color: rgba(43, 24, 9, .55); }
+.choose-search:focus { outline: 2px solid #ffd15c; outline-offset: 1px; background: rgba(255, 244, 225, .75); }
 
-.choose-id { display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
-.choose-name {
-  font: 400 clamp(22px, 2.8vw, 34px)/1 var(--title); letter-spacing: .02em;
-  color: #fff;
-  -webkit-text-stroke: 1px rgba(43, 24, 9, .85); paint-order: stroke fill;
-  text-shadow: 0 3px 0 rgba(43, 24, 9, .55), 0 2px 12px rgba(3, 5, 14, .7);
+/* La grilla: un pozo hundido en la tabla que scrollea solo, con tantas columnas como
+   entren. `--tile` es el ancho mínimo de cada Axie. */
+.choose-grid {
+  --tile: clamp(96px, 9vw, 128px);
+  flex: 1 1 auto; min-height: 0;
+  display: grid; align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr));
+  gap: clamp(6px, 1vw, 10px);
+  padding: clamp(6px, 1vw, 10px);
+  overflow-y: auto; overscroll-behavior: contain;
+  border-radius: 14px;
+  background: rgba(58, 32, 14, .3);
+  box-shadow: inset 0 2px 7px rgba(45, 24, 10, .5);
 }
-/* La clase, con su crest y su color: es el símbolo con el que puntúa, o sea el mazo. */
-.choose-class {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 12px 4px 6px; border-radius: 999px;
-  font-size: 13px; font-weight: 600; color: var(--ink);
-  background: color-mix(in srgb, var(--c) 22%, transparent);
-  border: 1px solid color-mix(in srgb, var(--c) 60%, transparent);
+/* Con pocos Axies —los seis de siempre— los naipes crecen: una grilla de naipes chicos
+   perdida en un pozo vacío es espacio tirado. */
+.choose-grid[data-few="true"] { --tile: clamp(150px, 15vw, 230px); align-content: center; }
+.choose-grid::-webkit-scrollbar { width: 7px; }
+.choose-grid::-webkit-scrollbar-thumb { background: var(--madera-borde); border-radius: 4px; }
+/* Cada Axie es un naipe de nogal con el color de su clase encendido detrás del
+   dibujo: de lejos la grilla se lee por colores antes que por nombres. */
+.roster-tile {
+  position: relative; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 6px 8px;
+  border-radius: 14px; border: 2px solid var(--naipe-borde);
+  background:
+    radial-gradient(90% 70% at 50% 45%, color-mix(in srgb, var(--c) 55%, transparent), transparent 72%),
+    var(--naipe);
+  box-shadow: var(--naipe-luz), 0 3px 0 -1px rgba(30, 16, 6, .6), 0 10px 16px -12px rgba(0, 0, 0, .9);
+  color: #fff; cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease, filter .12s ease;
 }
-.choose-class .crest { width: 20px; height: 20px; }
-.choose-of { font-family: var(--num); font-size: 13px; color: var(--ink-dim); }
+.roster-tile:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.roster-tile:active { transform: translateY(1px); }
+/* El de la ficha: el aro dorado de lo elegido, el mismo de los niveles de la Aventura. */
+.roster-tile[aria-pressed="true"] {
+  border-color: #ffd15c;
+  box-shadow: 0 0 0 2px #ffd15c, 0 0 20px -4px rgba(255, 209, 92, .75), 0 3px 0 -1px rgba(30, 16, 6, .6);
+}
+/* El recuadro del dibujo es más angosto que el Axie más alto (1,1 de ancho por alto),
+   así ninguno se sale y todos apoyan las patas a la misma altura. */
+.roster-art { display: flex; align-items: flex-end; justify-content: center; aspect-ratio: 11 / 10; }
+.roster-art .axie { width: 96%; filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .45)); }
+.roster-crest { position: absolute; top: 5px; left: 5px; }
+.roster-crest .crest--sm { display: block; width: 20px; height: 20px; }
+.roster-name {
+  font: 400 clamp(13px, 1.1vw, 16px)/1.15 var(--title); letter-spacing: .01em;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .45);
+}
+.roster-mark {
+  position: absolute; top: 5px; right: 5px;
+  font: 400 10px/1 var(--btn); letter-spacing: .04em; text-transform: uppercase;
+  padding: 3px 6px 2px; border-radius: 999px;
+  color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+.roster-mark--on { background: #1f9a74; }
+.roster-mark--plus { background: #59d09a; color: #10382a; text-shadow: none; font-size: 12px; padding: 2px 5px 1px; }
+.roster-mark--on + .roster-mark--plus { top: 24px; }
+.choose-empty {
+  grid-column: 1 / -1; margin: 18px 0; text-align: center;
+  font: 400 16px var(--title); color: rgba(255, 244, 225, .85);
+}
 
 /* ---- el mazo inicial ---- */
 
-/* La ficha de las cartas pasa al sistema: es una tabla de madera (.o-panel). */
+/* La ficha: una tabla de madera (.o-panel) en tres renglones —el Axie, sus cartas y
+   el botón—. Es contenedor de consultas: las cartas se miden contra el ancho de la
+   ficha y no contra la ventana, que es lo que cambia entre las tres disposiciones. */
 .choose-sheet {
-  grid-area: sheet; min-height: 0; overflow-y: auto;
-  position: relative;
-  color: var(--tinta);
-  border-radius: 20px;
-  border: 3px solid var(--madera-borde);
-  background: #ac8a68 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/frame_back.png") center / 100% 100% no-repeat;
-  box-shadow: 0 6px 0 -1px var(--madera-sombra), 0 30px 60px -18px rgba(0, 0, 0, .8);
-  padding: clamp(12px, 1.8vh, 20px) clamp(14px, 1.8vw, 22px);
-  display: flex; flex-direction: column; gap: 10px;
+  grid-area: sheet; min-height: 0; min-width: 0;
+  container-type: inline-size;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(8px, 1.4vh, 14px);
+  padding: clamp(10px, 1.8vh, 18px) clamp(12px, 1.6vw, 20px) clamp(14px, 2.2vh, 22px);
 }
-.choose-sheet::-webkit-scrollbar { width: 7px; }
-.choose-sheet::-webkit-scrollbar-thumb { background: var(--madera-borde); border-radius: 4px; }
+.choose-head { display: flex; align-items: center; gap: clamp(8px, 4cqi, 16px); min-width: 0; }
+/* El Axie respira sobre el color de su clase, como en su naipe de la colección. */
+.choose-art {
+  flex: 0 0 clamp(96px, 40cqi, 200px); min-width: 0;
+  padding: 4px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c, #fff) 50%, transparent), transparent);
+  filter: drop-shadow(0 10px 14px rgba(43, 24, 9, .45));
+}
+.choose-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.choose-id { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.choose-name {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 clamp(22px, 9cqi, 38px)/1.05 var(--title); letter-spacing: .02em;
+  color: #fff;
+  -webkit-text-stroke: 1px rgba(43, 24, 9, .85); paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(43, 24, 9, .55);
+}
+.choose-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* La clase, con su crest y su color: es el símbolo con el que puntúa, o sea el mazo. */
+.choose-class {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 11px 3px 4px; border-radius: 999px;
+  font-size: 13px; font-weight: 700; color: var(--tinta);
+  background: color-mix(in srgb, var(--c) 30%, rgba(255, 244, 225, .35));
+  border: 1.5px solid color-mix(in srgb, var(--c) 75%, var(--madera-borde));
+}
+.choose-class .crest { width: 20px; height: 20px; }
+.choose-on {
+  padding: 4px 9px 3px; border-radius: 999px;
+  font: 400 12px/1 var(--btn); letter-spacing: .04em; text-transform: uppercase;
+  color: #fff; background: #1f9a74; box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+}
+
+/* Las cartas son lo único de la ficha que puede no entrar: scrollean ellas, y el
+   Axie y el botón quedan siempre a la vista. */
+.choose-cards {
+  min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+}
+/* Centradas a lo alto con márgenes y no con `justify-content`: si no entran, un
+   centrado de flex las corta por arriba, donde el scroll no llega. */
+.choose-cards > :first-child { margin-top: auto; }
+.choose-cards > :last-child { margin-bottom: auto; }
+.choose-cards::-webkit-scrollbar { width: 7px; }
+.choose-cards::-webkit-scrollbar-thumb { background: var(--madera-borde); border-radius: 4px; }
 .choose-label {
   margin: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em;
-  color: var(--tinta-dim);
+  color: var(--tinta-dim); text-align: center;
 }
-/* Las diez cartas, en el mismo formato que en la mesa. `--carta` es la medida de la
-   que cuelga todo lo de adentro —el símbolo es un porcentaje del ancho útil—, así que
-   achicarla acá achica la carta entera sin tocar nada más. */
+/* Las diez cartas, en el mismo formato que en la mesa y en dos filas de cinco. `--carta`
+   es la medida de la que cuelga todo lo de adentro, y sale del ancho de la ficha: cinco
+   cartas con sus cuatro huecos. */
 .choose-deck {
-  --carta: clamp(46px, 5.4vw, 78px);
-  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
-  margin-bottom: 4px;
+  --carta: clamp(34px, min(calc((100cqi - 40px) / 5), calc((100vh - 460px) / 3.3)), 84px);
+  display: grid; grid-template-columns: repeat(5, max-content);
+  justify-content: center; gap: 8px;
 }
 /* En la mesa la carta reserva un hueco arriba para su número de orden. Acá no hay
    orden: se ve el mazo entero de una, así que el hueco sobra.
@@ -5665,7 +6043,7 @@ body .topbar-actions .topbar-cfg-btn {
 /* La cuenta de cada símbolo, de mayor a menor. Es el número que dice para qué sirve un
    Axie: los diez mazos tienen la misma forma y lo único que cambia es de qué color son
    las repeticiones. */
-.choose-tally { display: flex; flex-wrap: wrap; gap: 6px; }
+.choose-tally { display: flex; flex-wrap: wrap; gap: 5px; }
 .tally {
   display: flex; align-items: center; gap: 5px;
   padding: 3px 10px 3px 4px; border-radius: 999px;
@@ -5678,22 +6056,13 @@ body .topbar-actions .topbar-cfg-btn {
 
 /* ---- el botón ---- */
 
-.choose-actions {
-  grid-area: actions;
-  display: flex; align-items: center; justify-content: flex-end;
-  gap: clamp(10px, 1.6vw, 20px);
-}
-.choose-note {
-  margin: 0; text-align: right; font-size: 13px; color: rgba(255, 255, 255, .82);
-  text-shadow: 0 2px 10px rgba(3, 5, 14, .9);
-}
-.choose-note b { color: #fff; }
 /* El mismo botón grande de la portada, un punto más chico: es el que cierra la
-   pregunta, y tiene que verse desde la puerta igual que el de "Jugar". */
+   pregunta. En la ficha va a todo el ancho, al pie. */
 .choose-go {
   font-size: clamp(17px, 2.1vw, 28px);
   padding: 13px clamp(22px, 3.4vw, 46px);
 }
+.choose-sheet .choose-go { width: 100%; padding: 12px 16px; font-size: clamp(18px, 7cqi, 26px); }
 
 /* La portada en una ventana alta: la escena, un poco más arriba.
 
@@ -5773,63 +6142,85 @@ body .topbar-actions .topbar-cfg-btn {
   .lobby-aside { bottom: calc(clamp(10px, 1.8vh, 18px) + 62px); }
 }
 
-/* La elección en una pantalla angosta vertical: las dos columnas no entran —el Axie
-   grande al lado de diez cartas necesita ancho—, así que se apila. El Axie arriba,
-   las cartas abajo, y el botón al pie de todo. */
-@media (max-width: 860px) and (min-height: 501px) {
+/* La elección parada (o muy angosta): la colección arriba, que se lleva el alto que
+   sobre y scrollea, y la ficha abajo con el botón al pie, donde cae el pulgar. La ficha
+   se achica: el Axie al lado del nombre y las cartas un talle menos. */
+@media (orientation: portrait), (max-width: 620px) {
   .lobby-choose {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
-    grid-template-areas: "bar" "stage" "sheet" "actions";
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "bar" "roster" "sheet";
+    gap: 8px;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
   }
-  .choose-art { flex: 0 1 clamp(120px, 34vw, 200px); }
-  .choose-actions { justify-content: space-between; }
-  .choose-go { width: auto; }
+  .choose-bar .btn-ghost { padding: 6px 14px; font-size: 13px; }
+  .choose-step { font-size: 20px; }
+  .choose-grid { --tile: 72px; gap: 7px; padding: 7px; }
+  .choose-grid[data-few="true"] { --tile: clamp(84px, 22vw, 170px); }
+  .roster-name { font-size: 13px; }
+  .choose-chip { height: 32px; font-size: 14px; }
+  .choose-tools { gap: 6px; }
+  .choose-search { flex: 0 1 112px; min-width: 84px; height: 32px; padding: 0 10px; }
+  .roster-mark { font-size: 9px; padding: 2px 5px 1px; top: 4px; right: 4px; }
+  /* El nombre y sus dos chapas en un renglón si entran, y la etiqueta del mazo afuera:
+     cada renglón que se ahorra la ficha es un renglón más de colección. */
+  .choose-id { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .choose-label { display: none; }
+  .choose-sheet { gap: 8px; padding: 10px 12px 12px; }
+  .choose-art { flex-basis: clamp(80px, 26cqi, 150px); }
+  .choose-info { gap: 7px; }
+  .choose-name { font-size: clamp(22px, 7cqi, 34px); }
+  .choose-deck { --carta: clamp(34px, calc((100cqi - 40px) / 5), 54px); gap: 6px 8px; }
+  .choose-cards { gap: 5px; }
+  .choose-sheet .choose-go { padding: 10px 16px; font-size: 20px; }
 }
 
-/* En teléfono acostado (844x390) se mantiene en dos columnas como en escritorio:
-   Axie a la izquierda, mazo a la derecha con scroll interno y botón siempre visible. */
-@media (max-height: 500px) {
+/* Teléfono acostado (844x390): las dos columnas de escritorio, apretadas. El alto es lo
+   que falta, así que el botón sube al lado del Axie y las cartas se miden por el alto
+   de la ventana. */
+@media (max-height: 500px) and (orientation: landscape) {
   .lobby-choose {
-    grid-template-columns: minmax(180px, 30%) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "bar   bar"
-      "stage sheet"
-      "stage actions";
-    gap: 6px 14px;
-    padding: 6px 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 46%);
+    gap: 6px 10px;
+    padding: 6px 12px;
   }
   .choose-bar { gap: 10px; }
   .choose-step { font-size: 18px; }
   .choose-bar .btn-ghost { padding: 4px 12px; font-size: 12px; }
-  .choose-stage { gap: 4px; }
-  .choose-art { flex: 0 1 clamp(70px, 22vh, 110px); }
-  .choose-arrow { width: 32px; height: 32px; font-size: 22px; }
-  .choose-name { font-size: 18px; }
-  .choose-class { padding: 2px 8px 2px 4px; font-size: 11px; }
-  .choose-class .crest { width: 15px; height: 15px; }
+  .choose-roster { padding: 7px; gap: 6px; }
+  .choose-chip { height: 28px; font-size: 13px; padding: 0 9px 0 5px; }
+  .choose-chip .crest--sm { width: 18px; height: 18px; }
+  .choose-search { height: 28px; flex-basis: 130px; }
+  .choose-grid { --tile: 80px; gap: 6px; padding: 6px; }
+  /* Pocos: tres por fila y el dibujo un poco más apaisado, así entran dos filas enteras. */
+  .choose-grid[data-few="true"] { --tile: 104px; gap: 6px; padding: 6px; }
+  .choose-grid[data-few="true"] .roster-art { aspect-ratio: 5 / 4; }
+  .choose-grid[data-few="true"] .roster-art .axie { width: 88%; }
+  .roster-tile { padding: 4px 4px 6px; border-radius: 12px; }
+  .roster-name { font-size: 12px; }
   .choose-sheet {
-    padding: 8px 12px;
-    gap: 6px;
-    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "head go" "cards cards";
+    gap: 6px 10px;
+    padding: 8px 10px;
   }
-  .choose-deck {
-    --carta: clamp(36px, 10vh, 50px);
-    gap: 6px;
-    margin-bottom: 2px;
-  }
-  .choose-actions {
-    gap: 8px;
-    padding: 0;
-    justify-content: flex-end;
-  }
-  .choose-note { font-size: 11px; }
-  .choose-go {
-    font-size: 15px;
-    padding: 7px 18px;
-    width: auto;
-  }
+  .choose-head { grid-area: head; gap: 8px; }
+  .choose-cards { grid-area: cards; gap: 4px; }
+  .choose-art { flex-basis: 64px; padding: 0; }
+  .choose-info { gap: 4px; }
+  .choose-id { gap: 3px; }
+  .choose-name { font-size: 18px; }
+  .choose-class { padding: 1px 8px 1px 3px; font-size: 11px; }
+  .choose-class .crest { width: 15px; height: 15px; }
+  .choose-on { font-size: 10px; padding: 3px 7px 2px; }
+  .choose-tally { gap: 3px; }
+  .choose-tally .tally { padding: 1px 6px 1px 2px; gap: 3px; }
+  .choose-tally .tally .crest { width: 14px; height: 14px; }
+  .choose-tally .tally b { font-size: 12px; }
+  .choose-label { display: none; }
+  .choose-deck { --carta: clamp(30px, 11vh, 48px); gap: 5px 7px; }
+  .choose-sheet .choose-go { grid-area: go; align-self: start; width: auto; padding: 8px 14px; font-size: 15px; }
 }
 
 /* ── Tutorial overlay ─────────────────────────────────────────────────────── */
@@ -6340,8 +6731,8 @@ body:has(#tutorial-overlay) .topbar,
    Solo el cartel suelto: el de Símbolos vive en `.symbols-header`, que ya se aparta de
    la cruz con su propio relleno (ver el `@media` de 500px de más arriba). */
 .modal:has(.modal-close) > .o-banner {
-  min-width: 0; max-width: calc(100% - 112px);
-  margin-bottom: 28px;
+  min-width: 0; max-width: calc(100% - 88px);
+  margin-bottom: 24px;
 }
 @media (max-width: 500px) {
   .modal:has(.modal-close) > .o-banner { padding-inline: 16px; font-size: 16px; }

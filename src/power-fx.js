@@ -54,7 +54,8 @@ const fxLabel = (id) => `<span class="dmg-label">${fxIcon(id)} ${tr(POWERS[id].n
  *   `hp`      la vida que ya cambió en el estado pero la chapa no muestra hasta que
  *             el poder llega: `[asiento, cuánto]`, positivo si es daño
  *   `swing`   el daño que suma al número grande: se retiene y, al llegar, sube contando
- *   `back`    un segundo viaje de vuelta, del que recibió al que lo jugó
+ *   `back`    un segundo viaje de vuelta, del que recibió al que lo jugó; su `sfx`
+ *             arranca cuando salen los orbes
  *   `tag`     el cartel que sube sobre el Axie (vacío, no sube nada)
  *   `hud`     el cartel que sube de la chapa: `at` es de dónde (`hp`, la vida, o
  *             `shield`, el escudo) y `html` lo que dice
@@ -172,16 +173,18 @@ export const POWER_FX = {
     },
   },
   leech: {
-    // La daga toma envión para atrás, se clava, y la vida vuelve en orbes.
+    // La daga toma envión para atrás, se clava, y la vida vuelve en orbes. El drenaje
+    // del kit tarda más de un segundo en crecer: largado solo, la daga se clavaba en
+    // silencio. Por eso se clava con el tajo de Bicho y el drenaje acompaña a los orbes.
     apply: {
       flight: { path: 'stab', ms: 540 },
       clip: 'leech', width: 1.9,
-      motion: 'hurt', react: 'hit', sfx: 'leech',
+      motion: 'hurt', react: 'hit', sfx: 'bug',
       hp: (fx) => [[fx.on, fx.amount], [fx.by, -fx.heal, 'back']],
       tag: (fx) => `${fxLabel('leech')}−${fx.amount}`,
       back: {
         path: 'siphon', ms: 720, orbs: 4,
-        motion: 'snap',
+        motion: 'snap', sfx: 'leech',
         hud: { at: 'hp', kind: 'heal', html: (fx) => (fx.heal > 0 ? `+${fx.heal} HP` : '') },
       },
     },
@@ -637,6 +640,7 @@ export function createPowerFx({
     });
 
     if (spec.back) {
+      if (spec.back.sfx) sound(spec.back.sfx, land, { contact: true });
       for (let i = 0; i < (spec.back.orbs ?? 1); i++) {
         later(land + i * ORB_GAP, () => fly(fx.power, art(fx.on), art(by), spec.back));
       }
@@ -651,7 +655,7 @@ export function createPowerFx({
     const node = portraits[seat];
     if (spec.react) pulse(node, 'react', spec.react, 900);
     if (spec.motion) motions[seat]?.pulse(spec.motion);
-    if (spec.react === 'hit') shake?.(fx.amount);
+    if (spec.react === 'hit') shake?.(fx.amount, seat);
     const text = spec.tag?.(fx);
     if (text && node) floatTag(node, kind, text);
     if (spec.hud) hudTag(seat, spec.hud, fx);

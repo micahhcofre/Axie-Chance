@@ -19,12 +19,17 @@ if (new URLSearchParams(location.search).has('red')) {
   // Es **la misma** pantalla que la de la portada y no un roster aparte, que es
   // exactamente lo que había antes arriba de la mesa: con qué Axie jugás se pregunta
   // en un solo lugar del juego, y sentado a la mesa lo único que se hace es jugar.
-  // La mesa todavía no está armada y es ella la que trae el sonido: hasta que empiece
-  // la partida, los botones de la sala suenan con uno propio.
-  pressSounds(createAudio());
+  // La mesa todavía no está armada y es ella la que trae el sonido, así que el
+  // mezclador se arma acá y es **el mismo** que después recibe la mesa: los toques de
+  // la sala son los que lo encienden (el navegador no deja sonar nada antes de que el
+  // jugador toque algo), y cuando la partida empieza ya está andando. Con uno por
+  // pantalla, el de la mesa nacía dormido en medio de la partida y no se oía nada
+  // hasta que el jugador tocaba un botón.
+  const audio = createAudio();
+  pressSounds(audio);
   let sala = null;
   const lobby = createLobby(null, { net: true, onPick: () => sala?.axieChanged() });
-  sala = connect({ chooseAxie: () => lobby.open('choose') });
+  sala = connect({ chooseAxie: () => lobby.open('choose'), audio });
 } else {
   // La mesa se monta pero no reparte: la partida arranca cuando la portada sabe contra
   // quién se juega (ver `lobby.js`). Hasta entonces la mesa está vacía atrás, y no se

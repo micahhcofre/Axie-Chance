@@ -749,5 +749,72 @@ console.log('✓ render ok (los dos asientos de una sala)');
     assert.ok(heard.find(([key]) => key === 'feather')[1] < contact, 'y la pluma se oye mientras cae');
   }
 
+  // La daga se clava con ruido y el drenaje acompaña a los orbes que vuelven: el drenaje
+  // solo tarda más de un segundo en crecer, y la daga se clavaba en silencio.
+  {
+    const timers = [];
+    const realTimeout3 = globalThis.setTimeout;
+    globalThis.setTimeout = (fn, ms = 0) => { timers.push({ fn, at: ms }); return timers.length; };
+    const heard = [];
+    const hurt = [];
+    const dagger = createPowerFx({
+      vfx: { play() {} },
+      audio: { sfx: (key, opts) => heard.push([key, opts.delay]), lead: () => 300 },
+      field: null,
+      plates,
+      portraits,
+      motions: { p1: { pulse() {} }, p2: { pulse: (m) => hurt.push(m) } },
+      pulse() {},
+      floatTag() {},
+      shake() {},
+      sideOf: () => 'left',
+    });
+    dagger.play({ id: 2, player: 'p1', fx: [{ power: 'leech', moment: 'apply', by: 'p1', on: 'p2', amount: 5, heal: 5 }] }, 0);
+    let contact = 0;
+    let clock = 0;
+    while (timers.length) {
+      timers.sort((a, b) => a.at - b.at);
+      const next = timers.shift();
+      clock = next.at;
+      const before = timers.length;
+      next.fn();
+      for (const added of timers.slice(before)) added.at += clock;
+      if (hurt.length && !contact) contact = clock;
+    }
+    globalThis.setTimeout = realTimeout3;
+    assert.ok(contact > 0, 'la daga pega');
+    const [, stab] = heard.find(([key]) => key === 'bug') ?? [];
+    assert.equal(stab, contact - 300, 'la daga suena al clavarse, con el pico sobre el contacto');
+    assert.deepEqual(heard.find(([key]) => key === 'leech'), ['leech', contact], 'y el drenaje arranca con los orbes');
+  }
+
   console.log('✓ animación de los poderes ok');
+}
+
+// ---- levantarse de la mesa ---------------------------------------------------
+// Volver al menú en el medio corta la partida (ver `abortMatch` en `game.js` y `open`
+// en `lobby.js`), y la mesa se desarma sola: sin partida no hay nada que pintar, y lo
+// que había quedado encima —la pantalla del final, el reloj— se va con ella. Antes la
+// partida seguía andando detrás de la portada y volvía a aparecer entera al entrar.
+{
+  screen.restart({ mode: 'cpu' });
+  await idle();
+  const played = game.state.match;
+
+  screen.abortMatch();
+  assert.equal(game.state, null, 'la partida deja de existir');
+  assert.equal(nodes.result.hidden, true, 'la pantalla del final se va con ella');
+  assert.equal(nodes.result.innerHTML, '', 'y no queda nada escrito atrás');
+  assert.equal(nodes.clock.dataset.on, 'false', 'el reloj se apaga');
+  // Un repintado sin partida —la ventana que cambia de tamaño con la portada puesta—
+  // no rompe nada.
+  game.refresh();
+
+  // Y la mesa vuelve a repartir cuando se elige otra partida.
+  screen.restart({ mode: 'cpu' });
+  await idle();
+  assert.notEqual(game.state.match, played, 'la de después es otra');
+  assert.match(nodes.scoreboard.innerHTML, /Ronda 1/, 'y la mesa la pinta desde cero');
+
+  console.log('✓ levantarse de la mesa ok');
 }

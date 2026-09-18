@@ -96,7 +96,18 @@ localStorage.setItem('axie-chance:axie',
 const { connect } = await import('../src/net.js');
 /** Cuántas veces se pidió abrir la pantalla de elección de la portada. */
 let elegidas = 0;
-const sala = connect({ chooseAxie: () => { elegidas++; } });
+// El mezclador de la sala, escuchado: es el que arma `main.js` para que los botones de
+// la sala suenen, y tiene que ser **el mismo** que después usa la mesa. Si la mesa se
+// armara uno propio, nacería dormido en medio de la partida —el navegador solo enciende
+// el audio con un gesto del jugador, y para cuando la partida empieza ya no hay ninguno
+// por venir— y no se oiría nada hasta el primer clic.
+const { createAudio } = await import('../src/audio.js');
+const mixer = createAudio();
+/** Los temas que la mesa pidió por este mezclador. */
+const temas = [];
+const playMusic = mixer.music;
+mixer.music = (track) => { temas.push(track); return playMusic(track); };
+const sala = connect({ chooseAxie: () => { elegidas++; }, audio: mixer });
 await settle();
 
 let ws = FakeWebSocket.last;
@@ -194,6 +205,8 @@ await fromHost(ws, { t: 'state', state: turnOfP1 }, 5);
 
 assert.equal(nodes.net.hidden, true, 'con partida, el cartel se va');
 assert.ok(nodes.field.innerHTML.length > 0, 'y la mesa se pintó');
+assert.ok(temas.includes('battle'),
+  'la mesa suena por el mezclador de la sala, que es el que el jugador ya encendió');
 assert.equal(nodes['fighter-p2'].dataset.side, 'left', 'tu bicho, de este lado');
 assert.equal(nodes['fighter-p1'].dataset.side, 'right', 'el del otro, enfrente');
 assert.match(nodes['plate-p2'].innerHTML, /Vos/, 'tu chapa dice Vos');
@@ -283,7 +296,7 @@ ws = ws2;
   assert.equal(nodes['menu-btn'].hidden, false, 'con partida y asiento, se puede abandonar');
   nodes['menu-btn'].handlers.click();
   assert.equal(nodes['quit-modal'].open, true, 'abandonar pregunta antes');
-  assert.match(nodes['quit-note'].innerHTML, /se anula/, 'y avisa que en la primera ronda no gana nadie');
+  assert.match(nodes['quit-note'].innerHTML, /gana el otro/, 'y avisa que el que se queda gana');
 
   const before = ws.sent.length;
   nodes['quit-modal'].returnValue = 'stay';
@@ -303,8 +316,8 @@ ws = ws2;
   await settle();
   gone.forfeit('p1');
   await fromHost(ws, { t: 'state', state: wire(gone.state) }, 2);
-  assert.equal(nodes.result.dataset.outcome, 'void');
-  assert.match(nodes.result.innerHTML, /Partida anulada/, 'anulada no es perder');
+  assert.equal(nodes.result.dataset.outcome, 'win', 'el que se queda gana');
+  assert.match(nodes.result.innerHTML, /¡Victoria!/, 'irse le regala la partida al otro');
   assert.match(nodes.result.innerHTML, /Jugador 1 abandonó/, 'y se dice quién se fue');
   assert.match(nodes.result.innerHTML, /data-action="leave"/, 'la salida es volver a las salas');
   assert.doesNotMatch(nodes.result.innerHTML, /data-action="restart"/,

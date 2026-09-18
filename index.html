@@ -134,6 +134,8 @@
            unas líneas escritas adentro se borrarían en medio del recorrido. -->
       <svg class="chainfx" id="chainfx" aria-hidden="true"></svg>
       <canvas class="vfx" id="vfx" aria-hidden="true"></canvas>
+      <!-- El borde rojo del lado del que recibe un golpe (ver `.hurtfx`). -->
+      <div class="hurtfx" id="hurtfx" aria-hidden="true"></div>
     </section>
   </main>
 </div>
@@ -304,8 +306,6 @@
        botón, así que las dos esquinas dejaban de estar a la misma altura. -->
   <div class="lobby-foot" id="lobby-foot">
     <button class="btn btn-ghost lobby-help" id="lobby-tutorial">Tutorial</button>
-    <button class="btn btn-ghost lobby-help" id="lobby-rules">Cómo se juega</button>
-    <button class="btn btn-ghost lobby-help" id="lobby-symbols">Símbolos especiales</button>
     <button class="btn btn-ghost lobby-help" id="lobby-vision">Visión del producto</button>
   </div>
 
@@ -329,35 +329,43 @@
        el tuyo y el de la máquina se sortea. Lo llena `lobby.js`.
 
        Va afuera del panel de abajo a la derecha y no adentro: los otros dos son
-       carteles apoyados en una esquina de la escena, y este ocupa la escena. -->
+       carteles apoyados en una esquina de la escena, y este ocupa la escena.
+
+       Son dos mitades: la colección y la ficha. Con seis bichos alcanzaba una flecha de
+       cada lado, pero los Axies van a ser los de cada jugador —pueden ser cuarenta— y
+       cuarenta no se recorren de a uno: se miran todos juntos, se filtran por clase y
+       se buscan por nombre. La ficha es la del que tocaste, con el mazo a la vista. -->
   <div class="lobby-choose" id="lobby-choose" hidden>
     <div class="choose-bar">
       <button class="btn btn-ghost" id="lobby-choose-back">← Volver</button>
       <p class="choose-step o-title" id="lobby-choose-title">Elegí tu Axie</p>
     </div>
 
-    <!-- El Axie, con una flecha de cada lado. Las flechas son la navegación entera:
-         seis bichos se recorren, no se buscan. -->
-    <div class="choose-stage">
-      <div class="choose-hero">
-        <button class="choose-arrow" id="lobby-prev" aria-label="El Axie anterior">‹</button>
-        <div class="choose-art" id="lobby-choose-art"></div>
-        <button class="choose-arrow" id="lobby-next" aria-label="El Axie siguiente">›</button>
+    <!-- La colección: los filtros por clase, el buscador (solo con muchos) y la
+         grilla. La llena `lobby.js`. -->
+    <div class="choose-roster o-panel">
+      <div class="choose-tools">
+        <div class="choose-filters" id="lobby-choose-filters"></div>
+        <input class="choose-search" id="lobby-choose-search" type="search"
+               autocomplete="off" spellcheck="false" hidden>
       </div>
-      <div class="choose-id" id="lobby-choose-id"></div>
+      <div class="choose-grid" id="lobby-choose-roster"></div>
     </div>
 
-    <!-- El mazo con el que arranca, en el mismo formato en que se van a ver en la
-         mesa: son las mismas cartas. -->
+    <!-- La ficha: el bicho, su nombre, su clase y la cuenta de símbolos arriba; el
+         mazo con el que arranca en el mismo formato que en la mesa, y el botón. -->
     <div class="choose-sheet o-panel">
-      <p class="choose-label" id="lobby-choose-deck-label">Mazo inicial · 10 cartas</p>
-      <div class="choose-deck" id="lobby-choose-deck"></div>
-      <p class="choose-label">Símbolos en el mazo</p>
-      <div class="choose-tally" id="lobby-choose-tally"></div>
-    </div>
-
-    <div class="choose-actions">
-      <p class="choose-note" id="lobby-choose-note"></p>
+      <div class="choose-head">
+        <div class="choose-art" id="lobby-choose-art"></div>
+        <div class="choose-info">
+          <div class="choose-id" id="lobby-choose-id"></div>
+          <div class="choose-tally" id="lobby-choose-tally"></div>
+        </div>
+      </div>
+      <div class="choose-cards">
+        <p class="choose-label" id="lobby-choose-deck-label">Mazo inicial · 10 cartas</p>
+        <div class="choose-deck" id="lobby-choose-deck"></div>
+      </div>
       <button class="lobby-play choose-go" id="lobby-start">Elegir Axie</button>
     </div>
   </div>
@@ -571,41 +579,107 @@
   <form method="dialog"><button class="btn btn-primary">Entendido</button></form>
 </dialog>
 
-<dialog class="modal o-panel" id="vision-modal">
+<dialog class="modal modal--vision o-panel" id="vision-modal">
   <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
   <h2 class="o-banner">Visión del producto</h2>
-  <p>Un combate táctico 1v1 por turnos que fusiona <b>push-your-luck</b>, encadenamiento de símbolos y construcción
-     de mazo en tiempo real. La anatomía NFT del Axie deja de ser una tarjeta de estadísticas fijas: se convierte en
-     la estructura de las cartas con las que jugás, premiando la evolución con mayor estabilidad probabilística.</p>
+  <p class="vision-meta">Axie Infinity Vibeathon · Web, sin instalar nada · 3–4 minutos por partida</p>
 
-  <h3>El motor: apostar con matemática</h3>
-  <p>Cada racha pega por su largo <b>al cuadrado</b>, no en línea recta: una racha de 2 vale 4, una de 3 vale 9, una
-     de 4 vale 16. Esa curva es lo que hace que cada carta extra que arriesgás valga sensiblemente más que la
-     anterior — y que un corte de cadena la borre entera. El detalle completo de cadenas y mercado está en
-     <b>Cómo se juega</b>.</p>
+  <h3>1 · El pitch en una línea</h3>
+  <p class="vision-lead">Encadená símbolos mientras te animes. Cada carta que robás hace tu golpe más grande; una sola carta que no conecta te lo borra entero. Eso es todo lo que hay que entender para jugar, y es todo lo que hace falta para no poder parar.</p>
 
-  <h3>Axie Core: tu anatomía es tu mazo</h3>
-  <p>Cada una de las 6 partes del Axie —Ojos, Orejas, Cuernos, Boca, Espalda y Cola— está ligada a una carta
-     favorable del mazo inicial. Evolucionar una parte le suma a esa carta un tercer símbolo, ampliando sus vías de
-     conexión y bajando la tasa de corte.</p>
-  <p class="muted">Hoy esto se simula localmente con las mejoras (+) de la pantalla de elección de Axie: el mismo
-     efecto matemático que tendría leer una Part Evolution real on-chain.</p>
-
-  <h3>Ya jugable en esta ronda</h3>
+  <h3>2 · Por qué existe: una categoría nueva</h3>
+  <p>Los juegos competitivos de Ronin piden lo mismo de entrada: aprender un árbol de habilidades, memorizar un meta de cartas, entender una economía antes de divertirse. Son juegos excelentes para el que ya está adentro.</p>
+  <p>Axie Chance apunta al otro lado del embudo. Su mecánica es tan simple que se explica en una frase y se entiende en un turno, pero la decisión que propone —¿robo una más o me planto?— es la misma que sostiene a los juegos de mesa más adictivos de la historia. Esa combinación abre una categoría que el ecosistema todavía no tiene:</p>
   <div class="example">
-    <div><b>Vs CPU</b> — tres dificultades, con una IA que planea varios turnos por delante.</div>
-    <div><b>Aventura</b> — campaña de 6 niveles contra los starters de Origins.</div>
-    <div><b>Multijugador</b> — partidas online por sala con código y QR, sin servidor de costo fijo.</div>
-    <div><b>Tutorial</b> — 5 rondas guiadas que enseñan jugando.</div>
-    <div><b>12 poderes de clase</b> — dos por clase, uno sorteado por partida.</div>
+    <div><b>Casual de verdad.</b> Sin tutorial de veinte minutos, sin glosario, sin wallet para empezar. Se abre un link y se juega.</div>
+    <div><b>Tensión inmediata y visible.</b> El suspenso no requiere contexto: cualquiera que mire la pantalla entiende que esa próxima carta puede valer todo o nada. Es el formato ideal para streaming, clips cortos y para jugar al lado de alguien.</div>
+    <div><b>Sesiones de bolsillo.</b> Tres minutos. Entra en la cola del supermercado y entra en un torneo.</div>
+    <div><b>Puerta de entrada al universo Axie.</b> El jugador conoce las seis clases, sus fortalezas y su anatomía jugando, no leyendo una wiki. Cuando llegue a los juegos más profundos de Ronin, ya va a hablar el idioma.</div>
+  </div>
+  <p class="vision-punch">Es el juego que un jugador de Axie le pasa a un amigo que nunca tocó Axie.</p>
+
+  <h3>3 · El corazón del juego</h3>
+  <h4>La decisión</h4>
+  <p>En tu turno robás de tu mazo personal. La primera carta abre una o más cadenas (una por cada símbolo que trae). Cada carta siguiente tiene que compartir al menos un símbolo con alguna cadena viva: si lo hace, la alarga. Si no comparte ninguno con ninguna cadena viva, se corta la cadena y tu ataque de esa ronda vale 0.</p>
+  <p>En cualquier momento podés plantarte y descargar el daño acumulado sobre el Axie rival.</p>
+  <p class="vision-punch">Eso es el juego entero. Dos botones: robar o plantarse.</p>
+
+  <h4>Por qué es divertido</h4>
+  <div class="vision-beats">
+    <p><b>El daño es cuadrático, no lineal.</b> Una racha de 2 vale 4, una de 3 vale 9, una de 4 vale 16. Cada carta extra vale mucho más que la anterior, así que el juego te empuja permanentemente hacia adelante mientras el riesgo crece a la par. No es una decisión matemática fría: es una tentación.</p>
+    <p><b>La codicia tiene forma visible.</b> La rueda de probabilidades te dice, carta a carta, qué chance real tenés de seguir vivo. Se pinta de verde a rojo delante tuyo. Nadie se corta "por mala suerte": se corta porque decidió ir por una más con el 40% en la cara.</p>
+    <p><b>Cada turno es una historia con final.</b> Salís con una racha corta y segura, o vas por la cadena de cinco y volvés con 25 de daño y las manos temblando, o te cortás en la última y no te llevás nada. Tres minutos de partida son diez historias así.</p>
+    <p><b>Las rachas múltiples dan profundidad sin dar complejidad.</b> Una carta de apertura con tres símbolos abre tres caminos en paralelo; los que no conectan quedan congelados, guardando lo que ya ganaron. El jugador nuevo ve "muchas chances de seguir". El jugador experto ve un árbol de decisiones. Los dos están jugando bien.</p>
+    <p><b>Tu mazo cambia mientras jugás.</b> Al terminar cada turno elegís del mercado central —seis cartas boca arriba, compartidas— y lo que elegís se baraja en tu mazo al instante. Un ataque exitoso te deja llevarte una carta con poder o dos cartas simples; un bust te deja una simple, para que la partida perdida nunca sea una partida muerta. Nadie queda fuera de la remontada.</p>
+    <p><b>Los poderes son personajes, no estadísticas.</b> El frasco de veneno que se revolea, el huevo que rebota y te deja un escudo que contraataca al romperse, el caracol que frena el próximo golpe rival a la mitad, la bebida energética que se vuelca sobre el número de daño y lo hace subir contando. Doce poderes de clase, seis activos por partida —uno por clase—, cada uno con su gesto, su sonido y su momento. El jugador no aprende una tabla: se acuerda del pulpo.</p>
+    <p><b>El final tiene un último aliento.</b> Quien queda en 0 HP recibe una Última Chance: un turno más, con halo de fuego, para llevarse al rival puesto. Si lo logra, la partida termina en empate. Muchas partidas se deciden ahí, y todas las que se deciden ahí se cuentan después.</p>
+    <p><b>El reloj mantiene el pulso.</b> 30 segundos para decidir, 20 por elección en el mercado. Nunca hay tiempo muerto, nunca hay parálisis por análisis.</p>
   </div>
 
-  <h3>Hacia dónde va</h3>
-  <p><b>Ronda 2:</b> conectar Ronin Waypoint y la API de Axie Core para leer genes y Part Evolutions reales,
-     acreditación de AXP on-chain y matchmaking en tiempo real.</p>
-  <p><b>Lanzamiento:</b> temporadas competitivas con tablas de clasificación, soporte cosmético para Axies
-     coleccionables (Mystic, Origin, Shiny) y un modo King of the Hill.</p>
-  <p class="muted">Track: Axie Infinity Vibeathon — Round 1.</p>
+  <h3>4 · Tu Axie es tu mazo</h3>
+  <p>La integración con Axie Core no es un skin ni una ventaja comprada: es matemática de consistencia. Cada Axie entra a la arena con un mazo de 10 cartas derivado de su genética:</p>
+  <div class="example">
+    <div><b>6 cartas favorables</b>, una por cada parte anatómica —Ojos, Orejas, Cuernos, Boca, Espalda, Cola—, todas con el símbolo de su clase base más un símbolo secundario que depende de la parte.</div>
+    <div><b>4 cartas desfavorables</b> derivadas de la tríada piedra-papel-tijera del Axie: aliado y presas aparecen dos veces cada uno, los counters apenas una. El mazo está sesgado a tu favor por diseño, no por azar.</div>
+  </div>
+  <div class="vision-beats">
+    <p><b>Part Evolution como reductor de varianza.</b> Evolucionar una parte on-chain agrega un tercer símbolo a la carta de esa parte. Eso no sube el daño directamente: multiplica las formas de conectar. Más conexiones significan menos cortes, cadenas más largas y la libertad de jugar más agresivo. La evolución no necesariamente te hace pegar más fuerte; te hace animarte más.</p>
+  </div>
+  <h4>El flywheel con Ronin</h4>
+  <ol class="vision-steps">
+    <li><b>Jugás</b> y ganás AXP según el largo de tus cadenas y el daño ejecutado.</li>
+    <li><b>Evolucionás</b> partes on-chain en App.Axie con ese AXP.</li>
+    <li><b>Optimizás</b>: la parte evolucionada vuelve como una carta mejor en tu mazo inicial.</li>
+    <li><b>Coleccionás y criás</b> buscando combinaciones anatómicas con sinergia real en el mercado central.</li>
+  </ol>
+
+  <h3>5 · Amuletos que se craftean y se gastan</h3>
+  <p>La progresión a mediano plazo tiene un solo objetivo de diseño: darle al jugador cosas para fabricar sin romper la tensión de la mesa.</p>
+  <div class="vision-beats">
+    <p><b>Amuletos con vencimiento.</b> Los poderes van a poder craftearse como amuletos de uso limitado: duran una cantidad de partidas, de rondas o de activaciones, y después se consumen. Se fabrican con lo que se gana jugando, se equipan antes del duelo y se sienten mientras duran.</p>
+  </div>
+  <p>Por qué expiran:</p>
+  <div class="example">
+    <div><b>Mantienen la economía viva.</b> Hay siempre algo que fabricar, algo que gastar y una razón para volver a jugar mañana.</div>
+    <div><b>Evitan el mazo definitivo.</b> Nadie llega a una configuración óptima permanente que congele el meta. Cada temporada el arsenal se renueva porque el arsenal se termina.</div>
+    <div><b>Hacen que equiparlos sea una decisión.</b> Usar el amuleto bueno hoy, en esta partida, contra este rival, tiene peso. Guardarlo también.</div>
+    <div><b>Premian jugar, no acumular.</b> El que juega mucho tiene el taller lleno; el que compró una vez, no.</div>
+  </div>
+
+  <h3>6 · La promesa: siempre hay una chance</h3>
+  <p>Este es el pilar de diseño que sostiene todo lo anterior.</p>
+  <p><b>Incluso con todo maximizado, podés perder.</b> Un jugador con cada parte evolucionada, el mejor mazo y los amuletos más caros equipados sigue estando a una carta de cortarse. Las mejoras mueven la probabilidad, jamás la eliminan. El techo del juego no es la certeza: es una chance muy buena.</p>
+  <p>Esto vale por tres razones, y las tres son comerciales tanto como de diseño:</p>
+  <ol class="vision-steps">
+    <li><b>El novato nunca está fuera de la pelea.</b> El que abrió el juego hace diez minutos puede ganarle al veterano, y va a volver a intentarlo. No hay muro de entrada que desaliente.</li>
+    <li><b>El veterano nunca se aburre.</b> Su ventaja es real y se siente en cada racha larga, pero tiene que seguir jugando bien. La tensión no se compra.</li>
+    <li><b>Ganar siempre significa algo.</b> Cuando la victoria no está garantizada, la victoria se celebra. Ese es el clip que se comparte.</li>
+  </ol>
+  <p class="vision-punch">En Axie Chance la suerte no es lo que te pasa: es lo que decidís tentar. Y siempre, siempre, hay una chance.</p>
+
+  <h3>7 · Fricción cero, camino claro a Web3</h3>
+  <div class="example">
+    <div><b>Se abre y se juega.</b> HTML5 y JavaScript nativo, sin instalación, sin wallet, sin firmar nada para la primera partida.</div>
+    <div><b>Se aprende jugando.</b> Un tutorial de cinco rondas jugables, sin modales ni paredes de texto: una flecha, un brillo y la partida siguiendo adelante.</div>
+    <div><b>Se juega solo o acompañado.</b> Campaña por niveles contra los starters de Origins, duelos contra una CPU con dificultad elegible, y partidas online 1v1 por sala con código y QR —le mandás un link a un amigo de cualquier país y están jugando.</div>
+    <div><b>La conversión es un paso, no un salto.</b> Conectando Ronin Waypoint, el juego lee la metadata del Axie y sus Part Evolutions y arma el mazo personalizado solo. El jugador no cambia de juego: el mismo juego se vuelve suyo.</div>
+  </div>
+
+  <h3>8 · Hacia dónde va</h3>
+  <div class="example">
+    <div><b>Integración on-chain.</b> Ronin Waypoint y Axie Core API para leer genes y Part Evolutions reales, asignación procedimental de las seis cartas anatómicas según el Axie conectado, y acreditación real de AXP contra el endpoint oficial de Sky Mavis.</div>
+    <div><b>Taller de amuletos.</b> Crafteo de amuletos con vencimiento y de mejoras de mazo, con su economía de materiales alimentada por jugar.</div>
+    <div><b>Competencia.</b> Matchmaking en tiempo real, temporadas con leaderboards y modo King of the Hill.</div>
+    <div><b>Coleccionismo visible.</b> Soporte cosmético para Axies Mystic, Origin y Shiny con auras y efectos de ataque exclusivos: lo raro se tiene que ver en la mesa.</div>
+  </div>
+
+  <h3>9 · Para quién es</h3>
+  <div class="example">
+    <div><b>Jugadores casuales y móviles</b> que quieren partidas cortas, intensas y que se entiendan solas.</div>
+    <div><b>Holders y coleccionistas de Axie</b> que por primera vez ven el impacto de sus Part Evolutions traducido a algo que se siente turno a turno.</div>
+    <div><b>Creadores de contenido y audiencias de streaming</b>: tensión legible, suerte visible, remontadas épicas y clips de treinta segundos que se explican solos.</div>
+    <div><b>Todo el que todavía no entró al ecosistema</b> y necesita una primera puerta que no pida nada a cambio.</div>
+  </div>
 
   <form method="dialog"><button class="btn btn-primary">Entendido</button></form>
 </dialog>

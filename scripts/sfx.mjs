@@ -118,11 +118,28 @@ const PICKS = {
 };
 
 /**
- * Los dos temas: el del combate y el que entra cuando alguien queda con la vida corta.
- * Son mono a 16 kHz —así los publica el kit— y duran cerca de dos minutos cada uno.
+ * Los temas, uno por archivo. Qué suena en cada momento —la portada, el combate, la
+ * vida corta— y en qué orden rotan lo decide `PLAYLISTS` en `audio.js`: acá solo se
+ * miden.
+ *
+ * Los del combate son mono a 16 kHz, así los publica el kit (entre 3 y 7 MB). Los de
+ * menú y de evento son mono a 44,1 o 48 kHz y pesan de 10 a 16 MB. Faltan
+ * `lunar_menu`, `xmas_menu`, `lunar_battle`, `xmas_battle` y `halloween_2023`:
+ * pasan los 20 MB y jsDelivr no los sirve.
  */
 const TRACKS = {
-  battle: `${MUSICA}pve_1.wav`,
+  // La portada.
+  home: `${MUSICA}home.wav`,
+  summer23: `${MUSICA}summer23.wav`,
+  halloween: `${MUSICA}halloween.wav`,
+  lunar_bloodmoon: `${MUSICA}lunar_bloodmoon.wav`,
+  // El combate.
+  pve_1: `${MUSICA}pve_1.wav`,
+  pve_2: `${MUSICA}pve_2.wav`,
+  pve_3: `${MUSICA}pve_3.wav`,
+  pvp: `${MUSICA}pvp.wav`,
+  halloween_battle_2023: `${MUSICA}halloween_battle_2023.wav`,
+  // Alguien con la vida corta.
   boss: `${MUSICA}boss.wav`,
 };
 

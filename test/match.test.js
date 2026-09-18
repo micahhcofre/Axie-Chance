@@ -218,8 +218,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.equal(game.state.pool.length, 86 - MARKET_SIZE);
 }
 
-// El reloj: al que no juega su turno a tiempo se le desarma el ataque, como si se le
-// hubiera cortado la cadena, y al que no elige del centro a tiempo se queda sin carta.
+// El reloj: al que no juega su turno a tiempo el juego lo planta y ataca con lo que
+// llegó a robar, y al que no elige del centro a tiempo se queda sin carta.
 // La CPU no lleva reloj.
 {
   const game = createGame({ pace: 0, seed: 4, clock: { turn: 40, draft: 25 } });
@@ -243,9 +243,9 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
 
   await until(() => game.state.phase === 'draft' && game.drafting() === 'p1',
     'el turno no se cierra solo');
-  assert.equal(game.state.roundScores.p1, 0, 'sin tiempo el ataque falla');
-  assert.equal(game.state.chains.p1.busted, true, 'cuenta como cadena cortada');
-  assert.equal(game.state.draft.mode, 'plain', 'y el reparto es el de un fallo');
+  assert.ok(game.state.roundScores.p1 > 0, 'sin tiempo ataca con lo que tenía');
+  assert.equal(game.state.chains.p1.busted, false, 'la cadena no se corta');
+  assert.equal(game.state.draft.mode, null, 'y el reparto es el de plantarse');
   assert.ok(game.state.log.some((l) => l.text.startsWith('Se acabó el tiempo:')));
   assert.equal(game.state.clock?.kind, 'draft', 'el reparto trae su reloj');
   const deck = owned(game.state, 'p1');
@@ -601,5 +601,45 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   }
   console.log(`  recorrido de la cadena: ${aims.length} antes del golpe, ${busts.length} cortadas sin recorrer`);
 }
+
+// Levantarse de la mesa en el medio: la partida se corta de verdad (ver `abortMatch`).
+// Es lo que hace el que vuelve al menú contra la CPU —ahí no hay a quién darle la
+// victoria, así que no es abandonar (`forfeit`), es que la partida deja de existir—.
+// Sin esto la mesa seguía jugándose sola detrás de la portada: el reloj plantando por
+// el jugador, la máquina jugando su turno, y al volver a entrar la partida vieja ahí.
+{
+  const game = createGame({ pace: 0, seed: 12, clock: { turn: 40, draft: 25 } });
+  let emits = 0;
+  game.subscribe(() => { emits++; });
+  game.newMatch({ difficulty: 'normal', axie: 'bird' });
+  for (let i = 0; i < 400 && !(game.state?.turn === 'p1' && game.state.clock); i++) {
+    await new Promise((r) => setTimeout(r, 2));
+  }
+  assert.equal(game.state.turn, 'p1', 'no arranca el turno');
+  const played = game.state.match;
+
+  game.abortMatch();
+  assert.equal(game.state, null, 'la mesa queda vacía, como antes de la primera partida');
+
+  // Nada de lo que la partida había dejado agendado vuelve: ni el reloj —que a los
+  // 40 ms plantaría por el jugador— ni la carta que caía ni el turno de la máquina.
+  const after = emits;
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(game.state, null, 'nadie sigue jugando solo');
+  assert.equal(emits, after, 'y la mesa no se repinta más');
+
+  // Irse no rompe la próxima: la de después es otra partida, no la que se dejó.
+  game.newMatch({ difficulty: 'normal', axie: 'bird' });
+  assert.equal(game.state.round, 1);
+  assert.notEqual(game.state.match, played, 'y es una partida nueva');
+  assert.equal(game.state.totals.p1, 0, 'sin arrastrar el daño de la anterior');
+
+  // Sin partida no hay nada que cortar: irse dos veces no hace nada.
+  game.abortMatch();
+  game.abortMatch();
+  assert.equal(game.state, null);
+}
+
+console.log('✓ levantarse de la mesa ok');
 
 console.log('✓ flujo de partida ok');

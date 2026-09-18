@@ -219,41 +219,18 @@ export function attackViewOf(state, player) {
 }
 
 /**
- * Cuántas rondas tienen que haberse jugado enteras para que abandonar le cueste la
- * partida al que se va. Antes de eso irse no le da nada a nadie: la partida se anula.
+ * Cómo terminó la partida: `'p1'`, `'p2'`, `'tie'`, o `null` si todavía se juega. Gana
+ * el que deja al otro sin vida; si los dos quedaron en cero —una última chance que
+ * conecta— es empate.
  *
- * Sin este margen, entrar a una sala y ver que te tocó un rival que no te gusta se
- * resolvía yéndose en la primera ronda y regalándole una victoria que no jugó. Y al
- * revés, ganar por abandono tiene que ser algo que pasó en una partida de verdad.
- */
-export const FORFEIT_ROUNDS = 5;
-
-/** Las rondas ya cerradas: la que está en curso todavía no cuenta. */
-const roundsDone = (state) =>
-  (['roundEnd', 'matchEnd'].includes(state.phase) ? state.round : state.round - 1);
-
-/**
- * Qué pasa si `player` abandona ahora: el asiento que gana, o `null` si la partida se
- * anula. Lo usa la partida al cerrarse, y la pantalla para avisarlo antes de que el
- * jugador confirme: las dos cosas tienen que salir de la misma cuenta.
- */
-export function forfeitWinner(state, player) {
-  return roundsDone(state) >= FORFEIT_ROUNDS ? other(player) : null;
-}
-
-/**
- * Cómo terminó la partida: `'p1'`, `'p2'`, `'tie'`, `'void'`, o `null` si todavía se
- * juega. Gana el que deja al otro sin vida; si los dos quedaron en cero —una última
- * chance que conecta— es empate.
- *
- * Si alguien abandonó, gana el que se quedó, o nadie: `'void'` no es un empate —no se
- * jugó hasta el final—, es una partida que no cuenta (ver `FORFEIT_ROUNDS`).
+ * Si alguien abandonó, gana el que se quedó, sin importar en qué ronda fue: irse es
+ * dar la partida por perdida.
  *
  * Es una regla y por eso vive acá: la pantalla la pinta, no la decide.
  */
 export function matchResult(state) {
   if (!state || state.phase !== 'matchEnd') return null;
-  if (state.forfeit) return state.forfeit.winner ?? 'void';
+  if (state.forfeit) return state.forfeit.winner;
   const down = { p1: hpOf(state, 'p1') <= 0, p2: hpOf(state, 'p2') <= 0 };
   if (down.p1 && down.p2) return 'tie';
   return down.p2 ? 'p1' : 'p2';
@@ -488,18 +465,14 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (kind === 'turn') {
       // Ocupado es que ya está cerrando —la carta que cortó la cadena está cayendo—.
       if (canAct() !== player) return;
-      // Quedarse sin tiempo es fallar, no plantarse: si el reloj atacara con lo que
-      // hay, dejarlo correr sería una forma de plantarse sin apretar nada. La cadena se
-      // corta sin carta que la corte (`timeout` es para que la mesa diga por qué), y
-      // de ahí en más es un fallo como cualquiera: 0 de daño, ningún poder, y en el
-      // reparto una sola carta sin poder.
-      state.busy = true;
-      state.chains[player] = { ...state.chains[player], busted: true, timeout: true };
+      // Quedarse sin tiempo no arruina lo que ya se armó: el reloj se planta por el
+      // jugador y ataca con lo que llegó a robar. Dudar de más cuesta lo que la cadena
+      // hubiera crecido, no la cadena entera.
       const timeoutMsg = voice(player).you
-        ? tr('Se acabó el tiempo: se te desarma el ataque. 0 de daño.')
-        : tr('Se acabó el tiempo: se le desarma el ataque. 0 de daño.');
-      log(timeoutMsg, 'bad');
-      void finishTurn(player, 0, epoch);
+        ? tr('Se acabó el tiempo: atacás con lo que tenés.')
+        : tr('Se acabó el tiempo: ataca con lo que tiene.');
+      log(timeoutMsg, 'muted');
+      void stand();
     } else {
       if (state.phase !== 'draft' || drafter() !== player) return;
       log(tr('Se acabó el tiempo de elegir.'), 'muted');
@@ -1257,7 +1230,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (swing !== points) {
       const mods = [
         mine.strength ? tr('+{str} de fuerza', { str: mine.strength }) : '',
-        brutal ? tr('+{brutal} de garra brutal', { brutal }) : '',
+        brutal ? tr('+{brutal} de Energy Drink', { brutal }) : '',
         weakened ? tr('partido al medio por el caracol') : '',
       ].filter(Boolean);
       const swingMsg = voice(player).you
@@ -1963,8 +1936,8 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
 
   /**
    * `player` se va de la partida. Se cierra en el acto —lo que estaba en curso se
-   * corta, reloj incluido— y gana el otro o nadie, según cuánto se jugó (ver
-   * `forfeitWinner`).
+   * corta, reloj incluido— y gana el que se quedó, en la ronda que sea: irse es dar la
+   * partida por perdida.
    *
    * Solo lo usan las salas: contra la CPU irse es volver al menú, y no hay a quién
    * darle nada.
@@ -1975,17 +1948,34 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // el cierre que arranca la siguiente— se corten en vez de seguir jugando sin nadie.
     epoch++;
     stopClock();
-    const winner = forfeitWinner(state, player);
+    const winner = other(player);
     state.forfeit = { by: player, winner };
     state.phase = 'matchEnd';
     state.turn = null;
     state.draft = null;
     state.busy = false;
     log(`${who(player)} ${verb(player, 'abandonás', 'abandona')} la partida. ` +
-      (winner
-        ? `Gana ${whom(winner)}.`
-        : `Fue en las primeras ${FORFEIT_ROUNDS} rondas: no gana nadie.`), 'round');
+      `Gana ${whom(winner)}.`, 'round');
     emit();
+  }
+
+  /**
+   * Levantarse de la mesa: la partida deja de existir. Es lo que hace el que vuelve al
+   * menú en el medio —contra la CPU, en la Aventura o en el tutorial—, donde no hay a
+   * quién darle la victoria: enfrente está la máquina. Lo que estaba en curso se corta
+   * —reloj, corrutinas de la ronda, turnos de la máquina— y la mesa queda vacía, como
+   * antes de la primera partida. En una sala irse es abandonar, y eso es `forfeit`.
+   */
+  function abortMatch() {
+    if (!state) return;
+    // La época cambia para que lo que está andando —la carta que cae, el turno de la
+    // máquina, el cierre de la ronda— se corte en vez de seguir jugando solo.
+    epoch++;
+    clearTimeout(alarm);
+    state = null;
+    // Sin `emit`: acá no hay estado que mandar, y los que miran la partida esperan
+    // siempre uno (ver `subscribe` y `refresh`). Desarmar la mesa es de quien la pinta
+    // (ver el `abortMatch` que devuelve `mount` en `ui.js`).
   }
 
   return {
@@ -1998,8 +1988,8 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     drafter,
     acting,
     canRenew,
-    /** Vuelve a pintar el estado actual sin tocarlo. */
-    refresh: () => emit(),
+    /** Vuelve a pintar el estado actual sin tocarlo. Sin partida no hay nada que pintar. */
+    refresh: () => { if (state) emit(); },
     subscribe(fn) {
       listeners.add(fn);
       if (state) fn(state);
@@ -2014,5 +2004,6 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     skipDraft,
     renewMarket,
     forfeit,
+    abortMatch,
   };
 }

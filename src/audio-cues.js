@@ -25,6 +25,16 @@ import { hitDelay } from './vfx.js';
 const STEP = 0.06;
 const TOP_RATE = 1.55;
 
+/**
+ * El tono que le toca a una cadena de `len` eslabones, en esa misma escalera.
+ *
+ * Se exporta porque no es solo del tic: cualquier cosa que quiera decir "la cadena
+ * está así de larga" tiene que sonar en el mismo idioma, o son dos escaleras distintas
+ * y ninguna se aprende. La usa el impacto del Rocket Stamp al fusionarse (ver
+ * `fallOnto` en `ui.js`), que es el otro momento en que una cadena crece.
+ */
+export const chainRate = (len) => Math.min(1 + STEP * Math.max(0, len - 1), TOP_RATE);
+
 /** Con menos de esto de vida, el combate cambia de música. */
 const LOW_HP = 0.3;
 
@@ -94,7 +104,7 @@ export function createCues(audio) {
       // tarde, y para entonces ya había leído en la pantalla que se le había cortado.
       if (now.cards > was.cards) {
         if (now.busted) audio.sfx('bust');
-        else audio.sfx('draw', { rate: Math.min(1 + STEP * (now.cards - 1), TOP_RATE) });
+        else audio.sfx('draw', { rate: chainRate(now.cards) });
       }
 
       // El escudo que se gasta del todo devuelve la cáscara, justo después del golpe,

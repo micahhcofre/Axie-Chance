@@ -17,8 +17,7 @@
 // tenemos: no hace falta ir a preguntar por el cable ni escribirlas de nuevo.
 import { mount } from './ui.js';
 import {
-  FORFEIT_ROUNDS, actingOf, canRenewFor, draftableFor, draftingSeat, drafterOf,
-  forfeitWinner, unseenOf,
+  actingOf, canRenewFor, draftableFor, draftingSeat, drafterOf, unseenOf,
 } from './game.js';
 import { AXIES, axie, axieArt } from './axies.js';
 import { SYMBOLS, crest } from './data.js';
@@ -252,7 +251,7 @@ const roomTitle = (name) => (name ? tr('Sala de {name}', { name }) : tr('Sala'))
  * quién estaba sin quedar sentado, y cuando el otro aparato no llegaba la pantalla se
  * quedaba esperando sin decir a qué.
  */
-export function connect({ chooseAxie = null } = {}) {
+export function connect({ chooseAxie = null, audio = null } = {}) {
   const id = clientId();
   let sala = cleanRoom({ code: new URLSearchParams(location.search).get('sala')?.toUpperCase() }).code || null;
   const game = createRemoteGame((action, arg) => act(action, arg));
@@ -318,7 +317,7 @@ export function connect({ chooseAxie = null } = {}) {
       // puestos sus escuchas y de ahí en más se repinta sola con cada estado.
       if (msg.state && !mounted) {
         mounted = true;
-        mount(game, { seat, net: true, leave: quit });
+        mount(game, { seat, net: true, leave: quit, ...(audio ? { audio } : {}) });
       }
     }
     paint();
@@ -728,6 +727,9 @@ export function connect({ chooseAxie = null } = {}) {
     const show = !sala || !game.state || (!live && !ended);
     box.hidden = !show;
     if (!show) return;
+    // Sin partida todavía, el lobby y la sala suenan como la portada. Con el cable
+    // cortado en medio de una partida sigue el tema del combate.
+    if (!game.state) audio?.music('menu');
 
     const inRoom = Boolean(sala);
     byId('net-lobby').hidden = inRoom;
@@ -799,15 +801,13 @@ export function connect({ chooseAxie = null } = {}) {
   byId('net-axie').addEventListener('click', () => chooseAxie?.());
   byId('net-close').addEventListener('click', leave);
 
-  // Abandonar pregunta antes, y dice qué va a pasar: en las primeras rondas se anula,
-  // después gana el otro. Es lo único de la partida que no se puede deshacer, y el
-  // que lo aprieta tiene que saber cuál de las dos cosas está eligiendo.
+  // Abandonar pregunta antes, y dice qué va a pasar: la partida se corta ahí y gana el
+  // otro. Es lo único de la partida que no se puede deshacer, y el que lo aprieta tiene
+  // que saber lo que está eligiendo.
   const quitBox = byId('quit-modal');
   byId('menu-btn').addEventListener('click', () => {
     if (!canQuit()) return;
-    byId('quit-note').innerHTML = forfeitWinner(game.state, seat)
-      ? tr('Ya se jugaron {n} rondas: si te vas, <b>gana el otro</b>.', { n: FORFEIT_ROUNDS })
-      : tr('Todavía no se jugaron {n} rondas: si te vas, la partida <b>se anula</b> y no gana nadie.', { n: FORFEIT_ROUNDS });
+    byId('quit-note').innerHTML = tr('Si te vas, la partida se termina ahí y <b>gana el otro</b>.');
     // Lo que dijo la última vez no cuenta: cerrarlo con Escape no lo pisa.
     quitBox.returnValue = '';
     quitBox.showModal();

@@ -1,4 +1,4 @@
-// El sonido: los efectos del Axie Origins Asset Kit y sus dos temas de fondo.
+// El sonido: los efectos del Axie Origins Asset Kit y sus temas de fondo.
 //
 // Va sobre la Web Audio API y no sobre `<audio>` porque el juego necesita tres cosas
 // que un `<audio>` no da: largar el mismo golpe dos veces sin cortar el anterior,
@@ -67,6 +67,40 @@ const PRESS_DETUNE = 0.08;
 
 /** Cuánto tarda un tema en entrar y en irse, en segundos. */
 const FADE = 1.5;
+
+/**
+ * Qué suena en cada momento. Cada lista es una rueda: se baraja, suena entera y se
+ * vuelve a barajar sin repetir el último tema, así dos partidas seguidas no arrancan
+ * con lo mismo y una partida larga no da la vuelta sobre un solo tema. Para sumar o
+ * sacar un tema alcanza con tocar esta lista (los temas medidos están en
+ * `audio-clips.js`; `npm run sfx` mide los nuevos).
+ *
+ * - `menu`: la portada, la Aventura y la sala antes de empezar. `home` es el tema de
+ *   la pantalla principal de Origins. Los otros medidos: `halloween` y
+ *   `lunar_bloodmoon`.
+ * - `battle`: la partida. Los cuatro combates del kit.
+ * - `boss`: alguien quedó con la vida corta.
+ */
+const PLAYLISTS = {
+  menu: ['home', 'summer23'],
+  battle: ['pve_1', 'pve_2', 'pve_3', 'pvp'],
+  boss: ['boss'],
+};
+
+/**
+ * Cuánto tarda en entrar el tema siguiente de la rueda. Arranca encima de la cola del
+ * anterior, que se está yendo (ver `overlapOf`): un fundido corto de entrada y los dos
+ * se cruzan en vez de pisarse. Si el que sigue es el mismo tema, entra sin fundido,
+ * como siempre.
+ */
+const SWAP = 1;
+
+/**
+ * Cuántos temas decodificados se guardan. Uno de dos minutos y medio ocupa unos 30 MB
+ * ya decodificado: se guardan el que suena, el que sigue y uno más, y el resto se
+ * vuelve a pedir si hace falta (el navegador ya lo tiene en su caché).
+ */
+const KEEP_TRACKS = 3;
 /**
  * Los temas del kit no son bucles: terminan con un fundido. La vuelta siguiente se
  * larga encima de ese fundido, así el empalme queda tapado. Nunca menos de 2 s, aunque
@@ -118,15 +152,26 @@ export function createAudio() {
   const sfxGain = () => (prefs.sfx ? SFX_BUS * prefs.sfxVol : 0);
   const musicGain = () => MUSIC_BUS * prefs.musicVol;
   const Ctx = globalThis.AudioContext ?? globalThis.webkitAudioContext;
-  /** Qué tema se querría estar escuchando, aunque todavía no haya con qué. */
+  /** Qué lista se querría estar escuchando, aunque todavía no haya con qué. */
   let wanted = null;
   let ctx = null;
   let master = null;
   let sfxBus = null;
   let musicBus = null;
-  /** El tema sonando: sus pases encadenados y el temporizador del próximo. */
+  /** La lista sonando: sus pases encadenados y el temporizador del próximo. */
   let playing = null;
   const buffers = new Map();
+  /** Lo que le queda a cada rueda por sonar, y el último que sonó de cada una. */
+  const queues = {};
+  const lastOf = {};
+  /**
+   * El tema que cada lista tenía listo para seguir. Si la lista se cortó antes de
+   * llegar a él —se fue de la portada, se terminó la partida—, es con el que vuelve:
+   * volver a la portada no repite el tema que sonaba al irse.
+   */
+  const upcoming = {};
+  /** Los temas decodificados, del último que se usó al más viejo. */
+  let recent = [];
 
   /** Baja el wav y lo decodifica, una sola vez. `null` si no se pudo: es decorado. */
   function load(clip) {
@@ -192,8 +237,48 @@ export function createAudio() {
 
   // ---- música -----------------------------------------------------------------
 
-  /** Larga una vuelta del tema y deja programada la siguiente sobre su fundido. */
-  function pass(track, clip, buffer, at, fadeIn) {
+  /** El próximo tema de la rueda de `list`. */
+  function nextTrack(list) {
+    const tracks = PLAYLISTS[list];
+    if (!queues[list]?.length) {
+      const bag = tracks.slice();
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      // La rueda nueva no empieza con el que cerró la anterior.
+      if (bag.length > 1 && bag[0] === lastOf[list]) bag.push(bag.shift());
+      queues[list] = bag;
+    }
+    return (lastOf[list] = queues[list].shift());
+  }
+
+  /** Baja un tema y suelta los decodificados que ya no se van a usar pronto. */
+  function loadTrack(key) {
+    const clip = MUSIC[key];
+    recent = [key, ...recent.filter((k) => k !== key)];
+    for (const old of recent.splice(KEEP_TRACKS)) buffers.delete(soundUrl(MUSIC[old]));
+    return load(clip);
+  }
+
+  /**
+   * Larga `key` apenas esté bajado, si `run` sigue siendo lo que suena. Se compara la
+   * vuelta y no el nombre de la lista: portada, partida y portada de nuevo con el tema
+   * todavía bajando son la misma lista, y el pedido viejo no puede largar un segundo
+   * tema encima. Si no se pudo bajar, prueba con el que sigue, una vez por tema.
+   */
+  function play(run, key, fadeIn, tries = 1) {
+    loadTrack(key).then((buffer) => {
+      if (playing !== run) return;
+      if (buffer) pass(run, key, buffer, ctx.currentTime, fadeIn);
+      else if (tries < PLAYLISTS[run.list].length) play(run, nextTrack(run.list), fadeIn, tries + 1);
+    });
+  }
+
+  /** Larga una vuelta del tema y deja programado el siguiente de la rueda sobre su fundido. */
+  function pass(run, key, buffer, at, fadeIn) {
+    const { list } = run;
+    const clip = MUSIC[key];
     const { src, vol } = source(buffer, musicBus, clip.gain);
     if (fadeIn) {
       vol.gain.setValueAtTime(0, at);
@@ -201,17 +286,21 @@ export function createAudio() {
     }
     src.start(at);
     src.stop(at + clip.secs);
-    playing.sources.push({ src, vol });
+    run.sources.push({ src, vol });
+
+    // El siguiente se empieza a bajar ya: para cuando este llegue a su cola está listo.
+    const next = (upcoming[list] = nextTrack(list));
+    if (next !== key) loadTrack(next);
 
     const overlap = overlapOf(clip);
     // La cola se apaga mientras la vuelta siguiente ya está sonando: el empalme no se
     // oye ni cuando el tema termina más seco de lo que se midió.
     vol.gain.setValueAtTime(clip.gain, at + clip.secs - overlap);
     vol.gain.linearRampToValueAtTime(0, at + clip.secs);
-    playing.timer = setTimeout(() => {
-      if (playing?.track !== track) return;
-      playing.sources = playing.sources.filter((s) => s.src !== src);
-      pass(track, clip, buffer, ctx.currentTime, 0);
+    run.timer = setTimeout(() => {
+      if (playing !== run) return;
+      run.sources = run.sources.filter((s) => s.src !== src);
+      play(run, next, next === key ? 0 : SWAP);
     }, Math.max((clip.secs - overlap) * 1000, 1000));
   }
 
@@ -231,16 +320,13 @@ export function createAudio() {
     }
   }
 
-  function startMusic(track) {
-    const clip = MUSIC[track];
-    if (!clip) return;
+  function startMusic(list) {
+    if (!PLAYLISTS[list]) return;
     fadeOut();
-    playing = { track, sources: [], timer: 0 };
-    load(clip).then((buffer) => {
-      // Mientras se bajaba el tema pudo cambiar lo que hay que escuchar.
-      if (!buffer || playing?.track !== track) return;
-      pass(track, clip, buffer, ctx.currentTime, FADE);
-    });
+    playing = { list, sources: [], timer: 0 };
+    const key = upcoming[list] ?? nextTrack(list);
+    delete upcoming[list];
+    play(playing, key, FADE);
   }
 
   // ---- lo que usa el juego ----------------------------------------------------
@@ -375,14 +461,16 @@ export function createAudio() {
     },
 
     /**
-     * Qué tiene que estar sonando de fondo: `'battle'`, `'boss'` o `null`. Pedir lo
-     * mismo que ya suena no lo reinicia, así que se puede llamar en cada repintado.
+     * Qué tiene que estar sonando de fondo: `'menu'`, `'battle'`, `'boss'` o `null`
+     * (ver `PLAYLISTS`). Pedir lo mismo que ya suena no lo reinicia, así que se puede
+     * llamar en cada repintado. Volver a pedir una lista después de otra sí sigue su
+     * rueda: la partida siguiente arranca con otro tema.
      */
-    music(track) {
-      if (wanted === track) return;
-      wanted = track;
+    music(list) {
+      if (wanted === list) return;
+      wanted = list;
       if (!ctx || !prefs.music) return;
-      if (track) startMusic(track);
+      if (list) startMusic(list);
       else fadeOut();
     },
 

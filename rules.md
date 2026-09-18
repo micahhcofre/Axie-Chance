@@ -31,7 +31,7 @@ Se turnan. En tu turno:
 4. Podés seguir robando mientras no se corte.
 5. Al **plantarte**, soltás el ataque: el daño es el puntaje de la cadena.
 
-Si se te acaba el **reloj** (30 segundos), se te corta la cadena automáticamente.
+Si se te acaba el **reloj** (30 segundos), te plantás solo: el ataque sale con las cartas que llegaste a robar.
 
 ---
 
@@ -383,8 +383,8 @@ alcanza, se planta y lo asegura.
 | Turno | 30 segundos |
 | Draft (cada pick) | 20 segundos |
 
-- Si se agota en el turno: se corta la cadena (bust), ataque = 0.
-- Si se agota en el draft: se saltea el pick.
+- Si se agota en el turno: te plantás solo y atacás con la cadena que tenías.
+- Si se agota en el draft: no elegís nada y se pasa tu pick.
 - Los bots no tienen reloj.
 
 ---
@@ -392,9 +392,8 @@ alcanza, se planta y lo asegura.
 ## Abandono (forfeit)
 
 - Disponible en cualquier momento de la partida (pensado para red).
-- Si se completaron **5 o más rondas**: el que abandona pierde, el otro gana.
-- Si se completaron **menos de 5 rondas**: la partida se declara **nula** (`'void'`)
-  para prevenir dodging en rondas tempranas.
+- La partida deja de correr en el acto: el que abandona pierde y **gana el que se queda**,
+  en la ronda que sea.
 
 ---
 

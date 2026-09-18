@@ -88,12 +88,14 @@ function finish(state, down) {
 {
   const game = await table();
   game.forfeit('p2');
-  const view = resultView(game.state, { seat: 'p1', net: true });
-  assert.equal(view.outcome, 'void', 'irse temprano anula');
-  assert.deepEqual(view.stats, [], 'una partida anulada no tiene marcas');
-  assert.match(view.line, /Jugador 2 abandonó/);
-  assert.doesNotMatch(resultHtml(view), /confetti|result-rain|result-bolt/, 'ni escena');
-  console.log('  ✓ partida anulada');
+  const win = resultView(game.state, { seat: 'p1', net: true });
+  assert.equal(win.outcome, 'win', 'el que se queda gana, en la ronda que sea');
+  assert.match(win.line, /Jugador 2 abandonó/);
+  assert.match(resultHtml(win), /confetti/, 'con su escena');
+  const lose = resultView(game.state, { seat: 'p2', net: true });
+  assert.equal(lose.outcome, 'lose', 'y el que se va pierde');
+  assert.deepEqual(lose.cast.map((c) => c.stance), ['idle', 'win'], 'pero no queda tirado');
+  console.log('  ✓ abandono: gana el que se queda');
 }
 {
   const last = ADVENTURE_LEVELS.length;
@@ -157,11 +159,10 @@ function finish(state, down) {
   assert.equal(heard.filter((h) => h.key === 'take').length, 2, 'y cada objeto al caer');
 
   heard.length = 0;
-  s.forfeit = { by: 'p1', winner: null };
+  s.forfeit = { by: 'p1', winner: 'p2' };
   screen.show(s, { seat: 'p2', net: true });
-  assert.equal(node.dataset.outcome, 'void');
-  assert.equal(heard.filter((h) => ['win', 'lose', 'tie'].includes(h.key)).length, 0,
-    'la partida anulada no suena');
+  assert.equal(node.dataset.outcome, 'win', 'el abandono del otro se ve como victoria');
+  assert.equal(heard.filter((h) => h.key === 'win').length, 1, 'y suena como tal');
 
   node.handlers.click({ target: { closest: () => ({ dataset: { result: 'peek' } }) } });
   assert.equal(node.dataset.peek, 'true', 'se puede mirar la mesa');

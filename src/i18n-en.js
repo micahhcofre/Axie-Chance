@@ -370,6 +370,11 @@ export const EN_STRINGS = {
   'Mazo inicial · 10 cartas · sumale un símbolo con el +': 'Starter deck · 10 cards · add a symbol with +',
   '{name}: {n} en el mazo': '{name}: {n} in deck',
   'Con este vas a jugar hasta que lo cambies.': 'You will play with this one until you change it.',
+  'En uso': 'In use',
+  'Con mejoras': 'Boosted',
+  'Buscar': 'Search',
+  'Ningún Axie coincide': 'No Axie matches',
+  'Listo': 'Done',
   'Sacarle el {symbol} de más': 'Remove extra {symbol}',
   'Sumarle otro {symbol}': 'Add another {symbol}',
   'Sumarle uno de sus dos símbolos': 'Add one of its two symbols',
@@ -479,10 +484,10 @@ export const EN_STRINGS = {
   'el Jugador 2': 'Player 2',
   'al Jugador 2': 'to Player 2',
   'del Jugador 2': 'of Player 2',
-  'Se acabó el tiempo: se te desarma el ataque. 0 de daño.':
-    'Time is up: your attack collapses. 0 damage.',
-  'Se acabó el tiempo: se le desarma el ataque. 0 de daño.':
-    'Time is up: their attack collapses. 0 damage.',
+  'Se acabó el tiempo: atacás con lo que tenés.':
+    'Time is up: you attack with what you have.',
+  'Se acabó el tiempo: ataca con lo que tiene.':
+    'Time is up: they attack with what they have.',
   'Se acabó el tiempo de elegir.':
     'Time is up to choose.',
   'Vos rebarajás lo que ya salió.':
@@ -617,8 +622,8 @@ export const EN_STRINGS = {
     "{who} puts on the Gecko Mask: +{shield} shield, and the rival's next hit takes at most {cap} HP.",
   '+{str} de fuerza':
     '+{str} strength',
-  '+{brutal} de garra brutal':
-    '+{brutal} brutal claw',
+  '+{brutal} de Energy Drink':
+    '+{brutal} Energy Drink',
   'partido al medio por el caracol':
     'halved by Lazy Snail',
   'Vos atacás por {swing}: {points} de cadena {mods}.':
@@ -755,10 +760,8 @@ export const EN_STRINGS = {
     'When both players press Ready, it starts.',
   'Ya no':
     'Not ready',
-  'Ya se jugaron {n} rondas: si te vas, <b>gana el otro</b>.':
-    '{n} rounds have already been played: if you leave, <b>the opponent wins</b>.',
-  'Todavía no se jugaron {n} rondas: si te vas, la partida <b>se anula</b> y no gana nadie.':
-    '{n} rounds haven\'t been played yet: if you leave, the match is <b>voided</b> and no one wins.',
+  'Si te vas, la partida se termina ahí y <b>gana el otro</b>.':
+    'If you leave, the match ends there and <b>the opponent wins</b>.',
 
   // ui.js
   'Alargar columna {n}': 'Extend column {n}',
@@ -771,7 +774,6 @@ export const EN_STRINGS = {
   'Free Game — Elegí qué columna colocar': 'Free Game — Choose which column to place',
   'Free Game — {name} elige la columna': 'Free Game — {name} is choosing the column',
   'sin cartas': 'no cards',
-  'Se acabó el tiempo · el ataque falla': 'Time is up · attack fails',
   'Cadena cortada · el ataque falla': 'Chain busted · attack fails',
   '{name}: {dmg} de daño acumulado al romperse (escudo: {shield})':
     '{name}: {dmg} damage accumulated on break (shield: {shield})',
@@ -797,7 +799,6 @@ export const EN_STRINGS = {
   '{name}: el próximo ataque rival te saca {cap} de vida como máximo':
     '{name}: next rival attack takes at most {cap} HP',
   'Escudo: aguanta {shield} de daño': 'Shield: absorbs {shield} damage',
-  '{raw} de cadena': '{raw} chain',
   'DAÑO': 'DAMAGE',
   ', con {power}': ', with {power}',
   'La CPU cobra su carta del {icon}…': 'The CPU claims its {icon} card…',
@@ -844,9 +845,6 @@ export const EN_STRINGS = {
   'Botín': 'Loot',
   'Ver la mesa': 'View table',
   'Ver resultado': 'View result',
-  'Partida anulada': 'Match voided',
-  '{gone} abandonó en las primeras {rounds} rondas: no gana nadie.':
-    '{gone} forfeited in the first {rounds} rounds: no one wins.',
   '{gone} abandonó la partida.': '{gone} forfeited the match.',
   '{at}está eligiendo del centro…': '{at}is choosing from the center…',
   'Volver a las salas': 'Back to rooms',
@@ -951,38 +949,174 @@ export const EN_STRINGS = {
     '+3 damage per symbol in your longest chain',
 
   // index.html — Modal de visión del producto
+  // ── Visión del producto ───────────────────────────────────────────────────
   'Visión del producto': 'Product Vision',
-  'Un combate táctico 1v1 por turnos que fusiona':
-    'A tactical 1v1 turn-based combat that fuses',
-  ', encadenamiento de símbolos y construcción de mazo en tiempo real. La anatomía NFT del Axie deja de ser una tarjeta de estadísticas fijas: se convierte en la estructura de las cartas con las que jugás, premiando la evolución con mayor estabilidad probabilística.':
-    ", symbol chaining and real-time deckbuilding. Your Axie's NFT anatomy stops being a fixed stat card: it becomes the structure of the cards you play with, rewarding evolution with greater probabilistic stability.",
-  'El motor: apostar con matemática': 'The engine: betting with math',
-  'Cada racha pega por su largo': 'Each run hits for its length',
-  'al cuadrado': 'squared',
-  ', no en línea recta: una racha de 2 vale 4, una de 3 vale 9, una de 4 vale 16. Esa curva es lo que hace que cada carta extra que arriesgás valga sensiblemente más que la anterior — y que un corte de cadena la borre entera. El detalle completo de cadenas y mercado está en':
-    ", not linearly: a run of 2 is worth 4, a run of 3 is worth 9, a run of 4 is worth 16. That curve is what makes every extra card you risk worth noticeably more than the last — and what makes a broken chain wipe it all out. The full detail on chains and the market is in",
-  'Axie Core: tu anatomía es tu mazo': 'Axie Core: your anatomy is your deck',
-  'Cada una de las 6 partes del Axie —Ojos, Orejas, Cuernos, Boca, Espalda y Cola— está ligada a una carta favorable del mazo inicial. Evolucionar una parte le suma a esa carta un tercer símbolo, ampliando sus vías de conexión y bajando la tasa de corte.':
-    "Each of the Axie's 6 parts —Eyes, Ears, Horn, Mouth, Back and Tail— is tied to a favorable card in the starting deck. Evolving a part adds a third symbol to that card, widening its connection paths and lowering its bust rate.",
-  'Hoy esto se simula localmente con las mejoras (+) de la pantalla de elección de Axie: el mismo efecto matemático que tendría leer una Part Evolution real on-chain.':
-    'Today this is simulated locally with the (+) upgrades on the Axie selection screen: the same math effect that reading a real on-chain Part Evolution would have.',
-  'Ya jugable en esta ronda': 'Already playable this round',
-  '— tres dificultades, con una IA que planea varios turnos por delante.':
-    '— three difficulties, with an AI that plans several turns ahead.',
-  '— campaña de 6 niveles contra los starters de Origins.':
-    '— a 6-level campaign against the Origins starters.',
-  '— partidas online por sala con código y QR, sin servidor de costo fijo.':
-    '— online matches in a room with a code and QR, no fixed-cost server.',
-  '— 5 rondas guiadas que enseñan jugando.':
-    '— 5 guided rounds that teach by playing.',
-  '12 poderes de clase': '12 class powers',
-  '— dos por clase, uno sorteado por partida.':
-    '— two per class, one drawn per match.',
-  'Hacia dónde va': "Where it's headed",
-  'Ronda 2:': 'Round 2:',
-  'conectar Ronin Waypoint y la API de Axie Core para leer genes y Part Evolutions reales, acreditación de AXP on-chain y matchmaking en tiempo real.':
-    'connect Ronin Waypoint and the Axie Core API to read real genes and Part Evolutions, on-chain AXP accreditation, and real-time matchmaking.',
-  'Lanzamiento:': 'Launch:',
-  'temporadas competitivas con tablas de clasificación, soporte cosmético para Axies coleccionables (Mystic, Origin, Shiny) y un modo King of the Hill.':
-    'competitive seasons with leaderboards, cosmetic support for collectible Axies (Mystic, Origin, Shiny), and a King of the Hill mode.',
+  'Axie Infinity Vibeathon · Web, sin instalar nada · 3–4 minutos por partida':
+    'Axie Infinity Vibeathon · Web, nothing to install · 3–4 minutes per match',
+
+  '1 · El pitch en una línea': '1 · The pitch in one line',
+  'Encadená símbolos mientras te animes. Cada carta que robás hace tu golpe más grande; una sola carta que no conecta te lo borra entero. Eso es todo lo que hay que entender para jugar, y es todo lo que hace falta para no poder parar.':
+    'Chain symbols for as long as you dare. Every card you draw makes your hit bigger; a single card that does not connect wipes it out entirely. That is everything you need to understand to play, and everything it takes to be unable to stop.',
+
+  '2 · Por qué existe: una categoría nueva': '2 · Why it exists: a new category',
+  'Los juegos competitivos de Ronin piden lo mismo de entrada: aprender un árbol de habilidades, memorizar un meta de cartas, entender una economía antes de divertirse. Son juegos excelentes para el que ya está adentro.':
+    'Competitive games on Ronin all ask for the same thing up front: learn a skill tree, memorize a card meta, understand an economy before you get to have fun. They are excellent games for whoever is already inside.',
+  'Axie Chance apunta al otro lado del embudo. Su mecánica es tan simple que se explica en una frase y se entiende en un turno, pero la decisión que propone —¿robo una más o me planto?— es la misma que sostiene a los juegos de mesa más adictivos de la historia. Esa combinación abre una categoría que el ecosistema todavía no tiene:':
+    'Axie Chance aims at the other end of the funnel. Its mechanic is so simple it explains itself in one sentence and clicks in a single turn, yet the decision it poses —draw one more, or stand?— is the same one that carries the most addictive board games ever made. That combination opens a category the ecosystem does not have yet:',
+  'Casual de verdad.': 'Genuinely casual.',
+  'Sin tutorial de veinte minutos, sin glosario, sin wallet para empezar. Se abre un link y se juega.':
+    'No twenty-minute tutorial, no glossary, no wallet to get started. Open a link and play.',
+  'Tensión inmediata y visible.': 'Instant, visible tension.',
+  'El suspenso no requiere contexto: cualquiera que mire la pantalla entiende que esa próxima carta puede valer todo o nada. Es el formato ideal para streaming, clips cortos y para jugar al lado de alguien.':
+    'The suspense needs no context: anyone watching the screen understands that the next card could be worth everything or nothing. It is the ideal format for streaming, short clips, and playing next to someone.',
+  'Sesiones de bolsillo.': 'Pocket-sized sessions.',
+  'Tres minutos. Entra en la cola del supermercado y entra en un torneo.':
+    'Three minutes. It fits in a supermarket queue and it fits in a tournament.',
+  'Puerta de entrada al universo Axie.': 'A front door into the Axie universe.',
+  'El jugador conoce las seis clases, sus fortalezas y su anatomía jugando, no leyendo una wiki. Cuando llegue a los juegos más profundos de Ronin, ya va a hablar el idioma.':
+    'Players learn the six classes, their strengths and their anatomy by playing, not by reading a wiki. By the time they reach the deeper games on Ronin, they already speak the language.',
+  'Es el juego que un jugador de Axie le pasa a un amigo que nunca tocó Axie.':
+    'This is the game an Axie player hands to a friend who has never touched Axie.',
+
+  '3 · El corazón del juego': '3 · The heart of the game',
+  'La decisión': 'The decision',
+  'En tu turno robás de tu mazo personal. La primera carta abre una o más cadenas (una por cada símbolo que trae). Cada carta siguiente tiene que compartir al menos un símbolo con alguna cadena viva: si lo hace, la alarga. Si no comparte ninguno con ninguna cadena viva, se corta la cadena y tu ataque de esa ronda vale 0.':
+    'On your turn you draw from your personal deck. The first card opens one or more chains (one per symbol it carries). Every card after that has to share at least one symbol with a live chain: if it does, it extends it. If it shares none with any live chain, the chain breaks and your attack that round is worth 0.',
+  'En cualquier momento podés plantarte y descargar el daño acumulado sobre el Axie rival.':
+    'At any moment you can stand and unload the damage you have piled up onto the rival Axie.',
+  'Eso es el juego entero. Dos botones: robar o plantarse.':
+    'That is the whole game. Two buttons: draw or stand.',
+
+  'Por qué es divertido': 'Why it is fun',
+  'El daño es cuadrático, no lineal.': 'Damage is quadratic, not linear.',
+  'Una racha de 2 vale 4, una de 3 vale 9, una de 4 vale 16. Cada carta extra vale mucho más que la anterior, así que el juego te empuja permanentemente hacia adelante mientras el riesgo crece a la par. No es una decisión matemática fría: es una tentación.':
+    'A run of 2 is worth 4, a run of 3 is worth 9, a run of 4 is worth 16. Every extra card is worth far more than the last, so the game keeps pushing you forward while the risk climbs right alongside it. It is not a cold math problem: it is a temptation.',
+  'La codicia tiene forma visible.': 'Greed has a visible shape.',
+  'La rueda de probabilidades te dice, carta a carta, qué chance real tenés de seguir vivo. Se pinta de verde a rojo delante tuyo. Nadie se corta "por mala suerte": se corta porque decidió ir por una más con el 40% en la cara.':
+    'The odds dial tells you, card by card, the real chance you have of staying alive. It turns from green to red right in front of you. Nobody busts "out of bad luck": they bust because they chose to go for one more with 40% staring back.',
+  'Cada turno es una historia con final.': 'Every turn is a story with an ending.',
+  'Salís con una racha corta y segura, o vas por la cadena de cinco y volvés con 25 de daño y las manos temblando, o te cortás en la última y no te llevás nada. Tres minutos de partida son diez historias así.':
+    'You walk away with a short, safe run, or you go for the chain of five and come back with 25 damage and shaking hands, or you bust on the last card and take nothing. A three-minute match is ten stories like that.',
+  'Las rachas múltiples dan profundidad sin dar complejidad.': 'Parallel runs add depth without adding complexity.',
+  'Una carta de apertura con tres símbolos abre tres caminos en paralelo; los que no conectan quedan congelados, guardando lo que ya ganaron. El jugador nuevo ve "muchas chances de seguir". El jugador experto ve un árbol de decisiones. Los dos están jugando bien.':
+    'An opening card with three symbols opens three paths at once; the ones that do not connect freeze, keeping what they already earned. The new player sees "lots of chances to keep going". The expert sees a decision tree. Both of them are playing it right.',
+  'Tu mazo cambia mientras jugás.': 'Your deck changes while you play.',
+  'Al terminar cada turno elegís del mercado central —seis cartas boca arriba, compartidas— y lo que elegís se baraja en tu mazo al instante. Un ataque exitoso te deja llevarte una carta con poder o dos cartas simples; un bust te deja una simple, para que la partida perdida nunca sea una partida muerta. Nadie queda fuera de la remontada.':
+    'At the end of each turn you pick from the central market —six face-up cards, shared— and whatever you take is shuffled into your deck immediately. A successful attack lets you take one power card or two plain ones; a bust still leaves you one plain card, so a losing match is never a dead match. Nobody is locked out of the comeback.',
+  'Los poderes son personajes, no estadísticas.': 'The powers are characters, not stats.',
+  'El frasco de veneno que se revolea, el huevo que rebota y te deja un escudo que contraataca al romperse, el caracol que frena el próximo golpe rival a la mitad, la bebida energética que se vuelca sobre el número de daño y lo hace subir contando. Doce poderes de clase, seis activos por partida —uno por clase—, cada uno con su gesto, su sonido y su momento. El jugador no aprende una tabla: se acuerda del pulpo.':
+    "The poison vial that gets hurled, the egg that bounces in and leaves a shield that strikes back when it cracks, the snail that cuts the rival's next hit in half, the energy drink that spills over the damage number and makes it count upward. Twelve class powers, six live per match —one per class—, each with its own gesture, sound and moment. Players do not learn a table: they remember the octopus.",
+  'El final tiene un último aliento.': 'The ending has one last breath.',
+  'Quien queda en 0 HP recibe una Última Chance: un turno más, con halo de fuego, para llevarse al rival puesto. Si lo logra, la partida termina en empate. Muchas partidas se deciden ahí, y todas las que se deciden ahí se cuentan después.':
+    'Whoever drops to 0 HP gets a Last Chance: one more turn, wreathed in fire, to take the rival down with them. If they pull it off, the match ends in a draw. Plenty of matches are decided right there, and every one of them gets retold afterwards.',
+  'El reloj mantiene el pulso.': 'The clock keeps the pulse.',
+  '30 segundos para decidir, 20 por elección en el mercado. Nunca hay tiempo muerto, nunca hay parálisis por análisis.':
+    '30 seconds to decide, 20 per market pick. There is never dead time, and never analysis paralysis.',
+
+  '4 · Tu Axie es tu mazo': '4 · Your Axie is your deck',
+  'La integración con Axie Core no es un skin ni una ventaja comprada: es matemática de consistencia. Cada Axie entra a la arena con un mazo de 10 cartas derivado de su genética:':
+    'The Axie Core integration is not a skin and it is not a bought advantage: it is consistency math. Every Axie walks into the arena with a 10-card deck derived from its genetics:',
+  '6 cartas favorables': '6 favorable cards',
+  ', una por cada parte anatómica —Ojos, Orejas, Cuernos, Boca, Espalda, Cola—, todas con el símbolo de su clase base más un símbolo secundario que depende de la parte.':
+    ', one per body part —Eyes, Ears, Horn, Mouth, Back, Tail—, each carrying its base class symbol plus a secondary symbol set by that part.',
+  '4 cartas desfavorables': '4 unfavorable cards',
+  'derivadas de la tríada piedra-papel-tijera del Axie: aliado y presas aparecen dos veces cada uno, los counters apenas una. El mazo está sesgado a tu favor por diseño, no por azar.':
+    "derived from the Axie's rock-paper-scissors triad: ally and prey appear twice each, the counters barely once. The deck is tilted in your favor by design, not by chance.",
+  'Part Evolution como reductor de varianza.': 'Part Evolution as a variance reducer.',
+  'Evolucionar una parte on-chain agrega un tercer símbolo a la carta de esa parte. Eso no sube el daño directamente: multiplica las formas de conectar. Más conexiones significan menos cortes, cadenas más largas y la libertad de jugar más agresivo. La evolución no necesariamente te hace pegar más fuerte; te hace animarte más.':
+    "Evolving a part on-chain adds a third symbol to that part's card. It does not raise your damage directly: it multiplies your ways to connect. More connections mean fewer busts, longer chains and the freedom to play more aggressively. Evolution does not necessarily make you hit harder; it makes you braver.",
+  'El flywheel con Ronin': 'The Ronin flywheel',
+  'Jugás': 'Play',
+  'y ganás AXP según el largo de tus cadenas y el daño ejecutado.':
+    'and earn AXP based on the length of your chains and the damage you land.',
+  'Evolucionás': 'Evolve',
+  'partes on-chain en App.Axie con ese AXP.': 'parts on-chain on App.Axie with that AXP.',
+  'Optimizás': 'Optimize',
+  ': la parte evolucionada vuelve como una carta mejor en tu mazo inicial.':
+    ': the evolved part comes back as a better card in your starting deck.',
+  'Coleccionás y criás': 'Collect and breed',
+  'buscando combinaciones anatómicas con sinergia real en el mercado central.':
+    'hunting for anatomy combinations with real synergy in the central market.',
+
+  '5 · Amuletos que se craftean y se gastan': '5 · Amulets you craft and spend',
+  'La progresión a mediano plazo tiene un solo objetivo de diseño: darle al jugador cosas para fabricar sin romper la tensión de la mesa.':
+    'Mid-term progression has a single design goal: give players things to craft without breaking the tension at the table.',
+  'Amuletos con vencimiento.': 'Amulets that expire.',
+  'Los poderes van a poder craftearse como amuletos de uso limitado: duran una cantidad de partidas, de rondas o de activaciones, y después se consumen. Se fabrican con lo que se gana jugando, se equipan antes del duelo y se sienten mientras duran.':
+    'Powers will be craftable as limited-use amulets: they last a number of matches, rounds or activations, and then they are spent. You build them with what you earn by playing, equip them before the duel, and feel them for as long as they last.',
+  'Por qué expiran:': 'Why they expire:',
+  'Mantienen la economía viva.': 'They keep the economy alive.',
+  'Hay siempre algo que fabricar, algo que gastar y una razón para volver a jugar mañana.':
+    'There is always something to craft, something to spend and a reason to come back tomorrow.',
+  'Evitan el mazo definitivo.': 'They prevent the final build.',
+  'Nadie llega a una configuración óptima permanente que congele el meta. Cada temporada el arsenal se renueva porque el arsenal se termina.':
+    'Nobody reaches a permanent optimal setup that freezes the meta. Every season the arsenal renews itself, because the arsenal runs out.',
+  'Hacen que equiparlos sea una decisión.': 'They make equipping a real decision.',
+  'Usar el amuleto bueno hoy, en esta partida, contra este rival, tiene peso. Guardarlo también.':
+    'Spending the good amulet today, in this match, against this rival, carries weight. So does saving it.',
+  'Premian jugar, no acumular.': 'They reward playing, not hoarding.',
+  'El que juega mucho tiene el taller lleno; el que compró una vez, no.':
+    'Whoever plays a lot has a full workshop; whoever bought once does not.',
+
+  '6 · La promesa: siempre hay una chance': '6 · The promise: there is always a chance',
+  'Este es el pilar de diseño que sostiene todo lo anterior.':
+    'This is the design pillar holding up everything above.',
+  'Incluso con todo maximizado, podés perder.': 'Even fully maxed out, you can lose.',
+  'Un jugador con cada parte evolucionada, el mejor mazo y los amuletos más caros equipados sigue estando a una carta de cortarse. Las mejoras mueven la probabilidad, jamás la eliminan. El techo del juego no es la certeza: es una chance muy buena.':
+    'A player with every part evolved, the best deck and the most expensive amulets equipped is still one card away from busting. Upgrades move the probability; they never remove it. The ceiling of this game is not certainty: it is a very good chance.',
+  'Esto vale por tres razones, y las tres son comerciales tanto como de diseño:':
+    'This matters for three reasons, and all three are commercial as much as they are design:',
+  'El novato nunca está fuera de la pelea.': 'The newcomer is never out of the fight.',
+  'El que abrió el juego hace diez minutos puede ganarle al veterano, y va a volver a intentarlo. No hay muro de entrada que desaliente.':
+    'Someone who opened the game ten minutes ago can beat the veteran, and will come back to try again. There is no wall at the entrance to discourage them.',
+  'El veterano nunca se aburre.': 'The veteran is never bored.',
+  'Su ventaja es real y se siente en cada racha larga, pero tiene que seguir jugando bien. La tensión no se compra.':
+    'Their edge is real and it shows in every long run, but they still have to play well. Tension is not for sale.',
+  'Ganar siempre significa algo.': 'Winning always means something.',
+  'Cuando la victoria no está garantizada, la victoria se celebra. Ese es el clip que se comparte.':
+    'When victory is not guaranteed, victory gets celebrated. That is the clip people share.',
+  'En Axie Chance la suerte no es lo que te pasa: es lo que decidís tentar. Y siempre, siempre, hay una chance.':
+    'In Axie Chance luck is not what happens to you: it is what you choose to push. And there is always, always a chance.',
+
+  '7 · Fricción cero, camino claro a Web3': '7 · Zero friction, a clear road to Web3',
+  'Se abre y se juega.': 'Open it and play.',
+  'HTML5 y JavaScript nativo, sin instalación, sin wallet, sin firmar nada para la primera partida.':
+    'Native HTML5 and JavaScript, no install, no wallet, nothing to sign for the first match.',
+  'Se aprende jugando.': 'You learn by playing.',
+  'Un tutorial de cinco rondas jugables, sin modales ni paredes de texto: una flecha, un brillo y la partida siguiendo adelante.':
+    'A tutorial of five playable rounds, with no modals and no walls of text: an arrow, a glow, and the match carrying on.',
+  'Se juega solo o acompañado.': 'Play alone or together.',
+  'Campaña por niveles contra los starters de Origins, duelos contra una CPU con dificultad elegible, y partidas online 1v1 por sala con código y QR —le mandás un link a un amigo de cualquier país y están jugando.':
+    'A level campaign against the Origins starters, duels against a CPU at the difficulty you choose, and online 1v1 matches in a room with a code and a QR —send a friend in any country a link and you are playing.',
+  'La conversión es un paso, no un salto.': 'Conversion is a step, not a leap.',
+  'Conectando Ronin Waypoint, el juego lee la metadata del Axie y sus Part Evolutions y arma el mazo personalizado solo. El jugador no cambia de juego: el mismo juego se vuelve suyo.':
+    "Connect Ronin Waypoint and the game reads the Axie's metadata and its Part Evolutions and builds the personalized deck on its own. The player does not switch games: the same game becomes theirs.",
+
+  '8 · Hacia dónde va': '8 · Where it is headed',
+  'Integración on-chain.': 'On-chain integration.',
+  'Ronin Waypoint y Axie Core API para leer genes y Part Evolutions reales, asignación procedimental de las seis cartas anatómicas según el Axie conectado, y acreditación real de AXP contra el endpoint oficial de Sky Mavis.':
+    'Ronin Waypoint and the Axie Core API to read real genes and Part Evolutions, procedural assignment of the six anatomy cards from the connected Axie, and real AXP accreditation against the official Sky Mavis endpoint.',
+  'Taller de amuletos.': 'The amulet workshop.',
+  'Crafteo de amuletos con vencimiento y de mejoras de mazo, con su economía de materiales alimentada por jugar.':
+    'Crafting expiring amulets and deck upgrades, with a materials economy fed by playing.',
+  'Competencia.': 'Competition.',
+  'Matchmaking en tiempo real, temporadas con leaderboards y modo King of the Hill.':
+    'Real-time matchmaking, seasons with leaderboards and a King of the Hill mode.',
+  'Coleccionismo visible.': 'Collecting you can see.',
+  'Soporte cosmético para Axies Mystic, Origin y Shiny con auras y efectos de ataque exclusivos: lo raro se tiene que ver en la mesa.':
+    'Cosmetic support for Mystic, Origin and Shiny Axies with exclusive auras and attack effects: rare has to look rare on the table.',
+
+  '9 · Para quién es': '9 · Who it is for',
+  'Jugadores casuales y móviles': 'Casual and mobile players',
+  'que quieren partidas cortas, intensas y que se entiendan solas.':
+    'who want short, intense matches that explain themselves.',
+  'Holders y coleccionistas de Axie': 'Axie holders and collectors',
+  'que por primera vez ven el impacto de sus Part Evolutions traducido a algo que se siente turno a turno.':
+    'who for the first time see their Part Evolutions translated into something they feel turn by turn.',
+  'Creadores de contenido y audiencias de streaming': 'Content creators and streaming audiences',
+  ': tensión legible, suerte visible, remontadas épicas y clips de treinta segundos que se explican solos.':
+    ': readable tension, visible luck, epic comebacks and thirty-second clips that need no setup.',
+  'Todo el que todavía no entró al ecosistema': 'Everyone who has not entered the ecosystem yet',
+  'y necesita una primera puerta que no pida nada a cambio.':
+    'and needs a first door that asks for nothing in return.',
 };

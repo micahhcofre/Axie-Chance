@@ -40,7 +40,15 @@ export const SOUNDS = {
 
 /** Los temas de fondo. `tail` es el fundido del final, que es por donde se empalma. */
 export const MUSIC = {
-  battle: {'file':'Assets/OriginsKit/PvE/Music/pve_1.wav','secs':114.91,'tail':2.11,'gain':1.94},
+  home: {'file':'Assets/OriginsKit/PvE/Music/home.wav','secs':122.02,'tail':1,'gain':0.66},
+  summer23: {'file':'Assets/OriginsKit/PvE/Music/summer23.wav','secs':151.15,'tail':3.65,'gain':0.54},
+  halloween: {'file':'Assets/OriginsKit/PvE/Music/halloween.wav','secs':166.18,'tail':1.38,'gain':1.69},
+  lunar_bloodmoon: {'file':'Assets/OriginsKit/PvE/Music/lunar_bloodmoon.wav','secs':112.94,'tail':1.64,'gain':0.6},
+  pve_1: {'file':'Assets/OriginsKit/PvE/Music/pve_1.wav','secs':114.91,'tail':2.11,'gain':1.94},
+  pve_2: {'file':'Assets/OriginsKit/PvE/Music/pve_2.wav','secs':104.47,'tail':1.87,'gain':1.48},
+  pve_3: {'file':'Assets/OriginsKit/PvE/Music/pve_3.wav','secs':109.69,'tail':6.79,'gain':2.1},
+  pvp: {'file':'Assets/OriginsKit/PvE/Music/pvp.wav','secs':217.12,'tail':3.52,'gain':0.66},
+  halloween_battle_2023: {'file':'Assets/OriginsKit/PvE/Music/halloween_battle_2023.wav','secs':125.45,'tail':1.85,'gain':0.8},
   boss: {'file':'Assets/OriginsKit/PvE/Music/boss.wav','secs':122.69,'tail':1,'gain':1},
 };
 

@@ -119,8 +119,13 @@ const docHandlers = {};
 globalThis.document = {
   getElementById: (id) => (nodes[id] ??= node(id)),
   createElement: () => { const n = node(''); made.push(n); return n; },
+  // La capa del tutorial cuelga del cuerpo y busca por selector lo que va a señalar.
+  body: node('body'),
+  querySelector: () => null,
+  querySelectorAll: () => [],
   // Las flechas del teclado recorren el roster, y eso cuelga del documento.
   addEventListener(type, fn) { (docHandlers[type] ??= []).push(fn); },
+  removeEventListener() {},
 };
 // El navegador que se acuerda con qué jugás. La elección se guarda ahí porque tiene que
 // cruzar una recarga: a la sala se entra por `?red`, que es otra dirección (ver
@@ -135,12 +140,22 @@ globalThis.localStorage = {
 const { createLobby, symbolTally } = await import('../src/lobby.js');
 const { deckFor } = await import('../src/axies.js');
 const started = [];
-const portada = createLobby({ restart: (setup) => started.push(setup) });
+// La mesa de mentira: la portada le pide `restart` para arrancar una partida y `_game`
+// para el tutorial, que se monta sobre la partida que ya está puesta.
+const mesa = { restart: (setup) => started.push(setup), _game: null };
+const portada = createLobby(mesa);
 const fire = (id, type, event = {}) => nodes[id].handlers[type].forEach((fn) => fn(event));
 /** Qué Axie se está mirando en la elección, leído del cartel del bicho grande. */
 const mirando = () => AXIE_IDS.find((id) => nodes['lobby-choose-id'].innerHTML.includes(AXIES[id].name));
 /** Con cuál estás jugando, leído del botón de la portada. */
 const puesto = () => AXIE_IDS.find((id) => nodes['lobby-loadout-now'].innerHTML.includes(AXIES[id].name));
+/** Los Axies que muestra la colección, en orden, leídos de la grilla. */
+const coleccion = () => [...nodes['lobby-choose-roster'].innerHTML.matchAll(/data-axie="([\w-]+)"/g)].map((m) => m[1]);
+/** Tocar un Axie de la colección. */
+const tocarAxie = (id) => fire('lobby-choose-roster', 'click',
+  { target: { closest: () => ({ dataset: { axie: id } }) } });
+/** Una flecha del teclado. */
+const flecha = (key) => docHandlers.keydown.forEach((fn) => fn({ key }));
 
 assert.equal(nodes.lobby.hidden, false, 'la portada es lo primero que se ve');
 assert.equal(nodes['lobby-front'].hidden, false, 'y arranca en la tapa, con el botón de jugar');
@@ -185,20 +200,64 @@ assert.equal(cuenta.reduce((n, c) => n + c.n, 0), 19, 'diecinueve símbolos en d
 assert.equal((nodes['lobby-choose-tally'].innerHTML.match(/class="tally"/g) ?? []).length,
   cuenta.length, 'cada símbolo del mazo tiene su cuenta en pantalla');
 
-// Las flechas recorren los seis, y dan la vuelta entera: es un aro, no una lista con
-// bordes donde uno se queda trabado. Eligiendo el tuyo están los seis: no hay ningún
-// asiento de al lado que te saque uno.
-fire('lobby-next', 'click');
+// La colección los muestra a todos juntos, con el que tenés puesto marcado: los Axies
+// van a ser los de cada jugador, y muchos no se recorren de a uno.
+assert.deepEqual(coleccion(), AXIE_IDS, 'la colección tiene que mostrar a todos, en orden');
+assert.equal((nodes['lobby-choose-roster'].innerHTML.match(/roster-mark--on/g) ?? []).length, 1,
+  'uno solo lleva la marca de puesto');
+assert.equal(nodes['lobby-start'].textContent, 'Listo', 'con el tuyo en la ficha no hay nada que elegir');
+// Con seis —uno por clase— ni filtros ni buscador: no achicarían nada.
+assert.equal(nodes['lobby-choose-filters'].hidden, true, 'con pocos Axies los filtros sobran');
+assert.equal(nodes['lobby-choose-search'].hidden, true, 'y el buscador también');
+
+// Tocar uno lo pone en la ficha, y el botón pasa a elegirlo.
+const otroAxie = AXIE_IDS.find((id) => id !== yo);
+tocarAxie(otroAxie);
+assert.equal(mirando(), otroAxie, 'tocar un Axie de la colección lo pone en la ficha');
+assert.equal(nodes['lobby-start'].textContent, 'Elegir Axie');
+tocarAxie(yo);
+
+// Las flechas del teclado recorren la colección y dan la vuelta entera: al pasar el
+// último se vuelve al primero.
+flecha('ArrowRight');
 assert.notEqual(mirando(), yo, 'la flecha no movió nada');
-for (let i = 0; i < AXIE_IDS.length - 1; i++) fire('lobby-next', 'click');
+for (let i = 0; i < AXIE_IDS.length - 1; i++) flecha('ArrowRight');
 assert.equal(mirando(), yo, 'dando la vuelta entera se vuelve al mismo');
-fire('lobby-prev', 'click');
-docHandlers.keydown.forEach((fn) => fn({ key: 'ArrowRight' }));
-assert.equal(mirando(), yo, 'las flechas del teclado recorren igual que los botones');
+flecha('ArrowLeft');
+flecha('ArrowRight');
+assert.equal(mirando(), yo, 'para atrás y para adelante es quedarse en el mismo');
+// Escribiendo en el buscador, las flechas son del cursor.
+docHandlers.keydown.forEach((fn) => fn({ key: 'ArrowRight', target: { tagName: 'INPUT' } }));
+assert.equal(mirando(), yo, 'las flechas del buscador no mueven el Axie');
+
+// El filtro de clase deja solo los de esa clase, y tocarlo de nuevo lo saca.
+const claseAjena = AXIES[otroAxie].class;
+const porClase = (filter) => fire('lobby-choose-filters', 'click',
+  { target: { closest: () => ({ dataset: { filter } }) } });
+porClase(claseAjena);
+assert.ok(coleccion().length > 0 && coleccion().every((id) => AXIES[id].class === claseAjena),
+  'el filtro tiene que dejar solo los de su clase');
+assert.match(nodes['lobby-choose-filters'].innerHTML, new RegExp(`data-filter="${claseAjena}" aria-pressed="true"`),
+  'y marcarse');
+flecha('ArrowRight');
+assert.equal(AXIES[mirando()].class, claseAjena, 'las flechas recorren solo lo filtrado');
+porClase(claseAjena);
+assert.deepEqual(coleccion(), AXIE_IDS, 'tocar el filtro puesto lo saca');
+
+// El buscador encuentra por nombre, sin importar tildes ni mayúsculas.
+const buscar = (value) => fire('lobby-choose-search', 'input', { target: { value } });
+const conTilde = AXIE_IDS.find((id) => /[áéíóú]/i.test(AXIES[id].name)) ?? AXIE_IDS[0];
+buscar(AXIES[conTilde].name.normalize('NFD').replace(/\p{M}/gu, '').toUpperCase());
+assert.ok(coleccion().includes(conTilde), 'buscar sin tildes y en mayúsculas lo tiene que encontrar');
+buscar('zzzz');
+assert.deepEqual(coleccion(), [], 'lo que no coincide no aparece');
+assert.match(nodes['lobby-choose-roster'].innerHTML, /choose-empty/, 'y la grilla lo dice');
+buscar('');
+assert.deepEqual(coleccion(), AXIE_IDS, 'borrar la búsqueda vuelve a mostrar todos');
 
 // Y el botón lo sienta y devuelve a la portada. Elegir tu Axie no arranca ninguna
 // partida: es la otra puerta, no un paso de la de jugar.
-fire('lobby-next', 'click');
+flecha('ArrowRight');
 const mio = mirando();
 fire('lobby-start', 'click');
 assert.deepEqual(started, [], 'elegir tu Axie no tiene que arrancar una partida');
@@ -209,7 +268,7 @@ assert.equal(puesto(), mio, 'el botón de la portada tiene que decir el que acab
 
 // La flecha de atrás, sin elegir nada, también devuelve a la tapa —y no cambia nada—.
 fire('lobby-loadout', 'click');
-fire('lobby-next', 'click');
+flecha('ArrowRight');
 fire('lobby-choose-back', 'click');
 assert.equal(nodes['lobby-front'].hidden, false, '"Volver" desde tu Axie vuelve a la tapa');
 assert.equal(puesto(), mio, 'volver sin elegir no tiene que cambiar tu Axie');
@@ -262,9 +321,9 @@ assert.equal(simbolos(), 20, 'sacar la mejora devuelve la carta como estaba');
 
 // Las mejoras son del bicho y no de la pantalla: el de al lado tiene su mazo pelado, y
 // al volver las tuyas siguen puestas.
-fire('lobby-next', 'click');
+flecha('ArrowRight');
 assert.equal(simbolos(), 19, 'las mejoras no se contagian al Axie de al lado');
-fire('lobby-prev', 'click');
+flecha('ArrowLeft');
 assert.equal(simbolos(), 20, 'y al volver siguen puestas');
 fire('lobby-start', 'click');
 assert.equal(puesto(), mio, 'salir de las mejoras no cambia el Axie que tenías puesto');
@@ -298,7 +357,7 @@ assert.equal(nodes['lobby-choose-title'].textContent, 'Elegí tu Axie');
 const vuelta = new Set();
 for (let i = 0; i < AXIE_IDS.length; i++) {
   vuelta.add(mirando());
-  fire('lobby-next', 'click');
+  flecha('ArrowRight');
 }
 assert.equal(vuelta.size, AXIE_IDS.length, 'la vuelta tiene los seis, sin restas');
 assert.equal(started.length, 1, 'elegir Axie no arranca ninguna partida');
@@ -315,12 +374,38 @@ assert.equal(nodes.lobby.hidden, false);
 assert.equal(nodes['lobby-menu'].hidden, false, 'vuelve directo al menú');
 fire('lobby-menu-close', 'click');
 assert.equal(nodes['lobby-front'].hidden, false, '"Volver" vuelve a la tapa');
-fire('lobby-rules', 'click');
-assert.equal(nodes['rules-modal'].open, true, 'las reglas se abren desde la portada');
-fire('lobby-symbols', 'click');
-assert.equal(nodes['symbols-modal'].open, true, 'los símbolos especiales se abren desde la portada');
+
+// Tocar afuera de la tabla también lo guarda; tocar adentro, no.
+fire('lobby-play', 'click');
+fire('lobby', 'click', { target: { closest: (sel) => (sel.includes('#lobby-play') ? {} : null) } });
+assert.equal(nodes['lobby-menu'].hidden, false, 'el toque que abre el menú no lo cierra');
+fire('lobby', 'click', { target: { closest: (sel) => (sel.includes('#lobby-menu') ? {} : null) } });
+assert.equal(nodes['lobby-menu'].hidden, false, 'tocar adentro del menú no lo cierra');
+fire('lobby', 'click', { target: { closest: () => null } });
+assert.equal(nodes['lobby-menu'].hidden, true, 'tocar afuera del menú lo cierra');
+assert.equal(nodes['lobby-front'].hidden, false, 'y vuelve a la tapa');
 fire('lobby-vision', 'click');
 assert.equal(nodes['vision-modal'].open, true, 'la visión del producto se abre desde la portada');
+
+// Del tutorial se sale a la tapa y no al menú de modos: el que lo termina (o lo corta)
+// no viene de una partida que quiera repetir. Es la misma puerta de la mesa —el botón
+// de las tres rayitas, que adentro del tutorial dice "Salir del tutorial"— y la del
+// final (ver `endActionsHtml` en `ui.js`), así que se prueban las dos.
+{
+  const stub = { state: {}, newMatch() {}, refresh() {}, subscribe: () => () => {} };
+  mesa._game = stub;
+  fire('lobby-tutorial', 'click');
+  assert.equal(nodes.lobby.hidden, true, 'el tutorial se juega en la mesa, sin portada encima');
+  fire('menu-btn', 'click');
+  assert.equal(nodes['lobby-front'].hidden, false, 'salir del tutorial vuelve a la tapa');
+  assert.equal(nodes['lobby-menu'].hidden, true, 'y no al menú de modos');
+
+  // Y desde la pantalla del final, la misma puerta.
+  fire('lobby-tutorial', 'click');
+  fire('result', 'click', { target: { closest: (sel) => (sel.includes('menu') ? {} : null) } });
+  assert.equal(nodes['lobby-front'].hidden, false, 'el final del tutorial también sale a la tapa');
+  assert.equal(nodes['lobby-menu'].hidden, true, 'y tampoco al menú de modos');
+}
 
 portada.close();
 assert.equal(nodes.lobby.hidden, true);
@@ -367,7 +452,7 @@ console.log('✓ la portada ok (tu Axie por un lado, jugar por el otro)');
   assert.equal(nodes['lobby-front'].hidden, true, 'sin la tapa: a la sala ya entraste');
   assert.equal(mirando(), mio, 'y parada en el que tenés puesto');
 
-  fire('lobby-next', 'click');
+  flecha('ArrowRight');
   const otro = mirando();
   fire('lobby-start', 'click');
   assert.equal(avisos, 1, 'elegir se le avisa a la sala, que es la que va a repartir');
@@ -380,4 +465,27 @@ console.log('✓ la portada ok (tu Axie por un lado, jugar por el otro)');
   fire('lobby-choose-back', 'click');
   assert.equal(nodes.lobby.hidden, true, '"Volver" sale a la sala');
   console.log('  ✓ en una sala se abre la misma elección, encima');
+}
+
+// ---- la visión del producto se lee en los dos idiomas -------------------------
+// El pitch es el panel más largo del juego y el único escrito para alguien de afuera,
+// que lo más probable es que lo lea en inglés. Es todo HTML estático, así que no pasa
+// por `tr()`: lo traduce `translateDom()` nodo por nodo contra `EN_STRINGS`. Una frase
+// que se edita en el HTML y no en el diccionario no rompe nada — se queda en español
+// en medio del inglés, que es peor, porque nadie lo ve desde acá.
+{
+  const { EN_STRINGS } = await import('../src/i18n-en.js');
+  const html = read('index.html');
+  const modal = html.match(
+    /<dialog class="modal modal--vision o-panel" id="vision-modal">([\s\S]*?)\n<\/dialog>/,
+  );
+  assert.ok(modal, 'el modal de la visión del producto no está en el HTML');
+
+  const faltan = [];
+  for (const trozo of modal[1].split(/<[^>]+>/)) {
+    const texto = trozo.replace(/&amp;/g, '&').trim().replace(/\s+/g, ' ');
+    if (texto && EN_STRINGS[texto] === undefined && !faltan.includes(texto)) faltan.push(texto);
+  }
+  assert.deepEqual(faltan, [], 'la visión del producto tiene texto sin traducir en EN_STRINGS');
+  console.log('  ✓ la visión del producto entera tiene traducción al inglés');
 }

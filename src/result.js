@@ -16,9 +16,6 @@
 //             palabra se arma con dos mitades, un rayo en la costura, chispas, y los dos
 //             Axies mareados con el aturdido del kit.
 //
-// La partida anulada no tiene escena: no se jugó, y festejar o lamentar cualquier cosa
-// sería mentir. Queda la tela sola con el aviso de quién se fue.
-//
 // El orden de la entrada vive en `RESULT_BEAT` y es uno solo: el CSS lee los mismos
 // números como variables (`--t-*`) y el efecto, el sonido y los contadores se agendan
 // con ellos.
@@ -31,7 +28,7 @@ import { SYMBOLS, iconUrl } from './data.js';
 import { axie, axieArt } from './axies.js';
 import { createMotion } from './axie-motion.js';
 import { createVfx, preloadVfx } from './vfx.js';
-import { matchResult, seatVoice, FORFEIT_ROUNDS } from './game.js';
+import { matchResult, seatVoice } from './game.js';
 import { DIFFICULTY_LABELS, isFinalLevel } from './adventure.js';
 
 /**
@@ -95,15 +92,14 @@ export function resultView(state, { seat = null, net = false } = {}) {
   const me = seat ?? 'p1';
   const watching = net && !seat;
   const winner = result === 'p1' || result === 'p2' ? result : null;
-  const outcome = result === 'void' ? 'void'
-    : result === 'tie' ? 'tie'
-      : watching || winner === me ? 'win' : 'lose';
+  const outcome = result === 'tie' ? 'tie'
+    : watching || winner === me ? 'win' : 'lose';
   // El de adelante del escenario: el tuyo, salvo que estés mirando la sala de otros.
   const hero = watching && winner ? winner : me;
   const foe = otherSeat(hero);
   const nameOf = (seatId) => axie(state.axies[seatId]).name;
 
-  let title = { win: tr('¡Victoria!'), lose: tr('Derrota'), tie: tr('¡Empate!'), void: tr('Partida anulada') }[outcome];
+  let title = { win: tr('¡Victoria!'), lose: tr('Derrota'), tie: tr('¡Empate!') }[outcome];
   if (outcome === 'win' && watching) title = tr('¡Gana {name}!', { name: seatVoice(state, winner).name });
   if (outcome === 'win' && state.mode === 'tutorial') title = tr('¡TUTORIAL COMPLETADO!');
   if (outcome === 'win' && state.mode === 'adventure') {
@@ -122,14 +118,13 @@ export function resultView(state, { seat = null, net = false } = {}) {
   const gone = state.forfeit ? seatVoice(state, state.forfeit.by).name : null;
   const round = state.round;
   let line;
-  if (outcome === 'void') line = tr('{gone} abandonó en las primeras {rounds} rondas: no gana nadie.', { gone, rounds: FORFEIT_ROUNDS });
-  else if (gone) line = tr('{gone} abandonó la partida.', { gone });
+  if (gone) line = tr('{gone} abandonó la partida.', { gone });
   else if (outcome === 'win') line = tr('{name} quedó fuera de combate en la ronda {round}.', { name: nameOf(foe), round });
   else if (outcome === 'lose') line = tr('{name} te ganó en la ronda {round}.', { name: nameOf(foe), round });
   else line = tr('Doble KO en la ronda {round}.', { round });
 
   const records = state.records?.[hero] ?? { hit: 0, chain: 0 };
-  const stats = outcome === 'void' ? [] : [
+  const stats = [
     { key: 'damage', label: tr('Daño hecho'), value: state.totals?.[hero] ?? 0 },
     { key: 'hit', label: tr('Mejor golpe'), value: records.hit },
     { key: 'chain', label: tr('Cadena más larga'), value: records.chain },
@@ -142,7 +137,6 @@ export function resultView(state, { seat = null, net = false } = {}) {
     win: [{ seat: hero, stance: 'win', role: 'hero' }],
     lose: [{ seat: hero, stance: down, role: 'hero' }, { seat: foe, stance: 'win', role: 'rival' }],
     tie: [{ seat: hero, stance: 'ko', role: 'hero' }, { seat: foe, stance: 'ko', role: 'rival' }],
-    void: [{ seat: hero, stance: 'idle', role: 'hero' }],
   }[outcome].map((c) => ({ ...c, axie: state.axies[c.seat], color: SYMBOLS[state.symbols[c.seat]]?.color }));
 
   return { outcome, hero, foe, title, kicker, line, stats, cast, rewards: rewardsOf(state, me) };
@@ -200,7 +194,6 @@ function resultSkyHtml(view) {
     tie: `<i class="result-half result-half--l" style="--c:${a}"></i><i class="result-half result-half--r" style="--c:${b}"></i>` +
       `<svg class="result-bolt" viewBox="0 0 40 400" preserveAspectRatio="none"><polyline points="22,0 12,70 26,120 8,200 28,250 14,330 24,400"/></svg>` +
       `${resultBitsHtml('clash', 24)}`,
-    void: '<i class="result-glow"></i>',
   }[view.outcome];
   return `<div class="result-sky" aria-hidden="true">${sky}</div>`;
 }
@@ -214,7 +207,6 @@ function resultBannerHtml(view) {
       img('result-web-l.png', 'result-deco result-web result-web--l') +
       img('result-web-r.png', 'result-deco result-web result-web--r'),
     tie: img('result-branch.png', 'result-deco result-branch') + img('result-twig.png', 'result-deco result-twig'),
-    void: '',
   }[view.outcome];
   const cloth = view.outcome === 'tie'
     ? `<i class="result-cloth result-cloth--l" style="--cloth:url('${iconUrl('result-cloth-blue.png')}')"></i>` +
@@ -354,12 +346,10 @@ export function createResult(node, { audio = null } = {}) {
       node.hidden = false;
 
       // El remate suena con la pantalla y no con el último golpe: el pico del sonido cae
-      // sobre el efecto del kit. La anulada no suena: no se ganó ni se perdió nada.
+      // sobre el efecto del kit.
       const sound = { win: 'win', lose: 'lose', tie: 'tie' }[view.outcome];
-      if (sound) {
-        preloadVfx(sound);
-        audio?.sfx(sound, { delay: wait + RESULT_BEAT.fx });
-      }
+      preloadVfx(sound);
+      audio?.sfx(sound, { delay: wait + RESULT_BEAT.fx });
       // Cada objeto del botín hace su ruido al caer.
       view.rewards.forEach((_, i) => audio?.sfx('take', { delay: wait + RESULT_BEAT.loot + 150 + i * 350 }));
 

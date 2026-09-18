@@ -208,10 +208,13 @@ function fakeContext() {
   await idle();
   assert.equal(pedidos.length, bajados, 'la música no se baja hasta que se la prende');
   audio.setMusic(true);
-  await idle();
-  await idle();
-  assert.equal(pedidos.length, bajados + 1, 'ahí sí');
-  assert.match(pedidos[pedidos.length - 1], /pve_1\.wav$/);
+  for (let i = 0; i < 6; i++) await idle();
+  const COMBATE = /(pve_1|pve_2|pve_3|pvp)\.wav$/;
+  const temas = pedidos.slice(bajados);
+  assert.equal(temas.length, 2, 'ahí sí: el tema que suena y el que sigue en la rueda');
+  assert.match(temas[0], COMBATE);
+  assert.match(temas[1], COMBATE);
+  assert.notEqual(temas[0], temas[1], 'la rueda no repite el tema que acaba de sonar');
   const vueltas = started.length;
   audio.music('battle');
   await idle();
@@ -221,6 +224,23 @@ function fakeContext() {
   audio.music(null);
   const tema = started[started.length - 1];
   assert.ok(tema.src.stopped > ctx.currentTime, 'el tema se corta con fundido, no de golpe');
+
+  // La portada tiene su propia rueda.
+  audio.music('menu');
+  for (let i = 0; i < 6; i++) await idle();
+  assert.match(pedidos[pedidos.length - 2], /(home|summer23)\.wav$/, 'la portada suena a portada');
+
+  // La partida siguiente arranca con el tema que había quedado listo, no con el mismo.
+  // Ese ya estaba bajado: lo único que se pide es el que va después.
+  const sonando = started.length;
+  const pedidosAntes = pedidos.length;
+  audio.music('battle');
+  for (let i = 0; i < 6; i++) await idle();
+  assert.equal(started.length, sonando + 1, 'un solo tema a la vez');
+  const nuevos = pedidos.slice(pedidosAntes);
+  assert.equal(nuevos.length, 1, 'se pide solo el que sigue');
+  assert.ok(!nuevos.includes(temas[1]), 'vuelve con el que seguía, que ya estaba bajado');
+  audio.music(null);
 
   delete globalThis.AudioContext;
   delete globalThis.localStorage;
@@ -364,6 +384,36 @@ async function listening(seed = 3) {
   // El remate lo larga la pantalla del final, con su efecto (ver `test/result.test.js`).
   assert.equal(heard.filter((h) => ['win', 'lose', 'tie'].includes(h.key)).length, 0,
     'el resultado no suena desde las señales');
+}
+
+// La escalera de tonos es una sola, y la fusión del Rocket Stamp habla en ella.
+//
+// El Rocket no suma una carta a la cadena —`stackOnCard` reemplaza una, no agrega—, así
+// que no dispara el tic que va contando cómo crece: si su impacto no dijera nada, la
+// cadena daría su salto más grande en silencio. Suena en la misma escalera para que sea
+// el mismo idioma y no dos que hay que aprender por separado (ver `fallOnto` en `ui.js`).
+{
+  const { chainRate } = await import('../src/audio-cues.js');
+  const { stackOnCard } = await import('../src/rules.js');
+
+  assert.equal(chainRate(1), 1, 'una sola carta suena al tono del archivo');
+  assert.ok(chainRate(5) > chainRate(2), 'y cuanto más larga, más agudo');
+  assert.equal(chainRate(0), 1, 'una cadena vacía no baja de tono');
+  assert.equal(chainRate(999), chainRate(1000), 'la escalera tiene techo');
+
+  // Una cadena de dos cartas que comparten `aquatic`: la racha vale 2.
+  const chain = chainOf(card(['aquatic', 'bird']), card(['aquatic', 'plant']));
+  const topRun = (c) => c.runs.reduce((n, r) => Math.max(n, r.length), 0);
+  assert.equal(topRun(chain), 2);
+
+  // El Rocket cae sobre la primera columna con dos `aquatic` encima: la racha salta a 4
+  // sin que la cadena sume una sola carta.
+  const fused = stackOnCard(chain, 0, card(['aquatic', 'aquatic']));
+  assert.equal(fused.cards.length, chain.cards.length,
+    'fusionar no agrega cartas: por eso no hay tic que lo cuente');
+  assert.equal(topRun(fused), 4, 'pero la racha creció');
+  assert.ok(chainRate(topRun(fused)) > chainRate(topRun(chain)),
+    'y el impacto lo dice subiendo, que es lo único que lo dice');
 }
 
 console.log('✓ señales ok');

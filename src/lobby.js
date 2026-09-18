@@ -51,7 +51,7 @@ import {
   ADVENTURE_LEVELS, getAdventureProgress, getAdventureLevel, isLevelUnlocked,
   DIFFICULTY_LABELS,
 } from './adventure.js';
-import { openSymbols, openHud, ghostOut } from './ui.js';
+import { openHud, ghostOut } from './ui.js';
 import { tr, currentLang, setLang } from './i18n.js';
 
 // `el` y no `$` como en `ui.js` ni `byId` como en `net.js`: el build de un solo
@@ -294,6 +294,57 @@ function deckSlotHtml(base, card, own, added, open) {
 }
 
 /**
+ * Desde cuántos Axies aparece el buscador. Con pocos se ven todos de un vistazo y una
+ * caja de texto es un renglón que no ayuda a nadie; con muchos, el filtro por clase
+ * deja igual demasiados y buscar por nombre es lo más rápido.
+ */
+const SEARCH_FROM = 12;
+
+/** Hasta cuántos Axies la colección los muestra en naipes grandes (ver el CSS). */
+const FEW_AXIES = 8;
+
+/**
+ * Corre el scroll de `box` lo justo para que `item` quede adentro, en un solo eje.
+ *
+ * No es `scrollIntoView`: ese corre también a todos los de afuera que puedan correrse
+ * —con `overflow: hidden` incluido—, y la portada entera se desplazaba de costado.
+ */
+function nudgeInto(box, item, axis = 'y') {
+  if (!box?.getBoundingClientRect || !item?.getBoundingClientRect) return;
+  const [start, end, scroll] = axis === 'x' ? ['left', 'right', 'scrollLeft'] : ['top', 'bottom', 'scrollTop'];
+  const b = box.getBoundingClientRect();
+  const i = item.getBoundingClientRect();
+  const pad = 8;
+  if (i[start] < b[start]) box[scroll] -= b[start] - i[start] + pad;
+  else if (i[end] > b[end]) box[scroll] += i[end] - b[end] + pad;
+}
+
+/** Un nombre en minúsculas y sin tildes, para que "aguijon" encuentre a "Aguijón". */
+const foldText = (text) => String(text).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/**
+ * Un Axie en la colección: el dibujo quieto sobre el color de su clase, su nombre, el
+ * crest en la esquina y dos marcas —el que tenés puesto y el que tiene mejoras—.
+ *
+ * Quieto y sin dibujos alternativos (`alts: false`): son decenas en pantalla, y el que
+ * respira es el de la ficha. `data-axie` es lo que lee el clic (ver `createLobby`).
+ */
+function rosterTileHtml(id, { equipped, boosted }) {
+  const a = axie(id);
+  const sym = SYMBOLS[a.class];
+  const marks = [
+    equipped ? `<span class="roster-mark roster-mark--on">${tr('En uso')}</span>` : '',
+    boosted ? `<span class="roster-mark roster-mark--plus" title="${tr('Con mejoras')}">+</span>` : '',
+  ].join('');
+  return `<button class="roster-tile" data-axie="${id}" aria-pressed="false"
+    style="--c:${sym.color}" title="${a.name} · ${sym.name}">
+    <span class="roster-art">${axieArt(id, { alts: false })}</span>
+    <span class="roster-crest">${crest(a.class, 'sm')}</span>${marks}
+    <span class="roster-name">${a.name}</span>
+  </button>`;
+}
+
+/**
  * La portada, montada sobre el HTML que ya está en la página.
  *
  * @param {{restart: (setup?: object) => void}} ui  la pantalla del combate, que es
@@ -350,8 +401,12 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
    * cuál es cuál. Se cierra al elegir, al sacar una mejora y al cambiar de Axie.
    */
   let boostOpen = null;
-  /** Cuál de los seis se está mirando: un índice sobre `AXIE_IDS`. */
-  let at = 0;
+  /** El Axie de la ficha: el último que se tocó en la colección. */
+  let seen = pick;
+  /** La clase que filtra la colección, o `'all'`. */
+  let classFilter = 'all';
+  /** Lo que se escribió en el buscador. */
+  let query = '';
   /** El Axie grande, respirando. Es el mismo reproductor de la mesa y del paseo. */
   const heroMotion = createMotion(el('lobby-choose-art'), 0);
 
@@ -392,17 +447,75 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     if (which !== 'adventure') rivalMotion?.stop();
   }
 
-  /**
-   * El que se está mirando ahora. Se elige entre los seis, sin restas: elegís tu Axie
-   * sin saber contra quién vas a jugar, que es como tiene que ser.
-   */
-  const shown = () => AXIE_IDS[at];
+  /** El que está en la ficha. */
+  const shown = () => seen;
 
-  /** Repinta la pantalla entera con el Axie que se está mirando. */
+  /** Los Axies de la colección que pasan el filtro de clase y el buscador, en orden. */
+  function visibleIds() {
+    const needle = foldText(query.trim());
+    return AXIE_IDS.filter((id) => {
+      const a = axie(id);
+      if (classFilter !== 'all' && a.class !== classFilter) return false;
+      return !needle || foldText(a.name).includes(needle);
+    });
+  }
+
+  /**
+   * Los filtros de clase: "Todos" y una por clase que haya en la colección, cada una
+   * con cuántos tiene. Una clase sin Axies no se ofrece: sería un botón que vacía la
+   * grilla. El buscador se prende recién cuando la colección es grande.
+   */
+  function paintFilters() {
+    const count = {};
+    for (const id of AXIE_IDS) count[axie(id).class] = (count[axie(id).class] ?? 0) + 1;
+    const chip = (value, inner, label) =>
+      `<button class="choose-chip" data-filter="${value}" aria-pressed="${classFilter === value}"
+        title="${label}">${inner}</button>`;
+    el('lobby-choose-filters').innerHTML =
+      chip('all', `<span>${tr('Todos')}</span><b>${AXIE_IDS.length}</b>`, tr('Todos')) +
+      SYMBOL_IDS.filter((s) => count[s])
+        .map((s) => chip(s, `${crest(s, 'sm')}<b>${count[s]}</b>`, SYMBOLS[s].name))
+        .join('');
+    // Con pocos —uno por clase— filtrar no achica nada: la fila se guarda entera.
+    el('lobby-choose-filters').hidden = AXIE_IDS.length <= FEW_AXIES;
+    const search = el('lobby-choose-search');
+    search.hidden = AXIE_IDS.length < SEARCH_FROM;
+    search.placeholder = tr('Buscar');
+    search.value = query;
+  }
+
+  /**
+   * La grilla de la colección. Se arma entera solo cuando cambia qué se ve —abrir la
+   * pantalla, un filtro, una letra—: son decenas de dibujos, y tocar uno no puede
+   * volver a pedirlos todos. Cambiar de ficha pasa por `markRoster`.
+   */
+  function paintRoster() {
+    const ids = visibleIds();
+    const grid = el('lobby-choose-roster');
+    grid.dataset.few = String(AXIE_IDS.length <= FEW_AXIES);
+    grid.innerHTML = ids.length
+      ? ids.map((id) => rosterTileHtml(id, {
+          equipped: id === pick,
+          boosted: Object.keys(boosts[id] ?? {}).length > 0,
+        })).join('')
+      : `<p class="choose-empty">${tr('Ningún Axie coincide')}</p>`;
+    markRoster();
+  }
+
+  /** Marca en la grilla cuál está en la ficha, y lo trae a la vista si quedó afuera. */
+  function markRoster({ reveal = false } = {}) {
+    const grid = el('lobby-choose-roster');
+    for (const tile of grid.querySelectorAll?.('[data-axie]') ?? []) {
+      const on = tile.dataset.axie === seen;
+      tile.setAttribute('aria-pressed', String(on));
+      if (on && reveal) nudgeInto(grid, tile);
+    }
+  }
+
+  /** Repinta la ficha con el Axie que se está mirando. */
   function paintChoose() {
-    const ring = AXIE_IDS;
-    const id = ring[at];
-    const a = AXIES[id];
+    const id = seen;
+    const a = axie(id);
     const sym = SYMBOLS[a.class];
     // Dos mazos: el de fábrica, de donde salen las claves y los candidatos de cada
     // botón, y el mejorado, que es el que se dibuja y el que se cuenta abajo. Van en el
@@ -417,18 +530,21 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     // reproductor tiene que volver a tomarlas: sin esto queda quieto, con las capas
     // del anterior anotadas.
     el('lobby-choose-art').innerHTML = axieArt(id);
+    el('lobby-choose-art').style.setProperty('--c', sym.color);
     heroMotion.mount(id);
 
     el('lobby-choose-id').innerHTML = `<b class="choose-name">${a.name}</b>
-      <span class="choose-class" style="--c:${sym.color}">${crest(a.class)}${sym.name}</span>
-      <span class="choose-of">${tr('{current} de {total}', { current: ring.indexOf(id) + 1, total: ring.length })}</span>`;
+      <span class="choose-tags">
+        <span class="choose-class" style="--c:${sym.color}">${crest(a.class)}${sym.name}</span>
+        ${id === pick ? `<span class="choose-on">${tr('En uso')}</span>` : ''}
+      </span>`;
 
     const boosted = base.filter((c) => bag[c.key]).length;
     el('lobby-choose-deck-label').textContent = boosted
       ? (boosted > 1
           ? tr('Mazo inicial · 10 cartas · {boosted} mejoradas', { boosted })
           : tr('Mazo inicial · 10 cartas · {boosted} mejorada', { boosted }))
-      : tr('Mazo inicial · 10 cartas · sumale un símbolo con el +');
+      : tr('Mazo inicial · 10 cartas');
     el('lobby-choose-deck').innerHTML = base
       .map((c, i) => deckSlotHtml(c, deck[i], a.class, bag[c.key], boostOpen === c.key))
       .join('');
@@ -437,8 +553,8 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
         title="${tr('{name}: {n} en el mazo', { name: SYMBOLS[symbol].name, n })}">${crest(symbol)}<b>${n}</b></span>`)
       .join('');
 
-    // Qué pasa cuando apretás el botón. Es lo único que no se ve mirando la pantalla.
-    el('lobby-choose-note').textContent = tr('Con este vas a jugar hasta que lo cambies.');
+    // El que ya tenés puesto no se vuelve a elegir: el botón solo cierra.
+    el('lobby-start').textContent = id === pick ? tr('Listo') : tr('Elegir Axie');
   }
 
   /**
@@ -461,18 +577,24 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
       `${crest(a.class, 'sm')}<b>${a.name}</b>`;
   }
 
-  /** Deja la vuelta parada en un Axie, o en el primero libre si ese ya no está. */
-  function focusOn(id) {
-    const ring = AXIE_IDS;
-    at = Math.max(ring.indexOf(id), 0);
-  }
-
-  /** Un lugar para adelante o para atrás en la vuelta. Da la vuelta entera: es un aro. */
-  function browse(step) {
-    const ring = AXIE_IDS;
-    at = (at + step + ring.length) % ring.length;
+  /** Pone un Axie en la ficha. */
+  function show(id) {
+    if (!id || id === seen) return;
+    seen = id;
     boostOpen = null;
     paintChoose();
+    markRoster({ reveal: true });
+  }
+
+  /**
+   * Un lugar para adelante o para atrás entre los que se ven en la grilla, con las
+   * flechas del teclado. Da la vuelta: al pasar el último se vuelve al primero.
+   */
+  function browse(step) {
+    const ids = visibleIds();
+    if (!ids.length) return;
+    const i = ids.indexOf(seen);
+    show(ids[i < 0 ? 0 : (i + step + ids.length) % ids.length]);
   }
 
   /**
@@ -493,14 +615,22 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     // guarda ahí mismo, sin pasar por el botón de elegir, que es de elegir bicho.
     if (shown() === pick) remember();
     paintChoose();
+    paintRoster();
   }
 
   /** Abre la elección, parada en el Axie que tenés puesto. */
   function toChoose() {
     boostOpen = null;
-    focusOn(pick);
+    seen = pick;
+    // Se abre con la colección entera: un filtro que quedó puesto de la otra vez podría
+    // estar escondiendo justo el que tenés.
+    classFilter = 'all';
+    query = '';
+    paintFilters();
     paintChoose();
+    paintRoster();
     view('choose');
+    markRoster({ reveal: true });
   }
 
   function toAdventure() {
@@ -663,6 +793,17 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
 
   function open(which = 'front') {
     cleanupTutorial();
+    // Volver a la portada es levantarse de la mesa: la partida de atrás se corta acá
+    // —el reloj, los turnos de la máquina, la música— en vez de seguir jugándose sola
+    // detrás de la portada (ver `abortMatch` en `game.js`). Va en `open` y no en cada
+    // puerta porque las puertas son varias —las tres rayitas, el final, el mapa de la
+    // Aventura— y con la portada puesta nunca hay partida que siga. En una sala la
+    // partida no es de esta pantalla y no hay `ui` que cortar: irse de ahí es abandonar
+    // (ver `quit` en `net.js`).
+    ui?.abortMatch?.();
+    // La portada tiene su música (ver `PLAYLISTS` en `audio.js`): la partida la cambia
+    // por la del combate apenas reparte.
+    ui?.audio?.music('menu');
     // El paseo es de la portada. En una sala se abre una sola de estas pantallas —la
     // elección—, y tapa el terreno entero: poner cuatro Axies a caminar detrás sería
     // trabajo que el navegador hace para nadie.
@@ -696,6 +837,14 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   el('lobby-play').addEventListener('click', () => view('menu'));
   el('lobby-loadout').addEventListener('click', toChoose);
   el('lobby-menu-close').addEventListener('click', () => view('front'));
+  // El menú también se va tocando afuera de la tabla, como cualquier cartel que se
+  // abre encima. El toque que lo abrió sube hasta acá con el menú ya puesto: por eso
+  // el botón de jugar no cuenta, y tampoco la configuración, que abre lo suyo.
+  lobby.addEventListener('click', (e) => {
+    if (lobby.hidden || lobby.dataset.view !== 'menu') return;
+    if (e.target?.closest?.('#lobby-menu, #lobby-play, #lobby-settings-btn')) return;
+    view('front');
+  });
   el('lobby-choose-back').addEventListener('click', () => (net ? close() : view('front')));
   advBack.addEventListener('click', () => view('menu'));
   adv.addEventListener('click', (e) => {
@@ -710,10 +859,24 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
       playAdventure(selectedAdvLevel);
     }
   });
-  el('lobby-prev').addEventListener('click', () => browse(-1));
-  el('lobby-next').addEventListener('click', () => browse(1));
-  el('lobby-rules').addEventListener('click', () => el('rules-modal').showModal());
-  el('lobby-symbols')?.addEventListener('click', openSymbols);
+  // La colección: tocar un Axie lo pone en la ficha, tocar una clase filtra y escribir
+  // busca. Colgados de las cajas y no de cada botón, que se redibujan.
+  el('lobby-choose-roster').addEventListener('click', (e) => {
+    show(e.target.closest?.('[data-axie]')?.dataset?.axie);
+  });
+  el('lobby-choose-filters').addEventListener('click', (e) => {
+    const value = e.target.closest?.('[data-filter]')?.dataset?.filter;
+    if (!value) return;
+    classFilter = value === classFilter ? 'all' : value;
+    paintFilters();
+    paintRoster();
+    const filters = el('lobby-choose-filters');
+    nudgeInto(filters, filters.querySelector?.(`[data-filter="${classFilter}"]`), 'x');
+  });
+  el('lobby-choose-search').addEventListener('input', (e) => {
+    query = e.target.value ?? '';
+    paintRoster();
+  });
   el('lobby-vision')?.addEventListener('click', () => el('vision-modal').showModal());
 
   // El tutorial: una partida guionada con tooltips. Arranca un game propio y lo
@@ -771,11 +934,13 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     if (data) boost(data.boost, data.key, data.sym);
   });
 
-  // Las flechas del teclado recorren la vuelta, que es lo que uno intenta apenas ve dos
-  // flechas en pantalla. Solo esas dos: Enter y las letras ya las tiene tomadas la mesa
+  // Las flechas del teclado recorren la colección, en el orden de la grilla. Solo esas
+  // dos: Enter y las letras ya las tiene tomadas la mesa
   // (ver el `keydown` de `ui.js`), y con la portada encima seguirían llegando allá.
   document.addEventListener('keydown', (e) => {
     if (choose.hidden || lobby.hidden) return;
+    // Escribiendo en el buscador las flechas mueven el cursor, no el Axie.
+    if (e.target?.tagName === 'INPUT') return;
     if (e.key === 'ArrowLeft') browse(-1);
     else if (e.key === 'ArrowRight') browse(1);
   });
@@ -794,11 +959,19 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     return { open, close };
   }
 
+  /**
+   * La vuelta desde la mesa: al menú de modos, salvo saliendo del tutorial.
+   *
+   * De una partida se vuelve al menú y no al botón grande —el que abandona en el medio
+   * ya sabe a qué vino—, pero el tutorial no es una partida que se quiera repetir: se
+   * sale a la portada, igual que cuando se termina solo (ver `onDone` más arriba).
+   */
+  const backFromTable = () => open(activeTutorial ? 'front' : 'menu');
+
   // Abandonar la partida: la puerta de vuelta, adentro del menú de las tres rayitas.
   // La prende la portada al irse (ver `close`) —con la partida en red no hay portada a
-  // la que volver y el botón se queda guardado—, y vuelve al menú y no al botón grande: el que
-  // abandona en el medio de una partida ya sabe a qué vino.
-  el('menu-btn').addEventListener('click', () => open('menu'));
+  // la que volver y el botón se queda guardado—.
+  el('menu-btn').addEventListener('click', backFromTable);
 
   // La otra puerta de vuelta: la que aparece en la pantalla del final (ver
   // `endActionsHtml` en `ui.js`). Terminada la partida hay dos cosas que se pueden
@@ -807,7 +980,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   // otra: el botón lo dibuja la mesa, pero volver es asunto de la portada, y en la
   // partida en red no hay portada a la que volver.
   const doors = (e) => {
-    if (e.target.closest('[data-action="menu"]')) open('menu');
+    if (e.target.closest('[data-action="menu"]')) backFromTable();
     if (e.target.closest('[data-action="adv-map"]')) open('adventure');
   };
   el('controls').addEventListener('click', doors);

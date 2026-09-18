@@ -204,8 +204,12 @@ for (const cls of [
   'controls-acts',
   'lobby-aside', 'lobby-play--alt', 'loadout-cta', 'loadout-now',
   'lobby-foot', 'lobby-help',
-  'lobby-choose', 'choose-bar', 'choose-stage', 'choose-hero', 'choose-arrow',
-  'choose-sheet', 'choose-deck', 'choose-tally', 'choose-actions', 'card--deck', 'tally',
+  'lobby-choose', 'choose-bar', 'choose-sheet', 'choose-head', 'choose-info', 'choose-cards',
+  'choose-deck', 'choose-tally', 'choose-go', 'card--deck', 'tally',
+  // La colección de Axies: los filtros, el buscador, la grilla y cada naipe.
+  'choose-roster', 'choose-tools', 'choose-filters', 'choose-chip', 'choose-search',
+  'choose-grid', 'choose-empty', 'choose-tags', 'choose-on',
+  'roster-tile', 'roster-art', 'roster-crest', 'roster-name', 'roster-mark',
   // El (+) de cada carta: la mejora del Axie.
   'deck-slot', 'card-boost', 'boost-btn',
   // La sala en red, que es la única pantalla a la que se entra sin pasar por la

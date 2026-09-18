@@ -75,7 +75,7 @@ data.js ← rules.js ← ai.js
 | **`src/game.js`** | Máquina de estados: `createGame()`, turnos, robo (`hit`), plantarse (`stand`), draft del mercado (`takeCard`, `skipDraft`), renovación del mercado (`renewMarket`), apilado (`chooseStackTarget`), reloj de turno y draft, abandono (`forfeit`), cálculo de daño (`swingOf`), vida (`hpOf`), última chance (`lastChance`). |
 | **`src/ai.js`** | Toma de decisiones de la CPU: `decideDraw()` (expectimax; "duro" mide el ataque contra la partida con `attackWorth()` y la mesa de `attackViewOf()` en `game.js`), conectividad de cartas (`connectivity()`), valoración de poderes (`POWER_WORTH`), selección de draft (`planDraft()`, `pickBest()`, `pickBonus()`). |
 | **`src/ui.js`** | Renderizado reactivo de la mesa en `#arena`: render de cartas, rachas, HUD, barras de vida, escudos, status badges (veneno, hojas, caracol, etc.), dial de probabilidades (*odds*), controles de acción, selección interactiva de columnas para Free Game. |
-| **`src/result.js`** | Pantalla del final, una escena por resultado con las piezas de `BattleUI` del kit: **victoria** (tela azul, rama que florece, rayos, papelitos, `power_awaken`), **derrota** (tela roja, rama seca, telarañas, llovizna, letras que caen, rival festejando atrás, `death_mark_apply`), **empate** (media tela de cada lado que chocan, rayo, chispas, los dos mareados con `stunned`) y **anulada** (sin escena). `resultView()` decide qué ve cada pantalla (asiento, espectador, Aventura, tutorial), las marcas (`state.records`: mejor golpe y cadena más larga) y el **botín** (`state.rewards[asiento]`, ver `rewardsOf()`: `{ id, name, icon, qty?, rarity? }`). `RESULT_BEAT` es el orden de entrada que comparten CSS (`--t-*`), efectos, sonido (`win`/`lose`/`tie`) y contadores. Las puertas del final (`endActionsHtml` en `ui.js`) viven acá y no en el pie; "Ver la mesa" la apaga. |
+| **`src/result.js`** | Pantalla del final, una escena por resultado con las piezas de `BattleUI` del kit: **victoria** (tela azul, rama que florece, rayos, papelitos, `power_awaken`), **derrota** (tela roja, rama seca, telarañas, llovizna, letras que caen, rival festejando atrás, `death_mark_apply`), **empate** (media tela de cada lado que chocan, rayo, chispas, los dos mareados con `stunned`) y **empate**. `resultView()` decide qué ve cada pantalla (asiento, espectador, Aventura, tutorial), las marcas (`state.records`: mejor golpe y cadena más larga) y el **botín** (`state.rewards[asiento]`, ver `rewardsOf()`: `{ id, name, icon, qty?, rarity? }`). `RESULT_BEAT` es el orden de entrada que comparten CSS (`--t-*`), efectos, sonido (`win`/`lose`/`tie`) y contadores. Las puertas del final (`endActionsHtml` en `ui.js`) viven acá y no en el pie; "Ver la mesa" la apaga. |
 | **`src/lobby.js`** | Interfaz principal: portada con paseo de Axies (*strollers*), selector de modo de juego (Aventura, Solo CPU, Red), selector de Axie con asignación de mejoras (+), lanzador de tutorial, modales de reglas y enciclopedia de símbolos. |
 | **`src/adventure-levels.js`** | Definición declarativa de la campaña de niveles (`ADVENTURE_CAMPAIGN`): rivales starters, dificultades, nuevos poderes y showcase especial. |
 | **`src/adventure.js`** | Lógica del Modo Aventura: compilación y validación (`buildAdventureLevels`), derivación de `id` y `activePowers`, helpers (`isFinalLevel`, `nextLevelId`, `DIFFICULTY_LABELS`) y persistencia en `localStorage` (`axie-chance:adventure`). |
@@ -88,9 +88,10 @@ data.js ← rules.js ← ai.js
 | **`src/axies.js`** | Roster de los 6 Axies canónicos (Colmillo, Marea, Racha, Brote, Aguijón, Escama), mapeo de clases y partes cosméticas; `STARTERS` (Olek, Momo, Puffy, Buba, Pomodoro, Venoki), los rivales de la Aventura. |
 | **`scripts/starters.mjs`** | Baja los starters del Origins Asset Kit (Spine 3.8), corta su atlas en `Axies/<id>/` y deja el esqueleto listo para `npm run axies` y `npm run poses`. |
 | **`src/axie-motion.js`** | Animaciones de Axies mediante Web Animations API (posturas base, respiración, ataques, impactos, victoria, derrota). |
-| **`src/audio.js`** | Motor de sonido con Web Audio API: reproducción de SFX, música de fondo en loop, control de volumen maestro y muteo. |
+| **`src/audio.js`** | Motor de sonido con Web Audio API: reproducción de SFX, música de fondo en ruedas (`PLAYLISTS`: `menu` en la portada y la sala, `battle` en la partida, `boss` con la vida corta; se barajan, no repiten el último tema y se cruzan con fundido), control de volumen maestro y muteo. |
 | **`src/audio-cues.js`** | Orquestador de sonido: inspecciona las diferencias de estado (`lastHit`, cambios de fase, bust) y dispara los SFX adecuados. |
 | **`src/vfx.js`** | Animaciones de efectos visuales (golpes, chispas, veneno) basadas en atlas de sprites y `requestAnimationFrame`. |
+| **`src/camera.js`** | Cámara de la mesa con resortes: mueve solo el mundo (terreno, piso, Axies; las chapas la deshacen) vía `--cam-s`/`--cam-x`/`--cam-y` en el arena. Se acerca con cada carta de la cadena (`shotOf` en `ui.js`), se aleja al plantarse, se tira encima del que recibe el golpe (`punch`), lo empuja y tiembla (`hit`), y se hunde con el corte (`dip`). Nunca baja de escala 1 ni destapa el borde; quieta con `prefers-reduced-motion`. |
 | **`src/power-fx.js`** | Animación propia de cada carta con poder (los 12): la carta se enciende con su gesto, el amuleto llega al Axie con su recorrido (`FLIGHT_PATHS`: el huevo rebota, el veneno se revolea, la pluma cae del cielo, la fuerza se clava, la bebida se vuelca sobre el número de daño, que sube contando, el pulpo salta, la burbuja sube, la maceta brota, la hoja hace remolino, el caracol se arrastra, la daga vuelve con orbes de vida, la máscara cae puesta) y al llegar cae el efecto *buff* del kit, el gesto, el sonido y el cartel. También los segundos momentos: veneno al finalizar el turno, hojas al empezarlo, caracol que parte el ataque, Gecko que lo frena, burbuja que atrapa y abre la ronda, pulpo que abre la carta extra. Lee `state.powerFx` (lo anota `stageFx` en `game.js`) y la pluma en `lastHit`; el motor espera lo que pide `POWER_BEAT`. La chapa retiene vida y marcas hasta que el poder llega y la vida sube o baja contando; la cura y el escudo del huevo suben como cartel desde la chapa (`hudTag`). Los poderes ya no suenan desde `audio-cues.js`. |
 | **`scripts/dev.mjs`** | Servidor de desarrollo HTTP con live reload vía SSE (`/__dev`), `net.json` y el relay de salas por WebSocket en `/net/ws` (con `scripts/ws.mjs`, servidor WebSocket mínimo sin dependencias). |
 | **`relay/core.mjs`** | Relay de salas (el "cartero"): crea salas con código y llave de anfitrión, lista, conecta pantallas con el anfitrión y reenvía mensajes sin abrirlos. Almacén intercambiable: `memoryStore()` en dev, DynamoDB en AWS. |
@@ -155,16 +156,15 @@ El juego implementa formalmente la taxonomía oficial de Axie Infinity:
    - **Elegibilidad**: Solo podés elegir cartas que contengan tu símbolo de clase (o Free Game neutral).
    - **Renovación**: Si ninguna de las 6 cartas tiene tu símbolo, se puede renovar el centro entero una vez por draft (`renewMarket()`).
 5. **Reloj de Turno (`CLOCK`)**:
-   - 30 segundos para decidir robar o plantarse (si se agota, se corta la cadena automáticamente).
-   - 20 segundos por pick de draft (si se agota, se saltea el pick). Al renovar el centro se reinicia a 20 segundos.
+   - 30 segundos para decidir robar o plantarse (si se agota, te plantás solo y el ataque sale con lo que llegaste a robar).
+   - 20 segundos por pick de draft (si se agota, no se elige nada y se pasa el pick). Al renovar el centro se reinicia a 20 segundos.
 6. **Última Chance** (`lastChance()`):
    - Quien queda en 0 HP (cualquiera de los dos) tiene **un golpe más**. El que cierra lo juega en el mismo intercambio; el que abre (o quien cae después de atacar), abriendo la ronda siguiente, solo.
    - Juega su turno con halo de fuego: si logra dejar al rival en 0 HP también, la partida termina en **Empate** (*Draw*).
    - **Overkill**: si el daño pasado el cero supera 30 (`TUNING.overkill`, ver `overkillOf()`), no hay última chance.
    - **Sin cura** mientras está en 0 HP (`heal()` devuelve 0; las hojas no se gastan).
 7. **Abandono (`forfeit`)**:
-   - Si se abandona antes de la ronda 5 (`FORFEIT_ROUNDS`), la partida se declara **nula** (`'void'`) para evitar *dodging*.
-   - A partir de la ronda 5, quien abandona pierde y el oponente gana.
+   - La partida deja de correr en el acto: quien abandona pierde y **gana el que se queda**, en la ronda que sea.
 
 ---
 
@@ -256,7 +256,7 @@ Se ejecutan con `npm test` en Node.js puro usando `test/dom.mjs` como shim míni
 11. `test/audio.test.js`: Motor de audio Web Audio API, niveles de volumen y muting.
 12. `test/tutorial.test.js`: Presupuesto de texto (≤ 6 palabras, ≤ 2 burbujas por ronda, sin modales), mazos guionados (rueda, corte, Rocket) y partida guiada de punta a punta hasta la victoria.
 13. `test/adventure.test.js`: Configuración de 6 niveles, pools escalonados, progresión y persistencia.
-14. `test/result.test.js`: Pantalla del final: escena por pantalla (ganador, perdedor, espectador, empate, anulada, Aventura), marcas de la partida, botín saneado y escapado, y cuándo suena el remate.
+14. `test/result.test.js`: Pantalla del final: escena por pantalla (ganador, perdedor, espectador, empate, abandono, Aventura), marcas de la partida, botín saneado y escapado, y cuándo suena el remate.
 ---
 
 ## Infraestructura y Despliegue en AWS

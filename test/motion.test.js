@@ -130,3 +130,73 @@ for (const [id, clips] of Object.entries(POSES)) {
 }
 
 console.log(`✓ emotes ok (${EMOTES.length} por Axie)`);
+
+// La cámara de la mesa (`camera.js`). Lo que no se ve desde ningún otro lado es que
+// vuelva **exactamente** a su lugar: si se queda un pelo agrandada y cae de golpe en el
+// último cuadro, eso es la vibración que se vino a sacar. Y que nunca se aleje de más:
+// con la escala por debajo de 1 asoma el borde del dibujo.
+{
+  const { createCamera } = await import('../src/camera.js');
+  const frames = [];
+  globalThis.requestAnimationFrame = (fn) => frames.push(fn);
+  globalThis.cancelAnimationFrame = () => {};
+  Object.defineProperty(globalThis, 'performance', { value: { now: () => now }, configurable: true });
+  const vars = {};
+  const box = (left, width) => ({ getBoundingClientRect: () => ({ left, width }) });
+  const arena = {
+    ...box(0, 400), clientWidth: 400, clientHeight: 800,
+    style: { setProperty: (k, v) => { vars[k] = parseFloat(v); } },
+  };
+  const [left, right] = [box(0, 200), box(200, 200)];
+  const camera = createCamera(arena);
+  const seen = [];
+  const run = (ms) => {
+    for (let t = 0; t < ms; t += 16) {
+      tick(16);
+      for (const fn of frames.splice(0)) fn(now);
+      seen.push({ ...vars });
+    }
+  };
+
+  // Una cadena de cuatro cartas, el ataque y el golpe.
+  for (let n = 1; n <= 4; n++) {
+    camera.frame({ s: 1 + 0.011 * (n + 1), el: left, lean: 0.5, k: 26 });
+    camera.thump(0.3);
+    run(500);
+  }
+  assert.ok(vars['--cam-s'] > 1.04, `con cuatro cartas la cámara se acerca (${vars['--cam-s']})`);
+  camera.frame({ s: 1, k: 12 });
+  camera.punch(right, { at: 50, reach: 300, zoom: 0.08 });
+  run(350);
+  assert.ok(vars['--cam-s'] > 1.07, `el golpe la tira encima del que lo recibe (${vars['--cam-s']})`);
+  camera.hit(1, 12, 1);
+  camera.frame({ s: 1 });
+  run(3000);
+
+  for (const v of seen) {
+    const s = v['--cam-s'];
+    assert.ok(s >= 1, `la escala nunca baja de 1 (${s})`);
+    // Lo que sobra del dibujo a cada costado tiene que alcanzar para lo que se corre.
+    assert.ok(((s - 1) * arena.clientWidth) / 2 >= Math.abs(v['--cam-x']) - 1e-6,
+      `el corrimiento no destapa el borde (s=${s}, x=${v['--cam-x']})`);
+  }
+  // Y vuelve a su lugar de a poco, sin saltos: ningún cuadro del regreso se mueve más
+  // de un pelo respecto del anterior.
+  const back = seen.slice(-120).map((v) => v['--cam-s']);
+  for (let i = 1; i < back.length; i++) {
+    assert.ok(Math.abs(back[i] - back[i - 1]) < 0.004, `salto de escala al volver: ${back[i - 1]} → ${back[i]}`);
+  }
+  assert.deepEqual([vars['--cam-s'], vars['--cam-x'], vars['--cam-y']], [1, 0, 0], 'y termina exactamente en su lugar');
+  assert.equal(frames.length, 0, 'quieta, deja de pedir cuadros');
+
+  // Con el sistema pidiendo menos movimiento no se mueve nada.
+  globalThis.matchMedia = () => ({ matches: true });
+  const still = createCamera(arena);
+  still.frame({ s: 1.06, el: left });
+  still.punch(right, { zoom: 0.08 });
+  still.hit(1, 12, 1);
+  run(500);
+  assert.deepEqual([vars['--cam-s'], vars['--cam-x']], [1, 0], 'sin movimiento, la escena quieta');
+  delete globalThis.matchMedia;
+  console.log('✓ cámara ok (se acerca, golpea, vuelve sin saltos y nunca destapa el borde)');
+}

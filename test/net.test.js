@@ -207,7 +207,7 @@ async function playing(room) {
 
   assert.equal(room.act('celu', 'leave').sent, true);
   assert.equal(room.state.phase, 'matchEnd', 'irse cierra la partida');
-  assert.deepEqual(room.state.forfeit, { by: 'p2', winner: null }, 'en la primera ronda, no gana nadie');
+  assert.deepEqual(room.state.forfeit, { by: 'p2', winner: 'p1' }, 'gana el que se quedó');
   assert.equal(a.last('state').state.forfeit.by, 'p2', 'y el que se quedó se entera');
   assert.equal(a.last('room').room.seats.p2, false, 'el asiento queda libre en el acto');
 

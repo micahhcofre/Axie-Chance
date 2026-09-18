@@ -10,7 +10,7 @@ const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 const MODULES = [
   'i18n-en', 'i18n',
   'data', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'rules', 'ai', 'adventure-levels', 'adventure', 'game',
-  'vfx-clips', 'vfx', 'power-fx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'result', 'ui', 'rooms', 'link', 'qr', 'net',
+  'vfx-clips', 'vfx', 'camera', 'power-fx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'result', 'ui', 'rooms', 'link', 'qr', 'net',
   'tutorial', 'lobby', 'main',
 ];
 const FONTS =
