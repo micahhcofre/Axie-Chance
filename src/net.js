@@ -20,6 +20,7 @@ import {
   actingOf, canRenewFor, draftableFor, draftingSeat, drafterOf, unseenOf,
 } from './game.js';
 import { AXIES, axie, axieArt } from './axies.js';
+import { createMotion } from './axie-motion.js';
 import { SYMBOLS, crest } from './data.js';
 import { readLoadout } from './loadout.js';
 import { createRoom } from './rooms.js';
@@ -250,8 +251,14 @@ const roomTitle = (name) => (name ? tr('Sala de {name}', { name }) : tr('Sala'))
  * arrancaba sola al juntarse los dos—, y eso tenía dos problemas: no se podía mirar
  * quién estaba sin quedar sentado, y cuando el otro aparato no llegaba la pantalla se
  * quedaba esperando sin decir a qué.
+ *
+ * `table` es la mesa de la página (`{ attach(game, opts), detach() }`, ver `main.js`):
+ * con ella la sala se juega en la misma página que la portada —la mesa se sienta frente
+ * a la partida de la sala y al irse vuelve a la de acá— y nada se recarga, así que la
+ * música de los menús sigue sonando sin cortes. `onExit` es volver a la portada desde
+ * la lista. Sin mesa (los tests de la sala sola), la mesa se monta acá y salir recarga.
  */
-export function connect({ chooseAxie = null, audio = null } = {}) {
+export function connect({ chooseAxie = null, audio = null, table = null, onExit = null } = {}) {
   const id = clientId();
   let sala = cleanRoom({ code: new URLSearchParams(location.search).get('sala')?.toUpperCase() }).code || null;
   const game = createRemoteGame((action, arg) => act(action, arg));
@@ -261,6 +268,10 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
   let room = null;   // lo último que contó la sala de sí misma
   let rooms = [];    // la lista del lobby
   let mounted = false;
+  /** Si la pantalla de las salas está puesta. Guardada, el cable se cierra. */
+  let visible = true;
+  /** Lo que contestó `net.json`: dónde está el cartero. */
+  let relay = null;
   let live = false;
   /**
    * Si alguna vez llegamos a estar conectados a esta sala. Sin esto, el instante entre
@@ -281,6 +292,10 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
   let link = null;
   /** ¿Hay cartero? `null` mientras se pregunta. */
   let reachable = null;
+
+  /** Tu Axie en la ficha, respirando, y cuál está dibujado (para no redibujarlo en cada repintada). */
+  const mineMotion = createMotion(byId('net-axie-art'), 0);
+  let mineShown = null;
 
   /** La sala que corre en este navegador, si la creaste vos (ver `rooms.js`). */
   let hosted = null;
@@ -317,7 +332,9 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
       // puestos sus escuchas y de ahí en más se repinta sola con cada estado.
       if (msg.state && !mounted) {
         mounted = true;
-        mount(game, { seat, net: true, leave: quit, ...(audio ? { audio } : {}) });
+        const opts = { seat, net: true, leave: quit };
+        if (table) table.attach(game, opts);
+        else mount(game, { ...opts, ...(audio ? { audio } : {}) });
       }
     }
     paint();
@@ -558,16 +575,24 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
 
   /**
    * Irse de una sala con partida: se le avisa —suelta el asiento, y si la partida
-   * seguía, la cierra por abandono— y recién después se vuelve a la lista.
+   * seguía, la cierra por abandono— y recién después se vuelve a la lista. Si la sala
+   * es tuya se cierra: sin tu navegador no hay partida.
    *
-   * Volver es **recargar**, no `leave()`: la mesa se engancha una sola vez y con el
-   * asiento que tenía (ver `mount`), y en la próxima sala te puede tocar el otro. Si la
-   * sala es tuya se cierra: sin tu navegador no hay partida.
+   * La mesa vuelve a la partida de la página (`table.detach`) y la próxima sala la
+   * vuelve a sentar con el asiento que le toque ahí. Sin mesa que cambiar, volver es
+   * recargar: la mesa montada acá se engancha una sola vez y con su asiento.
    */
   async function quit() {
     await game.leave();
     await closeRoom();
-    location.href = `${location.pathname}?red`;
+    if (!table) {
+      location.href = `${location.pathname}?red`;
+      return;
+    }
+    table.detach();
+    mounted = false;
+    game.apply(null);
+    toLobby();
   }
 
   /** Abandonar, con la partida andando y un asiento propio: lo único que se puede dejar. */
@@ -604,6 +629,11 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
     return `<i data-here="${Boolean(here)}"${paint}>${a ? crest(a.class, 'sm') : ''}</i>`;
   }
 
+  /**
+   * Cada sala es un naipe, como los Axies de la colección: el Axie de quien la creó
+   * dibujado sobre el color de su clase —la sala se llama por él—, su número en el aro,
+   * el nombre y el código, los dos asientos y qué pasa si la tocás.
+   */
   function roomsHtml() {
     if (!rooms.length) {
       return `<li class="netbox-empty">${tr('Todavía no hay ninguna. Creá una y esperá al otro.')}</li>`;
@@ -615,12 +645,14 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
       // Sin asiento libre se entra igual, pero a mirar (ver `paint`). La etiqueta lo
       // dice antes de tocar y no después: es la diferencia entre sentarse y espiar.
       const watch = Boolean(full || r.playing);
-      return `<li><button class="netbox-room" data-sala="${r.code}">
-        <span class="room-no">${i + 1}</span>
-        <span class="room-id"><b>${roomTitle(r.name)}</b><span class="netbox-code">${r.code}</span></span>
-        <span class="room-seats"
-          >${seatPipHtml(r.seats.p1, r.axies?.p1)}${seatPipHtml(r.seats.p2, r.axies?.p2)}</span>
-        <span class="netbox-count" data-full="${full}">${tag}</span>
+      const host = r.axies?.p1;
+      const color = host ? SYMBOLS[axie(host).class].color : '#d9a05b';
+      return `<li><button class="netbox-room" data-sala="${r.code}" data-watch="${watch}" style="--c:${color}">
+        <span class="room-art">${host ? axieArt(host, { alts: false }) : ''}<span class="room-no">${i + 1}</span></span>
+        <span class="room-id"><b>${roomTitle(r.name)}</b>
+          <span class="room-meta"><span class="netbox-code">${r.code}</span><span class="room-seats"
+            >${seatPipHtml(r.seats.p1, r.axies?.p1)}${seatPipHtml(r.seats.p2, r.axies?.p2)}</span
+            ><span class="netbox-count" data-full="${full}">${tag}</span></span></span>
         <span class="room-go" data-watch="${watch}">${watch ? tr('Mirar') : tr('Entrar')}</span>
       </button></li>`;
     }).join('');
@@ -653,7 +685,7 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
    * `newMatch`).
    */
   function seatsHtml() {
-    return ['p1', 'p2'].map((s, i) => {
+    const [one, two] = ['p1', 'p2'].map((s, i) => {
       const here = room?.seats[s];
       const isReady = room?.ready[s];
       const id = here ? room?.axies?.[s] : null;
@@ -661,7 +693,8 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
       const art = id
         ? axieArt(id, { alts: false })
         : `<span class="seat-empty">${i + 1}</span>`;
-      return `<li data-ready="${Boolean(isReady)}" data-here="${Boolean(here)}">
+      const paint = id ? ` style="--c:${SYMBOLS[axie(id).class].color}"` : '';
+      return `<li class="seat" data-ready="${Boolean(isReady)}" data-here="${Boolean(here)}"${paint}>
         <span class="seat-art">${art}</span>
         <span class="seat-id">
           <span class="seat-who"
@@ -669,7 +702,10 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
           ${seatAxieHtml(id)}
         </span>
         <span class="seat-state">${state}</span></li>`;
-    }).join('');
+    });
+    // Frente a frente, como en la mesa: el primero a la izquierda y el segundo mirando
+    // para este lado.
+    return `${one}<li class="seat-vs" aria-hidden="true">VS</li>${two}`;
   }
 
   /**
@@ -685,12 +721,26 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
   function minePaint() {
     const btn = byId('net-axie');
     const mine = readLoadout();
-    // Sin asiento no hay nada que elegir: el que entró con los dos ocupados, mira.
-    btn.hidden = !seat || !chooseAxie;
+    // En la lista se puede cambiar antes de crear la sala: la sala se llama por tu
+    // Axie. Adentro, sin asiento no hay nada que elegir: el que entró con los dos
+    // ocupados, mira.
+    btn.hidden = !chooseAxie || (Boolean(sala) && !seat);
     if (btn.hidden) return;
-    byId('net-axie-now').innerHTML = mine
-      ? `${crest(AXIES[mine.axie].class, 'sm')}<b>${AXIES[mine.axie].name}</b>`
+    const id = mine && AXIES[mine.axie] ? mine.axie : null;
+    const a = id ? AXIES[id] : null;
+    byId('net-axie-now').innerHTML = a
+      ? `<b>${a.name}</b><span class="choose-class" style="--c:${SYMBOLS[a.class].color}"
+          >${crest(a.class)}${SYMBOLS[a.class].name}</span>`
       : `<b>${tr('Elegí uno')}</b>`;
+    // El dibujo se rehace solo si cambió el Axie: la pantalla se repinta con cada lista
+    // que llega, y volver a montarlo cada vez lo haría arrancar de nuevo a respirar.
+    if (id === mineShown) return;
+    mineShown = id;
+    const art = byId('net-axie-art');
+    art.innerHTML = id ? axieArt(id) : '';
+    if (a) art.style.setProperty('--c', SYMBOLS[a.class].color);
+    if (id) mineMotion.mount(id);
+    else mineMotion.stop();
   }
 
   /**
@@ -716,6 +766,8 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
    * entró con los dos asientos ocupados se queda mirando sin nada encima.
    */
   function paint() {
+    // Guardada, la pantalla no es de nadie: la portada maneja lo suyo.
+    if (!visible) return;
     // "Abandonar partida", en el menú de las tres rayitas. Terminada la partida la
     // salida es la del pie (ver `controlsHtml` en `ui.js`), y el que mira no tiene
     // nada que abandonar.
@@ -726,7 +778,12 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
     const ended = game.state?.phase === 'matchEnd';
     const show = !sala || !game.state || (!live && !ended);
     box.hidden = !show;
-    if (!show) return;
+    if (!show) {
+      // Nadie mira la ficha: tu Axie deja de respirar y se vuelve a montar al volver.
+      mineMotion.stop();
+      mineShown = null;
+      return;
+    }
     // Sin partida todavía, el lobby y la sala suenan como la portada. Con el cable
     // cortado en medio de una partida sigue el tema del combate.
     if (!game.state) audio?.music('menu');
@@ -735,10 +792,18 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
     byId('net-lobby').hidden = inRoom;
     byId('net-room').hidden = !inRoom;
     byId('net-urls').hidden = inRoom ? true : byId('net-list').innerHTML === '';
-    // La cruz de la esquina cierra la sala, así que solo existe adentro de una: atrás
-    // está la lista. Y está también con el cable cortado, que es justo cuando uno
-    // quiere salir de ahí.
+    byId('net-create').hidden = inRoom;
+    // Las dos puertas de la barra. En la lista se vuelve a la portada; adentro de una
+    // sala, salir la cierra y vuelve a la lista. Está también con el cable cortado,
+    // que es justo cuando uno quiere salir de ahí.
+    byId('net-home').hidden = inRoom;
     byId('net-close').hidden = !inRoom;
+    // El código de la sala, al lado del nombre: es lo que se le dicta al otro.
+    byId('net-code').hidden = !inRoom;
+    byId('net-code').textContent = inRoom ? sala : '';
+    // La ficha de la derecha es tuya: sin asiento —mirando, o entrando— no hay nada
+    // que poner ahí, y la sala se queda con el ancho entero.
+    box.dataset.sheet = String(!inRoom || (live && Boolean(seat)));
     box.dataset.state = inRoom && !live && (everLive || why) ? 'down' : 'wait';
     // El terreno de la pantalla es el de tu Axie: la sala es tuya y el fondo es tu casa,
     // igual que en la portada cuando se entra por un link (ver `open` en `lobby.js`).
@@ -746,6 +811,8 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
     invitePaint();
 
     if (!inRoom) {
+      byId('net-ready').hidden = true;
+      minePaint();
       byId('net-title').textContent = tr('Salas');
       byId('net-create').disabled = !link?.open;
       byId('net-note').textContent = note
@@ -798,6 +865,14 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
   // ---- los botones ------------------------------------------------------------
 
   byId('net-create').addEventListener('click', create);
+  // Volver a la portada desde la lista, en la misma página: la música de los menús
+  // sigue. Sin portada a la que volver, el link recarga como cualquier link.
+  byId('net-home').addEventListener('click', (e) => {
+    if (!onExit) return;
+    e.preventDefault?.();
+    hide();
+    onExit();
+  });
   byId('net-axie').addEventListener('click', () => chooseAxie?.());
   byId('net-close').addEventListener('click', leave);
 
@@ -834,16 +909,39 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
     if (hosted) link?.send({ a: 'close', code: hosted.code });
   });
 
+  /** Abre el cable al cartero, si se sabe dónde está y no hay uno ya. */
+  function startLink() {
+    if (link || !relay) return;
+    link = openLink(relayUrl(relay.ws), { onOpen, onClose, onMessage: onRelay });
+    // El latido: que el cable no se corte por silencio, y que la sala propia siga en la lista.
+    link.onBeat = () => link?.send({ a: 'ping', code: hosted?.code });
+  }
+
+  /**
+   * Guarda la pantalla y cierra el cable: en la portada no se mira ninguna lista, y
+   * cada pedido de la lista es un mensaje que en AWS se paga. Solo se sale así desde
+   * la lista, sin sala propia ni ajena.
+   */
+  function hide() {
+    visible = false;
+    box.hidden = true;
+    link?.close();
+    link = null;
+    live = false;
+    painted = null;
+    mineMotion.stop();
+    mineShown = null;
+  }
+
   netAvailable().then((config) => {
     reachable = Boolean(config);
     if (config) {
+      relay = config;
       lanUrls = Array.isArray(config.urls) ? config.urls.map(String) : [];
       if (lanUrls.length) {
         byId('net-list').innerHTML = lanUrls.map((u) => `<li>${u.replace(/[<&"]/g, '')}/?red</li>`).join('');
       }
-      link = openLink(relayUrl(config.ws), { onOpen, onClose, onMessage: onRelay });
-      // El latido: que el cable no se corte por silencio, y que la sala propia siga en la lista.
-      link.onBeat = () => link.send({ a: 'ping', code: hosted?.code });
+      if (visible) startLink();
     }
     paint();
   });
@@ -852,6 +950,14 @@ export function connect({ chooseAxie = null, audio = null } = {}) {
   paint();
 
   return {
+    /** Vuelve a poner la pantalla de las salas, con el cable abierto de nuevo. */
+    show() {
+      visible = true;
+      note = '';
+      history.replaceState(null, '', `${location.pathname}?red`);
+      startLink();
+      paint();
+    },
     /**
      * Elegiste otro Axie en la portada, encima de la sala. Se le cuenta a la sala —que
      * es la que va a repartir— y se repinta, que es donde se ve con qué entrás.

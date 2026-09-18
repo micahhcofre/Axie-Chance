@@ -76,8 +76,7 @@ function regla(sel) {
 // pantalla sin nada que apretar. Los que solo cambian el dibujo —el verde, el rojo, el
 // de tu Axie— heredan la forma de su base y declaran su propio `background-color`.
 for (const sel of ['.hpbar', '.btn', '.lobby-play', '.lobby-pick',
-  '.netbox-panel', '.netbox-banner', '.netbox-x', '.netbox-room', '.netbox-seats li',
-  '.room-go']) {
+  '.room-no', '.room-go', '.netbox-mine-cta', '.adv-tile-no']) {
   assert.match(
     regla(sel),
     /background:\s*(#[0-9a-fA-F]{3,8}|rgba?\()/,
@@ -213,13 +212,19 @@ for (const cls of [
   // El (+) de cada carta: la mejora del Axie.
   'deck-slot', 'card-boost', 'boost-btn',
   // La sala en red, que es la única pantalla a la que se entra sin pasar por la
-  // portada: el terreno, el logo, la tabla del panel y su cartel, y los renglones de
-  // madera de cada sala y de cada asiento.
-  'netbox-art', 'netbox-stack', 'netbox-logo', 'netbox-panel', 'netbox-banner',
-  'netbox-x', 'netbox-view', 'netbox-rooms', 'netbox-room', 'netbox-empty',
-  'room-no', 'room-id', 'room-seats', 'room-go', 'netbox-count', 'netbox-code',
-  'netbox-seats', 'seat-art', 'seat-empty', 'seat-id', 'seat-who', 'seat-state',
-  'netbox-you', 'netbox-axie', 'netbox-mine', 'netbox-urls', 'netbox-label',
+  // portada: el terreno, las dos tablas —lo que se elige y tu ficha—, el naipe de
+  // cada sala y los dos asientos frente a frente.
+  'netbox-art', 'netbox-screen', 'netbox-main', 'netbox-sheet', 'netbox-note',
+  'netbox-view', 'netbox-rooms', 'netbox-room', 'netbox-empty',
+  'room-art', 'room-no', 'room-id', 'room-meta', 'room-seats', 'room-go', 'netbox-count',
+  'netbox-code', 'netbox-seats', 'seat', 'seat-art', 'seat-empty', 'seat-id', 'seat-who',
+  'seat-state', 'seat-vs', 'netbox-you', 'netbox-axie',
+  'netbox-mine', 'netbox-mine-art', 'netbox-mine-info', 'netbox-mine-cta',
+  'netbox-invite', 'netbox-qr', 'netbox-urls', 'netbox-label',
+  // El Modo Aventura: el mapa de naipes y la ficha del nivel.
+  'lobby-adventure', 'adv-progress', 'adventure-map', 'adventure-levels', 'adv-tile',
+  'adv-tile-no', 'adv-mark', 'adventure-card', 'adv-head', 'adv-rival-stage', 'adv-info',
+  'adv-kicker', 'adv-card-title', 'adv-diff', 'adv-body', 'adv-powers', 'adv-power',
   // La pantalla del final (ver `result.js`): la escena, la tela, el escenario, las
   // marcas, el botín y las puertas.
   'result-scene', 'result-sky', 'result-vfx', 'result-box', 'result-banner', 'result-cloth',
@@ -288,3 +293,24 @@ assert.ok(Number.isFinite(brillo) && brillo <= colchon, `el brillo del centro ($
 }
 
 console.log(`✓ estilos ok (\`hidden\` oculta, ${remotas.length} texturas del kit con piso propio, tutorial sin scrim)`);
+
+// ---- nada de desenfoque sobre la escena ---------------------------------------
+// Un `backdrop-filter` se corta en seco en el borde de su caja. Sobre la mesa la
+// cámara agranda el mundo a cada cuadro, y con eso (o con la página agrandada) el
+// navegador pintaba el desenfoque entero: el halo del DAÑO, las chapas y la barra de
+// arriba se veían como cuadrados borrosos. El único que queda es el de la pantalla del
+// final, que cubre la ventana entera y no tiene borde que asome.
+const blurred = [...sinComentarios(css).matchAll(/([^{}]+)\{[^}]*backdrop-filter/g)]
+  .map((m) => m[1].trim());
+assert.deepEqual(
+  blurred.filter((sel) => !/\.result-scene::before/.test(sel)),
+  [],
+  'ningún desenfoque de fondo fuera de la pantalla del final',
+);
+
+// La fila de la cadena no recorta mientras la cadena entra: con `overflow` puesto de
+// fijo cortaba en seco las sombras de las cartas y el halo del tutorial (un
+// rectángulo alrededor de la carta). Se desplaza solo con `data-scroll` (ver
+// `markScroll` en `ui.js`).
+assert.doesNotMatch(sinComentarios(regla('.strip')), /overflow/, 'la fila no recorta sombras ni halos');
+assert.match(css, /\.strip\[data-scroll="true"\]\s*\{\s*overflow-x:\s*auto/, 'una cadena que no entra se desplaza');

@@ -647,7 +647,9 @@ function endActionsHtml(state) {
         : btn('adv-next', tr('Siguiente Nivel'), true);
     return first + btn('adv-map', tr('Aventura')) + btn('menu', tr('Menú principal'));
   }
-  return btn('restart', tr('Jugar de nuevo'), true) + (netPlay ? '' : btn('menu', tr('Menú principal')));
+  // En red la otra puerta es la de la sala: volver a la lista, sin recargar nada.
+  return btn('restart', tr('Jugar de nuevo'), true)
+    + (netPlay ? btn('leave', tr('Volver a las salas')) : btn('menu', tr('Menú principal')));
 }
 
 function controlsHtml(state, { picking, acting }) {
@@ -1647,7 +1649,16 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       fieldFit = fit;
       paint(field, fieldHtml(state, focus, fieldFit));
     }
+    markScroll();
     if (before) glideCards(before);
+  }
+  // La fila se desplaza solo si la cadena no entra (ver `.strip[data-scroll]` en el
+  // CSS). Los 4px de margen son la carta que entra girada: se sale un poco del borde
+  // mientras llega y no por eso la cadena deja de entrar.
+  function markScroll() {
+    const strip = field.querySelector?.('.strip');
+    if (!strip || !strip.clientWidth) return;
+    strip.dataset.scroll = String(strip.scrollWidth > strip.clientWidth + 4);
   }
   // La mesa se reescribe entera a cada carta, así que cada carta es un nodo nuevo y la
   // transición de `width` del CSS nunca tiene de dónde arrancar: cuando la cadena se
@@ -1954,7 +1965,8 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   let droppedStack = null;
   let hadPendingStack = false;
 
-  game.subscribe((state) => {
+  let unsubscribe = game.subscribe(onState);
+  function onState(state) {
     // Una partida nueva se olvida de la anterior: las cartas ya animadas y el último
     // número del golpe son de otra mesa. Sale del estado y no del botón que la arrancó
     // porque en red la puede haber arrancado el otro aparato.
@@ -2219,7 +2231,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
         }
       }, 420);
     }
-  });
+  }
 
   /**
    * El audio no puede arrancar solo: hasta que el jugador no toca algo, el navegador
@@ -2784,9 +2796,39 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     result.hide();
     forget();
     paintClock();
-    audio.music(null);
+    // La música no se toca: quien levanta la mesa es la portada, que en el mismo
+    // momento pide la suya. Apagarla acá cortaba el tema del menú que ya venía sonando
+    // desde la pantalla del final, y volvía a arrancar de cero.
+  }
+
+  /**
+   * Sienta la mesa frente a otra partida: la de la sala en red (con su asiento, y la
+   * salida de la sala) o, al volver, la de acá. La mesa es una sola y sus escuchas se
+   * ponen una vez (ver `mount`); lo que cambia es de quién lee y a quién le manda. Así
+   * la sala se abre en la misma página que la portada y la música de los menús sigue
+   * sonando sin cortes entre una pantalla y otra.
+   */
+  function swap(next, { seat = null, net = false, leave: exit = null } = {}) {
+    unsubscribe?.();
+    clearTimeout(autoDrawTimer);
+    game = next;
+    mySeat = seat;
+    netPlay = net;
+    leave = exit;
+    shown.p1 = null;
+    shown.p2 = null;
+    shown.match = null;
+    shown.result = null;
+    result.hide();
+    forget();
+    cues.reset();
+    paintClock();
+    unsubscribe = game.subscribe(onState);
   }
 
   // `audio` es el mezclador de la mesa: la portada lo usa para su propia música.
-  return { restart, abortMatch, audio, _game: game };
+  return {
+    restart, abortMatch, swap, audio,
+    get _game() { return game; },
+  };
 }

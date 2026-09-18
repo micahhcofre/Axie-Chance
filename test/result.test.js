@@ -5,7 +5,7 @@ import { fakeDom } from './dom.mjs';
 
 fakeDom();
 const { createGame, TARGET, swingOf } = await import('../src/game.js');
-const { resultView, resultHtml, createResult, rewardsOf, RESULT_BEAT } = await import('../src/result.js');
+const { resultView, resultHtml, createResult, rewardsOf, RESULT_BEAT, RESULT_MUSIC } = await import('../src/result.js');
 const { isFinalLevel, ADVENTURE_LEVELS } = await import('../src/adventure.js');
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
@@ -144,11 +144,24 @@ function finish(state, down) {
   const s = game.state;
   const heard = [];
   const node = document.getElementById('result');
-  const screen = createResult(node, { audio: { sfx: (key, opts) => heard.push({ key, ...opts }) } });
+  const tracks = [];
+  const screen = createResult(node, {
+    audio: { sfx: (key, opts) => heard.push({ key, ...opts }), music: (list) => tracks.push(list) },
+  });
 
   finish(s, ['p1', 'p2']);
   s.rewards = { p2: [{ name: 'Amuleto', icon: 'Icons/power-leaf.png' }, { name: 'Huevo', icon: 'Icons/power-egg.png' }] };
+  // Lo que la pantalla agenda, anotado en vez de esperado.
+  const agenda = [];
+  const realTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms) => agenda.push({ fn, ms });
   screen.show(s, { seat: 'p2', net: true, actions: '<button data-action="leave"></button>', wait: 2000 });
+  globalThis.setTimeout = realTimeout;
+  // La pantalla del final ya no es la partida: apagado el remate, vuelve el tema del
+  // menú, y sigue sin cortes al volver a la portada.
+  assert.ok(RESULT_MUSIC > RESULT_BEAT.fx + 1500, 'la música vuelve cuando el remate ya se apagó');
+  agenda.filter((t) => t.ms === 2000 + RESULT_MUSIC).forEach((t) => t.fn());
+  assert.deepEqual(tracks, ['menu'], 'la pantalla del final pone la música del menú');
   assert.equal(node.hidden, false);
   assert.equal(node.dataset.outcome, 'tie');
   assert.equal(node.style.props['--wait'], '2000ms', 'el CSS espera lo mismo que el efecto');

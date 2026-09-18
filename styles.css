@@ -213,18 +213,17 @@ body {
      vecino posible. */
   padding: 14px clamp(12px, 2.2vw, 24px) 12px;
 }
-/* La sombra y el desenfoque van en una capa aparte, con máscara, y no en la barra.
+/* La sombra va en una capa aparte, con máscara, y no en la barra: así se apaga hacia
+   abajo y la barra no tiene borde, se disuelve en el dibujo.
 
-   Puestos en la barra el degradé se apaga hacia abajo pero el desenfoque no: se corta
-   en seco en el borde, y esa línea de foco cruzando el cielo se ve más que cualquier
-   borde que hubiéramos dibujado a propósito. Con la máscara se apagan los dos juntos y
-   la barra deja de tener borde de abajo: se disuelve en el dibujo. */
+   Sin desenfoque (`backdrop-filter`) a propósito. El desenfoque se corta en seco en el
+   borde de su caja y la máscara no siempre lo apaga: con la cámara acercándose o con
+   la página agrandada el navegador lo pinta aparte y aparece el rectángulo entero.
+   Pasa lo mismo con todo lo que flota sobre la escena (ver `.swing::before`). */
 .topbar::before {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: linear-gradient(180deg,
-    rgba(7, 10, 24, .86) 0%, rgba(7, 10, 24, .62) 52%, rgba(7, 10, 24, 0) 100%);
-  -webkit-backdrop-filter: blur(7px);
-  backdrop-filter: blur(7px);
+    rgba(7, 10, 24, .88) 0%, rgba(7, 10, 24, .66) 52%, rgba(7, 10, 24, 0) 100%);
   -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 44%, transparent 100%);
   mask-image: linear-gradient(180deg, #000 0%, #000 44%, transparent 100%);
 }
@@ -560,26 +559,24 @@ body {
    `name_panel` del kit estirado a lo que midiera el texto: un rectángulo con el
    agujero deformado. La tabla es la de los botones (`player_name_bg`), que aguanta
    estirarse; las colas se dibujan con `clip-path` y el doblez es un triángulo oscuro. */
-.o-banner,
-.netbox-banner {
+.o-banner {
   --tail: #6e3521; --tail-end: #55291a; --fold: #3a1a0c;
   position: relative;
   border-radius: 10px;
   background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
   box-shadow: inset 0 -3px 0 rgba(58, 26, 12, .35), inset 0 2px 0 rgba(255, 196, 150, .22);
 }
-.o-banner::before, .o-banner::after,
-.netbox-banner::before, .netbox-banner::after {
+.o-banner::before, .o-banner::after {
   content: ""; position: absolute; top: 9px; bottom: -9px; width: 26px;
 }
-.o-banner::before, .netbox-banner::before {
+.o-banner::before {
   right: 100%;
   background:
     linear-gradient(to bottom left, var(--fold) 50%, transparent 50%) right bottom / 9px 9px no-repeat,
     linear-gradient(to left, var(--tail), var(--tail-end));
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 40% 50%);
 }
-.o-banner::after, .netbox-banner::after {
+.o-banner::after {
   left: 100%;
   background:
     linear-gradient(to bottom right, var(--fold) 50%, transparent 50%) left bottom / 9px 9px no-repeat,
@@ -1083,9 +1080,10 @@ body {
   bottom: min(calc(100% - 104px), calc(var(--axie-h) + 30px));
   display: grid; gap: 5px; width: min(100%, 252px);
   padding: 7px 11px 8px;
-  background: rgba(9, 13, 30, .58);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  /* Más tapada y sin desenfoque: la chapa deshace la cámara (ver más abajo) y un
+     `backdrop-filter` sobre una capa que se agranda y se achica a cada cuadro se
+     pintaba como un cuadrado borroso asomando por las esquinas redondeadas. */
+  background: rgba(9, 13, 30, .74);
   border: 1px solid rgba(255, 255, 255, .12);
   border-radius: 11px;
   transition: border-color .2s ease, box-shadow .2s ease;
@@ -1097,7 +1095,7 @@ body {
    dos renglones de texto para algo que el ojo agarra por el color. */
 .fighter[data-active="true"] .plate {
   border-color: color-mix(in srgb, var(--c) 75%, transparent);
-  background: color-mix(in srgb, var(--c) 9%, rgba(9, 13, 30, .58));
+  background: color-mix(in srgb, var(--c) 9%, rgba(9, 13, 30, .74));
   animation: plate-turn 2s ease-in-out infinite;
 }
 @keyframes plate-turn {
@@ -1485,19 +1483,18 @@ body {
 /* El terreno de abajo es una ilustración pintada, no una franja lisa, y el número
    flotaba sobre ella sin nada que lo separe: la sombra de texto sola no alcanzaba
    para leerlo contra un fondo con tanto detalle. Este círculo —centrado detrás del
-   número y la palabra, no un cuadro recortado a su caja— desenfoca lo que hay detrás
-   y lo oscurece hacia el centro, apagándose hacia el borde: el mismo recurso que ya
-   usa el aro de abajo (`.odds-dial`), así los dos se leen como una sola familia. */
+   número y la palabra, no un cuadro recortado a su caja— lo oscurece hacia el centro,
+   apagándose hacia el borde.
+
+   Es solo un degradé, sin desenfoque. Antes llevaba un `backdrop-filter` con máscara
+   para esconder el borde de la caja, y la máscara no siempre gana: con la cámara
+   acercándose (y en cualquier zoom de la página) el desenfoque se pintaba entero y el
+   halo se veía cuadrado. Un degradé no tiene caja que asome. */
 .swing::before {
   content: ''; position: absolute; z-index: -1;
   inset: -10% -30%;
-  background: radial-gradient(closest-side, rgba(8, 11, 24, .42), rgba(8, 11, 24, .22) 60%, transparent);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  /* La máscara apaga también el desenfoque: sin ella el `backdrop-filter` termina en
-     un borde duro y se ve como una mancha recortada. */
-  -webkit-mask-image: radial-gradient(closest-side, #000 30%, transparent);
-  mask-image: radial-gradient(closest-side, #000 30%, transparent);
+  background: radial-gradient(closest-side,
+    rgba(8, 11, 24, .56), rgba(8, 11, 24, .4) 35%, rgba(8, 11, 24, .18) 68%, transparent);
 }
 /* El ancho es el del aro, y de ahí para adentro cada cosa se centra sola: el número y
    la palabra son las dos que tienen que dar la misma vuelta que la rueda. */
@@ -1618,16 +1615,11 @@ body {
   display: grid; place-content: center; justify-items: center;
   position: relative;
   border-radius: 50%;
-  /* La punta del anillo no termina en un filo: los tres grados que siguen a la marca
-     van con el mismo color al 28%, que es la estela de lo que se está moviendo. Con el
-     anillo quieto casi no se nota; barriendo, es lo que le da dirección. */
+  /* Un solo color hasta la marca y el riel oscuro después: nada de estela pálida
+     pasada la marca, que se leía como otro tramo marcado. */
   background:
     radial-gradient(closest-side, rgba(9, 12, 26, .84) 84%, transparent 85%),
-    conic-gradient(currentColor calc(var(--p) * 1%),
-      color-mix(in srgb, currentColor 28%, transparent) 0 calc(var(--p) * 1% + 3%),
-      rgba(7, 10, 24, .6) 0);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+    conic-gradient(currentColor calc(var(--p) * 1%), rgba(7, 10, 24, .6) 0);
   box-shadow:
     0 10px 28px -8px rgba(0, 0, 0, .8),
     0 0 22px -4px color-mix(in srgb, currentColor 40%, transparent);
@@ -2498,7 +2490,7 @@ body {
      todo lo que sobre, así que la mesa puede crecer y achicarse sin mover el piso ni
      un pixel. Lo único que `--mesa` sigue haciendo es **reservar** el lugar de la carta
      más alta al calcular `--frente`, que es una cuenta aparte. */
-  max-width: 100%; overflow-x: auto; min-height: calc(var(--carta) * 1.6 * var(--zoom, 1));
+  max-width: 100%; min-height: calc(var(--carta) * 1.6 * var(--zoom, 1));
   /* Con `overflow` la fila pierde el piso de alto que tiene todo hijo de un flex, y
      cuando la mesa no daba más de alto (el dock del Free Game arriba, una carta apilada
      de seis símbolos) se aplastaba y recortaba las cartas por arriba. Que no se achique:
@@ -2521,6 +2513,12 @@ body {
   justify-content: safe center;
   align-items: flex-end;
 }
+/* Se desplaza solo cuando la cadena de verdad no entra (lo marca `markScroll` en
+   `ui.js`). Una fila con `overflow` recorta todo lo que se sale de su caja, y lo que se
+   sale son justo las sombras de las cartas y el halo celeste del tutorial: quedaban
+   cortados en seco, un rectángulo alrededor de la carta. Con la cadena entrando no hay
+   nada que desplazar, así que la fila no recorta nada. */
+.strip[data-scroll="true"] { overflow-x: auto; }
 .strip::-webkit-scrollbar { height: 6px; }
 .strip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 
@@ -2587,7 +2585,6 @@ body {
   font-size: calc(11px * var(--zoom, 1)); font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
   color: #fff1a8;
   box-shadow: 0 0 16px rgba(245, 197, 66, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(4px);
 }
 .tetris-badge i { font-style: normal; animation: tetris-sparkle 1.2s ease-in-out infinite alternate; }
 @keyframes tetris-sparkle {
@@ -2658,7 +2655,6 @@ body {
   border-radius: 12px;
   box-shadow: 0 0 36px rgba(255, 215, 0, 0.95), 0 0 16px rgba(255, 255, 255, 0.8), 0 16px 32px rgba(0, 0, 0, 0.7);
   will-change: transform, filter;
-  backdrop-filter: blur(1px);
 }
 
 .tetris-drop-beam {
@@ -2668,7 +2664,6 @@ body {
   background: radial-gradient(ellipse at center, rgba(255, 235, 80, 0.4) 0%, rgba(255, 205, 20, 0.2) 45%, rgba(255, 180, 0, 0.02) 80%);
   box-shadow: 0 0 32px rgba(255, 215, 0, 0.45), inset 0 0 20px rgba(255, 240, 120, 0.35);
   border-radius: 18px;
-  backdrop-filter: blur(1px);
   animation: fluidStream 0.4s ease-in-out infinite alternate;
 }
 @keyframes fluidStream {
@@ -4816,378 +4811,441 @@ body {
 
 /* ---------- la sala en red ---------- */
 
-/* La sala es una pantalla del juego, no un cartel del navegador.
+/* La sala es una pantalla del juego, y la misma que la elección de Axie.
 
-   Era lo segundo: un rectángulo azul oscuro centrado sobre un vidrio esmerilado, con
-   un rombo por título y la lista de salas hecha de renglones con borde de un píxel. Al
-   lado de la portada —el terreno pintado, el logo, las cintas talladas— parecía otro
-   programa. Y es la **primera** pantalla del juego para el que entra con el link del
-   otro desde el celular: la única que no se parecía al juego era justamente la puerta.
+   Fue primero un rectángulo azul sobre un vidrio esmerilado, y después un cartel de
+   madera chico en el medio del terreno, con el logo arriba: se veía como otro juego al
+   lado de la colección de Axies y de la Aventura. Y es la **primera** pantalla para el
+   que entra con el link del otro desde el celular.
 
-   Ahora está hecha con las piezas que ya estaban:
+   Ahora tiene la forma de las otras dos:
 
-     el terreno   el de tu Axie, colgado igual que en la mesa y en la portada. Lo pone
-                  `net.js` en `data-arena` (ver `.arena-art i`)
-     el logo      la marca arriba, en la versión con contorno, como en la portada
-     la tabla     `frame_back`, la plancha de madera clara con la que el Origins arma
-                  el fondo de sus paneles
-     el cartel    la cinta de `.o-banner`, colgada del borde de arriba
-     la madera    `player_name_bg`, la misma de las opciones del menú: cada sala y cada
-                  asiento es un cartel con un nombre puesto
-     las cintas   las de siempre para lo que se aprieta, y la gris (`slider-bg`) para
-                  lo que no se puede o para desdecirse
+     el terreno   el de tu Axie, colgado igual que en la mesa y en la portada (lo pone
+                  `net.js` en `data-arena`, ver `.arena-art i`), y apagado detrás
+     la barra     la cinta de volver —o de salir, adentro de una sala— y el título
+     a la izq.    lo que se elige: las salas, un naipe cada una con el Axie de quien
+                  la creó; o, adentro, los dos asientos frente a frente
+     a la der.    tu ficha: tu Axie vivo (tocarlo abre la elección), lo que hace falta
+                  para que entre el otro —el QR o las direcciones— y el botón grande
 
-   El material vuelve a decir qué es cada cosa, igual que en el menú de la portada: la
-   madera es un lugar con un nombre puesto —una sala, un asiento— y la cinta es algo que
-   se hace. De ahí que la lista entera sea de madera y el único verde de la pantalla sea
-   el de entrar.
-
-   Y la letra se da vuelta: sobre la tabla clara la tinta es marrón oscura y no el
-   `--ink` del resto del juego, que ahí no se leería. Los renglones, que son madera
-   oscura, siguen en blanco. */
+   Parada, la ficha va abajo con el botón al pie, como en las otras dos. Sobre la tabla
+   la letra es la tinta marrón (`--tinta`); sobre los naipes de nogal, blanca. */
 
 .netbox {
   position: fixed; inset: 0; z-index: 40;
-  display: flex; align-items: center; justify-content: center;
-  padding: clamp(10px, 2.4vh, 28px) clamp(12px, 3vw, 28px);
   overflow: hidden;
   /* Cuánto terreno queda por debajo del horizonte, como en la portada: es lo que hace
      que el dibujo caiga encuadrado y no como un cielo pelado. */
   --suelo: clamp(140px, 30vh, 300px);
-  /* La tinta sobre la tabla, que es lo único de acá que se declara como variable: la
-     usan el renglón que avisa, las etiquetas y los fantasmas, y las tres tienen que
-     cambiar juntas el día que la madera cambie de color.
-
-     El color que va **debajo** de cada dibujo del kit, en cambio, va escrito en su
-     regla: es el promedio medido de ese archivo, es la red de seguridad del día que el
-     CDN no conteste, y es lo que mira `test/styles.test.js` regla por regla. */
   --tinta: #2b1809;
   --tinta-dim: #45290f;
   background: var(--piso, var(--bg));
 }
 .netbox-art { position: absolute; left: 0; right: 0; top: 0; bottom: var(--suelo); }
-/* La escena se apaga contra los bordes, igual que en la portada: acá lo que hay que
-   leer es el panel, y el terreno es el escenario donde está apoyado. */
+/* La escena sigue atrás pero deja de competir, igual que detrás de la elección. */
 .netbox::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
-  background:
-    linear-gradient(180deg, rgba(9, 12, 26, .58) 0%, transparent 34%, transparent 56%,
-      rgba(9, 12, 26, .62) 100%),
-    radial-gradient(115% 78% at 50% 46%, transparent 34%, rgba(9, 12, 26, .68) 100%);
+  background: rgba(6, 9, 20, .62);
 }
 
-/* El logo y el panel, en una columna centrada. `max-height: 100%` con el `min-height: 0`
-   de adentro es lo que deja que la lista se desplace sola en una ventana baja en vez de
-   empujar los botones fuera de la pantalla. */
-.netbox-stack {
-  position: relative; z-index: 2;
-  width: min(100%, 520px); max-height: 100%;
-  display: flex; flex-direction: column; align-items: center;
+.netbox-screen {
+  position: relative; z-index: 2; height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 32vw, 440px);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "bar  bar"
+    "main sheet";
+  gap: clamp(8px, 1.6vh, 18px) clamp(10px, 1.8vw, 24px);
+  padding: clamp(8px, 2vh, 24px) clamp(12px, 2.6vw, 40px);
 }
-/* La marca, en la versión con contorno blanco: es la que se apoya sobre un dibujo. Más
-   chica que en la portada —acá lo que hay que mirar son las salas— y con el margen
-   justo para que el cartel del panel le pase por debajo sin tocarla. */
-.netbox-logo {
-  display: block; width: clamp(150px, 26vw, 250px); max-width: 100%; height: auto;
-  margin-bottom: 32px;
-  filter: drop-shadow(0 8px 20px rgba(3, 5, 14, .8));
-}
-
-/* La tabla. El dibujo del kit es casi liso —una plancha de madera clara con vetas
-   apenas marcadas—, así que estirarlo a lo que mida el panel no lo deforma: no hay
-   redondeo pintado adentro que se pueda achatar, como sí le pasaba a la cinta verde
-   grande (ver el README). El canto y el espesor los pone el CSS. */
-.netbox-panel {
-  position: relative;
-  width: 100%; min-height: 0;
-  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
-  padding: 6px clamp(12px, 2.4vw, 20px) clamp(14px, 2vh, 20px);
-  border-radius: 20px;
-  border: 3px solid #5e3a22;
-  background: #ac8a68 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/frame_back.png") center / 100% 100% no-repeat;
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 246, 232, .3),
-    inset 0 -18px 30px -14px rgba(60, 32, 14, .5),
-    0 6px 0 -1px #46280f,
-    0 30px 60px -18px rgba(0, 0, 0, .8);
+/* Sin asiento —mirando, o mientras se entra— la ficha no tiene nada tuyo que mostrar:
+   se va y la sala se queda con el ancho entero. */
+.netbox[data-sheet="false"] .netbox-screen { grid-template-areas: "bar bar" "main main"; }
+.netbox[data-sheet="false"] .netbox-sheet { display: none; }
+.netbox .choose-bar a.btn { text-decoration: none; }
+/* El código de la sala, al lado del nombre: es lo que se le dicta al otro. */
+.choose-bar .netbox-code {
+  margin-left: auto; flex: 0 0 auto;
+  padding: 6px 14px 5px; border-radius: 999px;
+  font: 400 clamp(15px, 1.6vw, 19px)/1 var(--num); letter-spacing: .16em; color: #fff;
+  background: rgba(43, 24, 9, .6);
+  box-shadow: inset 0 0 0 2px rgba(255, 209, 92, .5), 0 3px 8px rgba(0, 0, 0, .35);
 }
 
-/* El cartel con el nombre de la pantalla, colgado del borde de arriba del panel: es
-   donde el Origins pone los suyos, y es lo que hace que el panel se lea como un objeto
-   y no como una caja de texto. Sale para arriba con margen negativo y no con `position`
-   para que siga midiendo su lugar en la columna. */
-.netbox-banner {
-  align-self: center; margin: -28px 0 2px;
-  min-width: min(260px, 70%); padding: 12px 30px 14px;
-  font: 800 clamp(16px, 2.2vw, 23px)/1 var(--display);
-  text-align: center; text-transform: uppercase; letter-spacing: .05em;
-  color: #fff; text-shadow: 0 2px 4px rgba(0, 0, 0, .6);
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55));
-}
-/* Si se cortó el cable, el cartel es el que lo dice: la cinta roja del kit, la misma
-   del botón que arriesga. Un cartel de madera que dice "Se cortó la conexión" se lee
-   como un título; en rojo se lee como lo que es. */
-.netbox[data-state="down"] .netbox-banner {
-  --tail: #8f0029; --tail-end: #6a001e; --fold: #3d0010;
-  background-color: #bb0035;
-  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_red.png");
-}
+/* ---- la tabla de la izquierda: las salas, o los dos asientos ---- */
 
-/* La cruz de la esquina, en madera y con el dibujo del kit adentro. Es la puerta de
-   salida de la sala y solo existe adentro de una: atrás está la lista, que es a donde
-   vuelve. Sale un poco del panel, como en el Origins, así que no le come lugar a nada
-   de lo que hay adentro. */
-.netbox-x {
-  position: absolute; z-index: 3; top: -16px; right: -10px;
-  width: 46px; height: 46px; padding: 0; border: 0; border-radius: 13px;
-  display: grid; place-items: center; cursor: pointer;
-  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
-  box-shadow: 0 5px 0 -1px #46280f, 0 14px 22px -12px rgba(0, 0, 0, .9);
-  transition: filter .15s ease, transform .08s ease, box-shadow .08s ease;
+.netbox-main {
+  grid-area: main; min-height: 0; min-width: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: clamp(8px, 1.6vh, 16px) clamp(8px, 1.4vw, 16px);
 }
-.netbox-x::before {
-  content: ""; width: 24px; height: 24px;
-  background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/icon_close.png") center / contain no-repeat;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5));
-}
-.netbox-x:hover { filter: brightness(1.14) saturate(1.05); }
-.netbox-x:active {
-  transform: translateY(4px);
-  box-shadow: 0 1px 0 -1px #46280f, 0 6px 12px -10px rgba(0, 0, 0, .9);
-}
-
-/* Lo que la pantalla tiene que decir: a qué se está esperando. Sobre la tabla clara va
-   en tinta marrón, que es la letra de todo lo que se apoya en ella. */
+/* Lo que la pantalla tiene que decir: a qué se está esperando. */
 .netbox-note {
-  margin: 0 2px; text-align: center;
-  color: var(--tinta-dim); font-size: 14px; font-weight: 600; line-height: 1.45;
+  margin: 0 4px; text-align: center;
+  color: var(--tinta-dim); font-size: 14px; font-weight: 600; line-height: 1.4;
 }
-.netbox-view { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.netbox-actions { display: flex; gap: 8px; align-items: center; justify-content: center; }
-/* Los fantasmas de acá adentro van en tinta, no en el `--ink-dim` del resto del juego:
-   sobre la tabla clara un texto claro no se lee. */
-.netbox .btn-ghost { color: var(--tinta-dim); }
-.netbox .btn-ghost:hover:not(:disabled) { color: var(--tinta); }
+.netbox-note:empty { display: none; }
+/* Si se cortó el cable, el aviso va en la cinta roja del kit, la misma del botón que
+   arriesga: un renglón marrón que dice "se cortó la conexión" se lee como un detalle. */
+.netbox[data-state="down"] .netbox-note {
+  align-self: center; padding: 8px 16px; border-radius: 10px;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  background: #bb0035 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/bg_log_red.png") center / 100% 100% no-repeat;
+}
+.netbox-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* Entrando, o con el cable cortado, la sala no tiene asientos que mostrar: el pozo se
+   va y el aviso queda solo, en el medio de la tabla. */
+#net-room:has(> .netbox-seats:empty) { display: none; }
+.netbox-main:has(#net-room:not([hidden]) .netbox-seats:empty) { justify-content: center; }
+.netbox-main:has(#net-room:not([hidden]) .netbox-seats:empty) .netbox-note { font-size: 16px; }
 
-/* El hueco de la tabla donde se apoyan los renglones. Es lo que hace que la lista se
-   lea como una lista y no como cosas sueltas encima de la madera, y es también lo que
-   se desplaza cuando hay más salas que lugar. */
+/* El pozo de la tabla, el mismo de la colección de Axies: es lo que se desplaza cuando
+   hay más salas que lugar. */
 .netbox-rooms, .netbox-seats {
-  margin: 0; padding: 5px; list-style: none;
-  display: flex; flex-direction: column; gap: 6px;
-  min-height: 0; overflow-y: auto;
+  flex: 1 1 auto; min-height: 0;
+  margin: 0; padding: clamp(6px, 1vw, 10px); list-style: none;
+  overflow-y: auto; overscroll-behavior: contain;
   border-radius: 14px;
   background: rgba(58, 32, 14, .3);
   box-shadow: inset 0 2px 7px rgba(45, 24, 10, .5);
 }
-.netbox-rooms { max-height: min(46vh, 360px); }
+.netbox-rooms::-webkit-scrollbar, .netbox-seats::-webkit-scrollbar { width: 7px; }
+.netbox-rooms::-webkit-scrollbar-thumb, .netbox-seats::-webkit-scrollbar-thumb { background: var(--madera-borde); border-radius: 4px; }
+.netbox-rooms {
+  display: grid; align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: clamp(6px, 1vw, 10px);
+}
 
-/* Cada sala es un cartel de madera, y el cartel entero es el botón: en un teléfono lo
-   que se toca tiene que ser el renglón y no dos palabras adentro del renglón. */
+/* Cada sala es un naipe de nogal acostado, con el color de la clase de quien la creó
+   encendido detrás de su Axie. El naipe entero es el botón: en un teléfono lo que se
+   toca tiene que ser la sala y no dos palabras adentro. */
 .netbox-room {
   display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 9px 11px; border: 0; border-radius: 12px;
-  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
-  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
-  font: inherit; text-align: left; cursor: pointer;
-  transition: filter .15s ease, transform .08s ease;
+  padding: 8px 10px 8px 6px;
+  border-radius: 14px; border: 2px solid var(--naipe-borde);
+  background:
+    radial-gradient(55% 120% at 8% 55%, color-mix(in srgb, var(--c) 55%, transparent), transparent 72%),
+    var(--naipe);
+  box-shadow: var(--naipe-luz), 0 3px 0 -1px rgba(30, 16, 6, .6), 0 10px 16px -12px rgba(0, 0, 0, .9);
+  color: #fff; font: inherit; text-align: left; cursor: pointer;
+  transition: transform .12s ease, filter .12s ease;
 }
-.netbox-room:hover { filter: brightness(1.14) saturate(1.05); }
-.netbox-room:active { transform: translateY(2px); }
-/* El número de la sala en la lista, adentro del aro tallado del kit —el mismo con el
-   que el Origins enmarca los avatares—. El aro es un dibujo con el centro
-   transparente, así que lo que se ve adentro es la madera del renglón. */
+.netbox-room:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.netbox-room:active { transform: translateY(1px); }
+.room-art {
+  position: relative; flex: 0 0 76px; aspect-ratio: 11 / 10;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.room-art .axie { width: 100%; filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .45)); }
+/* El número de la sala en el aro tallado del kit, como el de los niveles. */
 .room-no {
-  flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center;
-  background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/avatar_frame.png") center / 100% 100% no-repeat;
-  font: 400 15px/1 var(--num); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+  position: absolute; top: -2px; left: -2px;
+  width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%;
+  background: rgba(36, 17, 7, .7) url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/avatar_frame.png") center / 100% 100% no-repeat;
+  font: 400 12px/1 var(--num); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
 }
-.room-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.room-id b { font-size: 15px; font-weight: 700; }
+.room-id { flex: 1 1 auto; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.room-id b {
+  font: 400 18px/1.1 var(--title); letter-spacing: .01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .45);
+}
+.room-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .netbox-code {
-  font-family: var(--num); font-size: 12px; letter-spacing: .09em;
-  color: rgba(255, 240, 228, .7);
+  font-family: var(--num); font-size: 12px; letter-spacing: .12em;
+  color: rgba(255, 240, 228, .72);
 }
-/* Los dos asientos de la sala, vistos desde afuera: dos huecos, y en el que está
-   ocupado el crest del bicho con el que entró. Es lo que uno quiere saber antes de
-   entrar —si hay lugar, y contra qué— y son dos dibujos, no un renglón de texto.
-
-   Van con la cuenta al lado y no en su lugar: el hueco se ve de lejos y el "1/2" se
-   lee de cerca, y con dos asientos las dos cosas entran en el mismo renglón. */
-.room-seats { display: flex; gap: 4px; margin-left: auto; }
+/* Los dos asientos, vistos desde afuera: dos huecos, y en el ocupado el crest del
+   bicho con el que entró. Es lo que uno quiere saber antes de entrar —si hay lugar, y
+   contra qué—, y la cuenta al lado para leerlo de cerca. */
+.room-seats { display: flex; gap: 4px; }
 .room-seats i {
-  width: 23px; height: 23px; display: grid; place-items: center; border-radius: 50%;
-  background: rgba(36, 17, 7, .55);
+  width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%;
+  background: rgba(20, 10, 4, .55);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, .65);
 }
 .room-seats i[data-here="true"] {
-  background: color-mix(in srgb, var(--c, #d9a05b) 38%, rgba(36, 17, 7, .55));
+  background: color-mix(in srgb, var(--c, #d9a05b) 38%, rgba(20, 10, 4, .55));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, #d9a05b) 65%, transparent);
 }
-.room-seats .crest { width: 15px; height: 15px; }
+.room-seats .crest { width: 14px; height: 14px; }
 .netbox-count {
   font: 400 12px/1 var(--num); letter-spacing: .06em; text-transform: uppercase;
   color: rgba(255, 240, 228, .72);
 }
-/* Qué pasa si toco. Es una etiqueta y no un botón —el botón es el renglón entero—, así
-   que no lleva espesor: lleva el color de lo que va a pasar. Verde si hay asiento,
-   gris si la sala está llena o ya jugando, que ahí se entra a mirar. */
+/* Qué pasa si toco. Es una etiqueta y no un botón —el botón es el naipe entero—: verde
+   si hay asiento, gris si la sala está llena o ya jugando, que ahí se entra a mirar. */
 .room-go {
   flex: 0 0 auto; padding: 8px 14px; border-radius: 9px;
   font: 400 14px/1 var(--btn); letter-spacing: .02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
   background: #00766c url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-fill.png") center / 100% 100% no-repeat;
-  box-shadow: 0 3px 0 -1px rgba(0, 0, 0, .4);
+  box-shadow: 0 3px 0 -1px rgba(0, 0, 0, .45);
 }
 .room-go[data-watch="true"] {
   background-color: #6e696d;
   background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-bg.png");
 }
+/* Sin salas, el aviso va en el medio del pozo y no pegado arriba. */
+.netbox-rooms:has(> .netbox-empty) { align-content: center; }
 .netbox-empty {
-  padding: 18px 8px; text-align: center;
-  font-size: 14px; color: rgba(255, 240, 228, .82); text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  grid-column: 1 / -1; align-self: center;
+  padding: clamp(24px, 8vh, 64px) 12px; text-align: center;
+  font: 400 clamp(16px, 1.8vw, 20px)/1.3 var(--title); letter-spacing: .01em;
+  color: rgba(255, 244, 225, .88); text-shadow: 0 2px 0 rgba(43, 24, 9, .5);
 }
 
-/* Los dos asientos de la sala propia: quién está, con qué bicho y si dijo que sí.
-
-   El bicho va dibujado y no nombrado: es lo que se está esperando cuando se espera al
-   otro, y de paso es la primera vez que se ve al rival. El asiento vacío muestra su
-   número en el mismo aro tallado, que es lo que dice que ahí falta alguien. */
-.netbox-seats li {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 11px; border-radius: 12px;
-  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
-  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+/* Los dos asientos de la sala, frente a frente como en la mesa: el primero a la
+   izquierda mirando para este lado, el segundo a la derecha, y el VS en el medio. Cada
+   uno es un naipe de la colección en grande: el Axie con el que entra, quién es y si ya
+   dijo que sí. El vacío es un hueco con su número en el aro tallado. */
+.netbox-seats {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center; align-content: center;
+  gap: clamp(8px, 2vw, 24px);
+  padding: clamp(10px, 2vw, 24px);
 }
-.netbox-seats li[data-here="false"] { filter: saturate(.45) brightness(.82); }
+.seat {
+  position: relative; justify-self: center;
+  width: 100%; max-width: 280px; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 10px 10px 12px;
+  border-radius: 16px; border: 2px solid var(--naipe-borde);
+  background:
+    radial-gradient(90% 60% at 50% 38%, color-mix(in srgb, var(--c, transparent) 55%, transparent), transparent 72%),
+    var(--naipe);
+  box-shadow: var(--naipe-luz), 0 3px 0 -1px rgba(30, 16, 6, .6), 0 12px 20px -14px rgba(0, 0, 0, .9);
+  color: #fff; text-align: center;
+}
+/* El asiento vacío es un hueco en la tabla, no un naipe: lo que falta es alguien. */
+.seat[data-here="false"] {
+  background: rgba(36, 17, 7, .28);
+  border: 2px dashed rgba(255, 236, 214, .35);
+  box-shadow: none;
+}
 /* El que ya dijo que sí, con el aro de la casa: es el único dato de esta pantalla que
    cambia mientras la mirás. */
-.netbox-seats li[data-ready="true"] {
-  box-shadow: 0 0 0 2px var(--accent), 0 6px 14px -8px rgba(0, 0, 0, .8);
+.seat[data-ready="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 22px -4px var(--accent), 0 3px 0 -1px rgba(30, 16, 6, .6);
 }
-.seat-art { flex: 0 0 auto; width: 56px; display: grid; place-items: center; }
-.seat-art .axie { width: 100%; }
+.seat-art {
+  width: 100%; aspect-ratio: 11 / 10;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.seat-art .axie { width: 92%; filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .45)); }
+.seat:first-child .axie-body { transform: scaleX(-1); }
 .seat-empty {
-  width: 44px; height: 44px; display: grid; place-items: center;
+  align-self: center; margin: auto;
+  width: clamp(48px, 34%, 76px); aspect-ratio: 1; display: grid; place-items: center;
   background: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/avatar_frame.png") center / 100% 100% no-repeat;
-  font: 400 19px/1 var(--num); color: rgba(255, 240, 228, .85);
+  font: 400 clamp(18px, 2.4vw, 26px)/1 var(--num); color: rgba(255, 240, 228, .85);
   text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
 }
-.seat-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-/* Quién es y, si sos vos, la chapita que lo dice: van en el mismo renglón porque son
-   la misma respuesta. */
-.seat-who { display: flex; align-items: center; gap: 7px; }
-.seat-id b { font-size: 15px; font-weight: 700; }
-.seat-state {
-  margin-left: auto; text-align: right;
-  font: 700 11px/1.3 var(--display); letter-spacing: .06em; text-transform: uppercase;
-  color: rgba(255, 240, 228, .72);
+.seat-id { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+/* Quién es y, si sos vos, la chapita que lo dice: en el mismo renglón, sin partirse. */
+.seat-who { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.seat-who b {
+  font: 400 clamp(16px, 1.7vw, 20px)/1 var(--title); letter-spacing: .01em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .45);
 }
-.netbox-seats li[data-ready="true"] .seat-state { color: var(--accent); }
 .netbox-you {
-  padding: 1px 7px; border-radius: 20px; background: var(--accent); color: #06210f;
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  padding: 2px 7px 1px; border-radius: 20px; background: var(--accent); color: #06210f;
+  font: 400 11px/1.3 var(--btn); text-transform: uppercase; letter-spacing: .06em;
   text-shadow: none;
 }
-/* Con qué Axie entra cada uno, al lado de quién es. El color es el de su clase, que es
-   su mazo: dos asientos con el mismo bicho se leen de un vistazo, y está permitido. */
+/* Con qué Axie entra, con el color de su clase, que es su mazo. */
 .netbox-axie {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 13px; color: color-mix(in srgb, var(--c) 42%, #fff);
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  font-size: 13px; font-weight: 600; color: color-mix(in srgb, var(--c) 42%, #fff);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .netbox-axie .crest { width: 15px; height: 15px; }
+.seat-state {
+  padding: 5px 11px 4px; border-radius: 999px;
+  font: 400 12px/1 var(--btn); letter-spacing: .05em; text-transform: uppercase;
+  color: rgba(255, 240, 228, .8); background: rgba(0, 0, 0, .35);
+}
+.seat[data-ready="true"] .seat-state { color: #fff; background: #1f9a74; }
+.seat-vs {
+  font: 400 clamp(28px, 4vw, 52px)/1 var(--title); letter-spacing: .02em;
+  color: #ffd15c;
+  -webkit-text-stroke: 1.5px rgba(43, 24, 9, .9); paint-order: stroke fill;
+  text-shadow: 0 4px 0 rgba(43, 24, 9, .6);
+}
 
-/* Tu Axie, adentro de la sala: es **el mismo botón** que el de la portada —la cinta
-   azul, la de lo que se puede apretar antes de jugar— con el cuerpo acostado. Lleva la
-   clase `btn`, así que el material, el espesor y el hundirse los hereda de ahí y acá
-   solo queda cómo se reparte lo que tiene adentro. Abre esa misma pantalla de elección
-   encima de la sala, y por eso dice qué hace —"Cambiar"—: lo que muestra es lo que ya
-   tenés puesto, no una lista para tocar. */
+/* ---- la ficha: tu Axie, la invitación y el botón ---- */
+
+.netbox-sheet {
+  grid-area: sheet; min-height: 0; min-width: 0;
+  container-type: inline-size;
+  display: flex; flex-direction: column; gap: clamp(8px, 1.4vh, 14px);
+  padding: clamp(10px, 1.8vh, 18px) clamp(12px, 1.6vw, 20px) clamp(14px, 2.2vh, 22px);
+  overflow-y: auto;
+}
+/* Tu Axie, como la cabeza de su ficha en la elección: el dibujo respirando sobre el
+   color de su clase, el nombre grande y la clase. Todo el renglón es el botón que abre
+   esa misma elección, y lo dice la cinta de "Cambiar". */
 .netbox-mine {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 9px 13px; border-radius: 12px; text-align: left;
+  display: flex; align-items: center; gap: clamp(8px, 4cqi, 16px); width: 100%;
+  padding: 6px 12px 6px 6px; border-radius: 16px;
+  border: 1.5px solid rgba(94, 58, 34, .45);
+  background: rgba(58, 32, 14, .12);
+  font: inherit; color: var(--tinta); text-align: left; cursor: pointer;
+  transition: background .12s ease;
 }
+.netbox-mine:hover { background: rgba(58, 32, 14, .22); }
+.netbox-mine:hover .netbox-mine-cta { filter: brightness(1.14) saturate(1.05); }
+.netbox-mine-art {
+  flex: 0 0 clamp(84px, 36cqi, 156px); aspect-ratio: 1;
+  display: grid; grid-template-columns: minmax(0, 1fr); align-items: end;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c, #fff) 50%, transparent), transparent);
+  filter: drop-shadow(0 10px 14px rgba(43, 24, 9, .45));
+}
+.netbox-mine-art .axie { width: 96%; justify-self: center; }
+.netbox-mine-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
 .netbox-mine-label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .1em;
-  color: rgba(255, 255, 255, .58);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--tinta-dim);
 }
-.netbox-mine-now { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
-.netbox-mine-now .crest { width: 18px; height: 18px; }
-.netbox-mine-cta { margin-left: auto; font-size: 13px; color: var(--accent); }
-/* Desdecirse no es lo mismo que confirmar: el botón se pasa a la cinta gris, que es la
-   del kit para lo que no empieza nada. */
-#net-ready[data-on="true"] {
-  background-color: #6e696d;
-  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-bg.png");
+.netbox-mine-now { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; max-width: 100%; }
+.netbox-mine-now b {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 clamp(22px, 9cqi, 34px)/1.05 var(--title); letter-spacing: .02em;
+  color: #fff;
+  -webkit-text-stroke: 1px rgba(43, 24, 9, .85); paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(43, 24, 9, .55);
 }
-
-/* Las direcciones para entrar desde el otro aparato. Van al pie de la lista, separadas
-   por una costura, y cada una es para copiarla a mano en el celular: grande, en mono y
-   seleccionable de un toque. */
-.netbox-urls { padding-top: 10px; border-top: 2px dashed rgba(94, 58, 34, .45); }
-.netbox-label {
-  display: block; margin-bottom: 7px;
-  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-dim);
-}
-.netbox-urls ul { margin: 0; padding: 0; list-style: none; }
-.netbox-urls li {
-  padding: 7px 10px; margin-bottom: 5px; border-radius: 8px;
-  background: rgba(48, 26, 12, .5);
-  font-family: var(--mono); font-size: 14px; color: #ffe9c9;
-  user-select: all; overflow-wrap: anywhere;
+.netbox-mine-cta {
+  padding: 6px 14px; border-radius: 10px;
+  font: 400 14px/1 var(--btn); letter-spacing: .02em;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
+  box-shadow: 0 3px 0 -1px var(--madera-sombra);
 }
 
-/* La invitación a la sala: el QR a la izquierda, sobre su tarjeta blanca —una cámara
-   no lee un QR sobre madera—, y el link a la derecha para copiarlo a mano. Misma
-   costura que las direcciones del lobby: es la misma idea, del lado de adentro. */
-.netbox-invite {
-  display: flex; align-items: center; gap: 12px;
-  padding-top: 10px; border-top: 2px dashed rgba(94, 58, 34, .45);
+/* La invitación: el QR sobre su tarjeta blanca —una cámara no lee un QR sobre
+   madera— y el link al lado para copiarlo a mano, en el pozo de la tabla. */
+.netbox-invite, .netbox-urls {
+  padding: 10px; border-radius: 14px;
+  background: rgba(58, 32, 14, .22);
+  box-shadow: inset 0 2px 6px rgba(45, 24, 10, .4);
 }
-.netbox-invite[hidden] { display: none; }
+.netbox-invite { display: flex; align-items: center; gap: 12px; }
+.netbox-invite[hidden], .netbox-urls[hidden] { display: none; }
 .netbox-qr {
-  flex: none; width: clamp(104px, 18vh, 148px); aspect-ratio: 1;
+  flex: none; width: clamp(96px, 34cqi, 148px); aspect-ratio: 1;
   padding: 4px; border-radius: 10px; background: #fff;
   box-shadow: 0 3px 0 #5e3a22;
 }
 .netbox-qr svg { display: block; width: 100%; height: 100%; }
 .netbox-invite-text { display: flex; flex-direction: column; min-width: 0; }
-.netbox-link {
+.netbox-label {
+  display: block; margin-bottom: 7px;
+  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-dim);
+}
+.netbox-link, .netbox-urls li {
   padding: 7px 10px; border-radius: 8px;
-  background: rgba(48, 26, 12, .5);
+  background: rgba(48, 26, 12, .6);
   font-family: var(--mono); font-size: 13px; color: #ffe9c9;
   user-select: all; overflow-wrap: anywhere;
 }
-/* Con el teléfono acostado no hay alto para el QR debajo de los asientos: se los
-   comía. Ahí la invitación pasa a una columna a la derecha, con el QR arriba y el
-   link abajo, y el panel se ensancha para hacerle lugar. */
-@media (max-height: 560px) and (min-width: 600px) {
-  .netbox-stack:has(.netbox-invite:not([hidden])) { width: min(100%, 780px); }
-  #net-room:has(.netbox-invite:not([hidden])) {
-    display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 10px 16px;
-    align-items: start;
-  }
-  #net-room > :not(.netbox-invite) { grid-column: 1; }
-  #net-room > .netbox-invite {
-    grid-column: 2; grid-row: 1 / span 3;
-    flex-direction: column; align-items: stretch; gap: 8px;
-    padding: 0 0 0 16px; border-top: 0; border-left: 2px dashed rgba(94, 58, 34, .45);
-  }
-  #net-room > .netbox-invite .netbox-qr { width: 118px; align-self: center; }
-  #net-room > .netbox-invite .netbox-link { font-size: 12px; }
+.netbox-urls ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+
+/* El botón grande, al pie de la ficha como en la elección. */
+.netbox-sheet .choose-go {
+  width: 100%; margin-top: auto;
+  padding: 12px 16px; font-size: clamp(18px, 7cqi, 26px);
+}
+.netbox-sheet .choose-go:disabled { cursor: not-allowed; filter: grayscale(.75) brightness(.85); transform: none; }
+/* Desdecirse no es lo mismo que confirmar: el botón se pasa a la cinta gris, que es la
+   del kit para lo que no empieza nada. */
+#net-ready[data-on="true"] {
+  background-color: #6e696d;
+  background-image: url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/slider-bg.png");
+  box-shadow: 0 8px 0 -1px #3b383a, 0 26px 40px -14px rgba(0, 0, 0, .85);
 }
 
-/* En una ventana baja el logo es lo primero que sobra: el panel tiene que entrar
-   entero, y la marca ya está en la portada y en la barra de la mesa. */
-@media (max-height: 560px) {
-  .netbox-logo { display: none; }
+/* En una pantalla ancha y alta sobra ficha: tu Axie se para en grande, con el nombre
+   abajo, como el de la elección cuando se lo mira. */
+@media (min-width: 941px) and (min-height: 700px) and (orientation: landscape) {
+  .netbox-mine { flex-direction: column; align-items: center; gap: 6px; padding: 10px 12px 14px; }
+  .netbox-mine-art { flex-basis: auto; width: clamp(150px, 62cqi, 250px); }
+  .netbox-mine-info, .netbox-mine-now { align-items: center; text-align: center; }
 }
-/* En un teléfono los renglones se apilan: el nombre de la sala arriba y lo demás
-   debajo, que en 320 de ancho no entra todo en una línea. */
-@media (max-width: 420px) {
-  .netbox-room { flex-wrap: wrap; }
-  .room-id { flex: 1 0 auto; }
-  .room-go { margin-left: auto; }
-  .seat-state { flex: 1 0 100%; margin-left: 0; text-align: left; }
+
+/* Parada (o muy angosta): lo que se elige arriba, que se lleva el alto que sobre, y la
+   ficha abajo con el botón al pie, donde cae el pulgar. Tu Axie se acuesta al lado de
+   su nombre y el QR se achica. */
+@media (orientation: portrait), (max-width: 620px) {
+  .netbox-screen {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "bar" "main" "sheet";
+    gap: 8px;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .netbox[data-sheet="false"] .netbox-screen { grid-template-areas: "bar" "main" "main"; }
+  .netbox-main { padding: 8px; gap: 8px; }
+  .netbox-note { font-size: 13px; }
+  .netbox-rooms { grid-template-columns: minmax(0, 1fr); }
+  .netbox-seats { gap: 6px; padding: 8px; }
+  .seat { padding: 8px 6px 10px; gap: 6px; }
+  .seat-who b { font-size: 15px; }
+  .netbox-axie { font-size: 12px; }
+  .seat-state { font-size: 10px; padding: 4px 8px 3px; }
+  .seat-vs { font-size: 26px; }
+  .netbox-sheet { gap: 8px; padding: 10px 12px 12px; overflow: visible; }
+  .netbox-mine-art { flex-basis: clamp(64px, 20cqi, 110px); }
+  .netbox-mine-info { gap: 5px; }
+  .netbox-mine-now { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .netbox-mine-now b { font-size: clamp(20px, 7cqi, 30px); }
+  .netbox-invite { padding: 8px; }
+  .netbox-qr { width: clamp(84px, 26cqi, 120px); }
+  .netbox-sheet .choose-go { padding: 10px 16px; font-size: 20px; }
+}
+
+/* Teléfono acostado (844x390): las dos columnas, apretadas. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .netbox-screen {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 42%);
+    gap: 6px 10px;
+    padding: 6px 12px;
+  }
+  .choose-bar .netbox-code { padding: 4px 10px 3px; font-size: 14px; }
+  .netbox-main { padding: 7px; gap: 6px; }
+  .netbox-note { font-size: 12.5px; }
+  .netbox-rooms { gap: 6px; padding: 6px; }
+  .netbox-room { padding: 5px 8px 5px 4px; }
+  .room-art { flex-basis: 58px; }
+  .room-id b { font-size: 16px; }
+  .netbox-seats { padding: 6px 10px; gap: 10px; }
+  .seat { max-width: 200px; padding: 6px 8px 8px; gap: 4px; }
+  .seat-art { aspect-ratio: 4 / 3; }
+  .seat-art .axie { width: 76%; }
+  .seat-who b { font-size: 15px; }
+  .seat-state { font-size: 10px; padding: 3px 8px 2px; }
+  .seat-vs { font-size: 28px; }
+  .netbox-sheet { gap: 6px; padding: 8px 10px; }
+  .netbox-mine { padding: 4px 10px 4px 4px; }
+  .netbox-mine-art { flex-basis: 58px; }
+  .netbox-mine-info { gap: 4px; }
+  .netbox-mine-label { font-size: 10px; }
+  .netbox-mine-now { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 3px 6px; }
+  .netbox-mine-now b { font-size: 19px; }
+  .netbox-mine-now .choose-class { padding: 1px 8px 1px 3px; font-size: 11px; }
+  .netbox-mine-now .choose-class .crest { width: 15px; height: 15px; }
+  .netbox-mine-cta { padding: 4px 10px; font-size: 12px; }
+  .netbox-invite { padding: 6px; gap: 8px; }
+  .netbox-qr { width: 82px; }
+  .netbox-link, .netbox-urls li { font-size: 11.5px; padding: 5px 8px; }
+  .netbox-label { margin-bottom: 4px; font-size: 10px; }
+  .netbox-urls { padding: 6px; }
+  .netbox-sheet .choose-go { padding: 8px 14px; font-size: 17px; }
 }
 
 /* ---------- la portada ---------- */
@@ -5771,6 +5829,7 @@ body .topbar-actions .topbar-cfg-btn {
 .choose-bar { grid-area: bar; display: flex; align-items: center; gap: clamp(10px, 2vw, 24px); }
 /* El botón de volver pasa a una cinta del kit en lugar de un círculo translúcido. */
 .choose-bar .btn-ghost {
+  flex: 0 0 auto; white-space: nowrap;
   display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 18px; border-radius: 12px; border: 0;
   background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
@@ -5789,6 +5848,7 @@ body .topbar-actions .topbar-cfg-btn {
   box-shadow: 0 1px 0 -1px var(--madera-sombra), 0 4px 8px -4px rgba(0, 0, 0, .8);
 }
 .choose-step {
+  min-width: 0;
   margin: 0; font-family: var(--title); font-size: clamp(20px, 2.6vw, 30px); font-weight: 400; line-height: 1.1;
   text-transform: uppercase; letter-spacing: .02em;
   color: #fff;
@@ -6370,90 +6430,97 @@ body:has(#tutorial-overlay) .topbar,
    Modo Aventura
    ============================================================================= */
 
-/* La pantalla de Aventura ocupa la escena completa sobre el escenario. */
+/* La misma pantalla que la elección de Axie, con otra pregunta: el mapa a la izquierda
+   —un naipe por nivel— y la ficha del nivel tocado a la derecha, con un ancho que
+   alcanza para su texto y sus poderes. Parada, el mapa es una fila de seis arriba y la
+   ficha se queda con el resto (ver las `@media` del final del bloque). */
 .lobby-adventure {
   position: absolute; inset: 0; z-index: 4;
-  display: flex; flex-direction: column;
-  gap: clamp(8px, 1.6vh, 16px);
-  padding: clamp(10px, 2.2vh, 26px) clamp(14px, 3vw, 44px);
-  background: rgba(6, 9, 20, .65);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 38vw, 540px);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "bar bar"
+    "map sheet";
+  gap: clamp(8px, 1.6vh, 18px) clamp(10px, 1.8vw, 24px);
+  padding: clamp(8px, 2vh, 24px) clamp(12px, 2.6vw, 40px);
+  background: rgba(6, 9, 20, .62);
   animation: lobby-menu-in .22s cubic-bezier(.2, .9, .3, 1) backwards;
-  overflow: hidden;
 }
-
 .lobby[data-view="adventure"] .lobby-head,
 .lobby[data-view="adventure"] .lobby-cast { display: none; }
 
-.adventure-stage {
-  flex: 1; min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
-  gap: clamp(12px, 2vw, 24px);
-  align-items: stretch;
+/* Cuántos niveles llevás, del lado de enfrente del título: es la cuenta de la campaña
+   y se lee de un vistazo sin recorrer el mapa. */
+.adv-progress {
+  margin-left: auto; flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px 5px; border-radius: 999px;
+  font: 400 clamp(15px, 1.6vw, 19px)/1 var(--title); letter-spacing: .03em; color: #fff;
+  background: rgba(43, 24, 9, .6);
+  box-shadow: inset 0 0 0 2px rgba(255, 209, 92, .5), 0 3px 8px rgba(0, 0, 0, .35);
 }
+.adv-progress b { font-weight: 400; color: #ffd15c; }
 
-/* La lista de niveles pasa a un pozo hundido (.o-well) sobre el fondo. */
+/* ---- el mapa ---- */
+
+/* Contenedor de consultas en las dos medidas: los naipes se miden contra el lugar que
+   de verdad tiene el mapa, así entran las dos filas de tres sin scroll en cualquier
+   ventana apaisada. */
+.adventure-map {
+  grid-area: map; min-height: 0; min-width: 0;
+  container-type: size;
+  display: flex;
+  padding: clamp(8px, 1.6vh, 16px) clamp(8px, 1.4vw, 16px);
+}
+/* El pozo, como el de la colección. `--tile` es el ancho de cada naipe: el menor entre
+   lo que dejan tres por fila, lo que dejan dos filas a lo alto (el naipe mide ~0,9 de
+   su ancho más el nombre) y un tope, para que en una pantalla grande no sean carteles. */
 .adventure-levels {
-  display: flex; flex-direction: column; gap: 8px;
-  overflow-y: auto;
-  padding: 8px;
-  border-radius: 16px;
+  --tile: min(calc((100cqi - 44px) / 3), calc((100cqh - 100px) / 1.85), 240px);
+  flex: 1 1 auto; min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, var(--tile));
+  justify-content: center; align-content: center;
+  gap: clamp(8px, 1.2vw, 14px);
+  padding: clamp(6px, 1vw, 12px);
+  overflow-y: auto; overscroll-behavior: contain;
+  border-radius: 14px;
   background: rgba(58, 32, 14, .3);
   box-shadow: inset 0 2px 7px rgba(45, 24, 10, .5);
 }
 .adventure-levels::-webkit-scrollbar { width: 7px; }
 .adventure-levels::-webkit-scrollbar-thumb { background: var(--madera-borde); border-radius: 4px; }
 
-/* Los botones de nivel son cintas de madera del kit, como .lobby-pick, con color
-   sólido debajo de la textura y sin fondos translúcidos ni desplazamientos laterales. */
-.adv-level-btn {
-  display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 10px 14px;
-  background: #884831 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
-  border: 2px solid transparent;
-  border-radius: 12px;
-  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
-  cursor: pointer;
-  text-align: left;
-  box-shadow: 0 3px 0 -1px rgba(0, 0, 0, .45), 0 8px 14px -6px rgba(0, 0, 0, .7);
-  transition: filter .15s ease, transform .08s ease, border-color .15s ease, box-shadow .15s ease;
-}
-.adv-level-btn:hover:not(:disabled) {
-  filter: brightness(1.14) saturate(1.05);
-}
-.adv-level-btn:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 -1px rgba(0, 0, 0, .45), 0 4px 8px -4px rgba(0, 0, 0, .7);
-}
-.adv-level-btn.active {
-  border-color: #ffd15c;
-  box-shadow: 0 0 0 2px #ffd15c, 0 4px 0 -1px rgba(0, 0, 0, .5);
-  filter: brightness(1.1);
-}
-.adv-level-btn.completed .adv-level-num {
-  color: #ffd15c;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
-}
-.adv-level-btn:disabled,
-.adv-level-btn.locked {
-  opacity: .45;
-  cursor: not-allowed;
-  filter: grayscale(.6) brightness(.85);
-  box-shadow: none;
-}
-.adv-level-num {
-  font-family: var(--title); font-size: 16px; font-weight: 400; line-height: 1;
-  width: 28px; height: 28px;
-  display: grid; place-items: center;
-  background: rgba(43, 24, 9, .5);
+/* Cada nivel es un naipe de la colección (`.roster-tile`) con el rival adentro. El
+   número va en el aro tallado del kit, arriba a la izquierda, donde el naipe del Axie
+   lleva su clase. */
+.adv-tile-no {
+  position: absolute; top: 4px; left: 4px;
+  width: 30px; height: 30px; display: grid; place-items: center;
   border-radius: 50%;
-  flex: 0 0 auto;
-  color: #fff;
+  background: rgba(36, 17, 7, .7) url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/avatar_frame.png") center / 100% 100% no-repeat;
+  font: 400 15px/1 var(--num); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
 }
-.adv-level-name {
-  font-family: inherit; font-size: 14px; font-weight: 700;
-  color: #fff;
+/* Superado: la estrella dorada en la esquina de enfrente, donde el Axie lleva "En uso". */
+.adv-tile .adv-mark {
+  display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px;
+  background: #ffd15c; color: #5c3807; text-shadow: none;
+  font: 400 15px/1 var(--title);
 }
+.adv-tile .adv-mark--lock { background: rgba(36, 17, 7, .8); color: #d7c2a4; }
+/* Cerrado: el naipe sin el color de la clase y el rival en silueta. Se sabe que ahí
+   espera alguien, no quién. */
+.adv-tile[data-state="locked"] {
+  cursor: not-allowed;
+  background: var(--naipe);
+  border-color: rgba(125, 90, 60, .6);
+}
+.adv-tile[data-state="locked"] .roster-art .axie { filter: brightness(0) opacity(.42); }
+.adv-tile[data-state="locked"] .roster-name { color: rgba(255, 244, 225, .45); }
+.adv-tile[data-state="locked"] .adv-tile-no { color: rgba(255, 255, 255, .55); }
+.adv-tile:disabled:hover,
+.adv-tile:disabled:active { transform: none; filter: none; }
 
 /* Candado vectorial en CSS puro sin emojis */
 .adv-lock {
@@ -6478,239 +6545,186 @@ body:has(#tutorial-overlay) .topbar,
   box-sizing: border-box;
 }
 
-/* La ficha del nivel es una tabla de madera (.o-panel). */
+/* ---- la ficha del nivel ---- */
+
+/* Tres renglones, como la ficha del Axie: la cabeza, lo que scrollea si no entra y el
+   botón, que queda siempre a la vista. */
 .adventure-card {
-  position: relative;
-  color: var(--tinta);
-  border-radius: 20px;
-  border: 3px solid var(--madera-borde);
-  background: #ac8a68 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/frame_back.png") center / 100% 100% no-repeat;
-  box-shadow: 0 6px 0 -1px var(--madera-sombra), 0 30px 60px -18px rgba(0, 0, 0, .8);
-  padding: clamp(16px, 2.5vw, 24px);
-  display: flex; flex-direction: column;
-  gap: clamp(12px, 1.8vh, 18px);
-  overflow-y: auto;
-}
-.adventure-card::-webkit-scrollbar { width: 7px; }
-.adventure-card::-webkit-scrollbar-thumb { background: var(--madera-borde); border-radius: 4px; }
-
-.adv-badge {
-  display: inline-block;
-  font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1;
-  letter-spacing: .08em; text-transform: uppercase;
-  padding: 5px 12px; border-radius: 20px;
-  background: rgba(58, 32, 14, .25);
-  color: var(--tinta-dim);
-  border: 1.5px solid rgba(94, 58, 34, .45);
-  margin-bottom: 6px;
-}
-.adv-badge.adv-badge--won {
-  background: rgba(255, 209, 92, .25);
-  color: #5c3807;
-  border-color: #c49126;
-}
-
-.adv-card-title {
-  margin: 0;
-  font-family: var(--title); font-size: clamp(20px, 2.6vw, 30px); font-weight: 400; line-height: 1.1;
-  color: var(--tinta);
-}
-.adv-card-desc {
-  margin: 4px 0 0;
-  font: 400 15px/1.45 var(--display);
-  color: var(--tinta);
-}
-
-.adv-section-title {
-  margin: 0 0 8px;
-  font-family: var(--title); font-size: 13px; font-weight: 400; line-height: 1;
-  letter-spacing: .06em; text-transform: uppercase;
-  color: var(--tinta-dim);
-}
-
-.adv-powers-grid {
+  grid-area: sheet; min-height: 0; min-width: 0;
+  container-type: inline-size;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(8px, 1.4vh, 14px);
+  padding: clamp(10px, 1.8vh, 18px) clamp(12px, 1.6vw, 20px) clamp(14px, 2.2vh, 22px);
 }
-
-.adv-power-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 12px;
-  background: rgba(58, 32, 14, .14);
-  border: 1.5px solid rgba(94, 58, 34, .35);
-  border-radius: 12px;
-  box-shadow: inset 0 2px 6px rgba(45, 24, 10, .3);
-}
-.adv-power-icon {
-  flex: 0 0 auto;
-}
-.adv-power-text b {
-  display: block; font: 700 14px/1.2 var(--display); color: var(--tinta);
-}
-.adv-power-text b span { font-weight: 600; color: var(--tinta-dim); }
-.adv-power-text p {
-  margin: 2px 0 0; font: 400 13.5px/1.35 var(--display); color: var(--tinta);
-}
-.adv-powers-foot {
-  margin: 8px 0 0; font: 400 13px/1.35 var(--display); color: var(--tinta-dim);
-}
-
-.adv-rival-box {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px;
-  background: rgba(58, 32, 14, .14);
-  border: 1.5px solid rgba(94, 58, 34, .35);
-  border-radius: 12px;
-  box-shadow: inset 0 2px 6px rgba(45, 24, 10, .3);
-}
+.adv-head { display: flex; align-items: center; gap: clamp(10px, 4cqi, 18px); min-width: 0; }
 /* El rival en su cuadro, vivo: parado sobre el terreno de su clase —el mismo fondo del
    combate (`--arena`), corrido para que el horizonte le quede a la altura del lomo—.
    Los gestos saltan un poco: el aire de arriba es para eso. */
 .adv-rival-stage {
-  flex: 0 0 auto;
-  width: clamp(104px, 11vw, 148px); aspect-ratio: 1;
+  flex: 0 0 clamp(96px, 34cqi, 172px); aspect-ratio: 1;
   /* La columna va fija: el Axie son capas absolutas, y con una columna `auto` mide
      cero y el ancho del dibujo se resuelve contra ese cero. Sin padding a propósito:
      en porcentaje se mide contra el ancho de la ficha, no del cuadro, y se lo comía. */
   display: grid; grid-template-columns: minmax(0, 1fr); align-items: end;
   box-sizing: border-box;
-  border-radius: 12px;
-  border: 2px solid var(--madera-borde);
+  border-radius: 16px;
+  border: 3px solid var(--madera-borde);
   background: var(--arena) 50% calc(var(--horizonte) * 100%) / auto 210% no-repeat var(--piso);
-  box-shadow: inset 0 3px 10px rgba(0, 0, 0, .45), 0 3px 0 -1px var(--madera-sombra);
+  box-shadow: inset 0 3px 10px rgba(0, 0, 0, .45), 0 4px 0 -1px var(--madera-sombra);
   overflow: hidden;
 }
 .adv-rival-stage .axie { width: 78%; justify-self: center; margin-bottom: 7%; }
-.adv-rival-info {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+.adv-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.adv-kicker {
+  font: 700 12px/1 var(--display); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--tinta-dim);
 }
-.adv-rival-info b {
-  font: 400 clamp(20px, 2vw, 26px)/1.05 var(--title); color: var(--tinta);
+/* El nombre del nivel, con la letra y el contorno del nombre del Axie en su ficha. */
+.adv-card-title {
+  margin: 0; max-width: 100%;
+  font: 400 clamp(22px, 7.4cqi, 34px)/1.05 var(--title); letter-spacing: .02em;
+  color: #fff;
+  -webkit-text-stroke: 1px rgba(43, 24, 9, .85); paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(43, 24, 9, .55);
 }
-.adv-rival-class {
-  display: inline-flex; align-items: center; gap: 6px;
-  font: 600 14px/1.2 var(--display); color: var(--tinta);
+/* La dificultad es una chapa con el color de lo que cuesta: verde, ámbar o rojo. */
+.adv-diff {
+  padding: 4px 10px 3px; border-radius: 999px;
+  font: 400 12px/1 var(--btn); letter-spacing: .04em; text-transform: uppercase;
+  color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .35);
+  background: #c08a1e; box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
 }
-.adv-rival-diff {
-  font: 600 13px/1.2 var(--display); color: var(--tinta);
-  padding: 2px 8px; background: rgba(58, 32, 14, .25); border-radius: 6px;
-}
+.adv-diff[data-diff="facil"] { background: #3c9a3a; }
+.adv-diff[data-diff="duro"] { background: #bb2a36; }
 
-.adv-card-actions {
-  margin-top: auto;
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  display: flex; justify-content: flex-end; align-items: center; gap: 12px;
-  flex-wrap: wrap;
-  padding: 8px 0 2px;
-  /* El degradado se cierra en 14px y los botones quedan sobre madera llena: si la
-     transparencia llegaba hasta ellos, el rival se leía a medias detrás del botón. */
-  background: linear-gradient(180deg, rgba(172, 138, 104, 0) 0, #ac8a68 14px);
-  padding-top: 18px;
+/* Lo que puede no entrar —el relato y los poderes— scrollea acá; la cabeza y el botón
+   se quedan a la vista. */
+.adv-body {
+  min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 8px;
 }
-
-@media (max-width: 680px) {
-  .adventure-stage {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 10px;
-    min-height: 0;
-  }
-  .adventure-levels {
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 6px;
-    gap: 6px;
-    justify-content: center;
-  }
-  .adv-level-btn {
-    width: auto;
-    flex: 1 1 0;
-    min-width: 38px;
-    max-width: 52px;
-    height: 42px;
-    padding: 0;
-    justify-content: center;
-  }
-  .adv-level-name {
-    display: none;
-  }
-  .adv-level-num {
-    margin: 0;
-  }
+.adv-body::-webkit-scrollbar { width: 7px; }
+.adv-body::-webkit-scrollbar-thumb { background: var(--madera-borde); border-radius: 4px; }
+.adv-card-desc { margin: 0; font: 500 14.5px/1.45 var(--display); color: var(--tinta); }
+.adv-body .choose-label { margin-top: 4px; text-align: left; }
+.adv-powers { display: grid; gap: 8px; }
+/* Cada poder es un naipe de nogal, como las cartas del mazo en la ficha del Axie, con
+   el color de su clase encendido detrás del amuleto. */
+.adv-power {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 12px; border: 2px solid var(--naipe-borde);
+  background:
+    radial-gradient(70% 130% at 0% 50%, color-mix(in srgb, var(--c) 50%, transparent), transparent 70%),
+    var(--naipe);
+  box-shadow: var(--naipe-luz), 0 3px 0 -1px rgba(30, 16, 6, .6);
+  color: #fff;
 }
+.adv-power-icon { flex: 0 0 auto; display: grid; place-items: center; width: 46px; height: 46px; }
+.adv-power-icon .power { width: 42px; height: 42px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
+.adv-power-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.adv-power-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.adv-power-name b {
+  font: 400 16px/1.1 var(--title); letter-spacing: .01em; font-weight: 400;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .4);
+}
+.adv-power-owner {
+  display: inline-flex; align-items: center; gap: 4px;
+  font: 700 11px/1 var(--display); letter-spacing: .06em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--c) 40%, #fff);
+}
+.adv-power-owner .crest--sm { width: 14px; height: 14px; vertical-align: 0; }
+.adv-power-note { font: 400 13px/1.35 var(--display); color: #f1dfc6; }
+.adv-powers-foot { margin: 0; font: 400 12.5px/1.35 var(--display); color: var(--tinta-dim); }
+.adventure-card .choose-go { width: 100%; padding: 12px 16px; font-size: clamp(18px, 7cqi, 26px); }
 
-@media (max-height: 500px) {
+/* Parada (o muy angosta): el mapa es una fila de seis naipes chicos arriba —sin el
+   nombre, que ya está en la ficha— y la ficha se lleva el resto del alto, con el botón
+   al pie donde cae el pulgar. */
+@media (orientation: portrait), (max-width: 620px) {
   .lobby-adventure {
-    padding: 6px 14px;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: "bar" "map" "sheet";
+    gap: 8px;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
   }
-  .adventure-stage {
-    grid-template-columns: minmax(150px, 190px) minmax(0, 1fr);
-    gap: 10px;
-  }
+  .adv-progress { padding: 5px 11px 4px; font-size: 15px; }
+  /* Acá el mapa mide lo que miden sus naipes: con `size` no mediría nada. */
+  .adventure-map { container-type: inline-size; padding: 7px; }
   .adventure-levels {
-    padding: 4px 6px;
-    gap: 4px;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 5px; padding: 5px;
   }
-  .adv-level-btn {
-    padding: 4px 8px;
-    gap: 6px;
+  .adv-tile { padding: 3px 3px 5px; border-radius: 11px; }
+  .adv-tile .roster-name { display: none; }
+  .adv-tile-no { top: 2px; left: 2px; width: 21px; height: 21px; font-size: 11px; }
+  .adv-tile .adv-mark { top: 2px; right: 2px; min-width: 17px; height: 17px; padding: 0 3px; font-size: 11px; }
+  .adv-tile .adv-lock { transform: scale(.8); margin-top: 4px; }
+  .adventure-card { gap: 8px; padding: 10px 12px 12px; }
+  .adv-rival-stage { flex-basis: clamp(88px, 28cqi, 150px); }
+  .adv-card-desc { font-size: 14px; }
+  .adventure-card .choose-go { padding: 10px 16px; font-size: 20px; }
+}
+/* Un teléfono alto tiene lugar para el mapa en dos filas de tres, como la colección de
+   Axies: los naipes crecen y vuelve el nombre del rival. En uno bajo la fila de seis
+   deja el alto para la ficha, que es la que se lee. */
+@media (orientation: portrait) and (min-height: 760px) {
+  .adventure-levels { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding: 7px; }
+  .adv-tile { padding: 4px 4px 6px; }
+  .adv-tile .roster-art { aspect-ratio: 5 / 4; }
+  .adv-tile .roster-art .axie { width: 86%; }
+  .adv-tile .roster-name { display: block; font-size: 13px; }
+  .adv-tile-no { top: 4px; left: 4px; width: 24px; height: 24px; font-size: 12px; }
+  .adv-tile .adv-mark { top: 4px; right: 4px; min-width: 19px; height: 19px; font-size: 12px; }
+}
+/* Una tableta parada tiene lugar para el nombre aunque vaya en una sola fila. */
+@container (min-width: 560px) {
+  .adv-tile .roster-name { display: block; }
+}
+
+/* Teléfono acostado (844x390): las dos columnas, apretadas. El botón sube al lado del
+   rival, como en la ficha del Axie, y el texto va un talle más chico. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .lobby-adventure {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 56%);
+    gap: 6px 10px;
+    padding: 6px 12px;
   }
-  .adv-level-num {
-    width: 22px;
-    height: 22px;
-    font-size: 12px;
-  }
-  .adv-level-name {
-    font-size: 12px;
-  }
+  .adv-progress { padding: 4px 10px 3px; font-size: 14px; }
+  .adventure-map { padding: 7px; }
+  .adventure-levels { gap: 6px; padding: 6px; }
+  .adv-tile { padding: 4px 4px 6px; border-radius: 12px; }
+  .adv-tile .roster-name { font-size: 12px; }
+  .adv-tile-no { width: 22px; height: 22px; font-size: 12px; }
+  .adv-tile .adv-mark { min-width: 18px; height: 18px; font-size: 12px; }
   .adventure-card {
-    padding: 10px 14px;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "head go" "body body";
+    gap: 6px 10px;
+    padding: 8px 10px;
   }
-  .adv-card-title {
-    font-size: 18px;
-  }
-  .adv-card-desc {
-    font-size: 13.5px;
-  }
-  .adv-section-title {
-    font-size: 12px;
-    margin-bottom: 4px;
-  }
-  .adv-powers-grid {
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 6px;
-  }
-  .adv-power-item {
-    padding: 6px 8px;
-    gap: 8px;
-  }
-  .adv-power-text b {
-    font-size: 13px;
-  }
-  .adv-power-text p {
-    font-size: 12.5px;
-  }
-  .adv-rival-box {
-    padding: 6px 10px;
-    gap: 8px;
-  }
-  .adv-rival-stage { width: 76px; }
-  .adv-rival-info { gap: 3px; }
-  .adv-rival-info b { font-size: 18px; }
-  .adv-card-actions {
-    padding: 4px 0 2px;
-    gap: 8px;
-  }
-  .adv-card-actions .choose-go {
-    font-size: 15px;
-    padding: 7px 18px;
-  }
+  .adv-head { grid-area: head; gap: 8px; }
+  .adv-body { grid-area: body; gap: 5px; }
+  .adv-rival-stage { flex-basis: 64px; border-width: 2px; border-radius: 10px; }
+  .adv-info { gap: 3px; }
+  .adv-kicker { font-size: 10px; }
+  .adv-card-title { font-size: 18px; }
+  .adv-info .choose-class { padding: 1px 8px 1px 3px; font-size: 11px; }
+  .adv-info .choose-class .crest { width: 15px; height: 15px; }
+  .adv-diff, .adv-info .choose-on { font-size: 10px; padding: 3px 7px 2px; }
+  .adv-card-desc { font-size: 12.5px; line-height: 1.35; }
+  .adv-body .choose-label { display: none; }
+  .adv-powers { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 5px; }
+  .adv-power { padding: 5px 8px 5px 5px; gap: 7px; }
+  .adv-power-icon { width: 32px; height: 32px; }
+  .adv-power-icon .power { width: 30px; height: 30px; }
+  .adv-power-name b { font-size: 14px; }
+  .adv-power-note { font-size: 11.5px; }
+  .adv-powers-foot { font-size: 11px; }
+  .adventure-card .choose-go { grid-area: go; align-self: start; width: auto; padding: 8px 14px; font-size: 15px; }
 }
 
 /* ---------- terminaciones del sistema Origins ----------

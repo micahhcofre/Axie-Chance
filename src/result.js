@@ -38,6 +38,14 @@ import { DIFFICULTY_LABELS, isFinalLevel } from './adventure.js';
  */
 export const RESULT_BEAT = { sky: 80, banner: 250, title: 480, axie: 650, fx: 900, stats: 1250, loot: 1750, acts: 1900 };
 
+/**
+ * Cuándo vuelve la música de la portada, desde que la pantalla entra: apenas se apaga
+ * el remate (que suena en `fx` y dura un segundo y medio). La pantalla del final ya no
+ * es la partida —es la puerta a la siguiente o al menú—, y el tema que suena en todos
+ * los menús entra acá para seguir sin cortes cuando se vuelve a la portada.
+ */
+export const RESULT_MUSIC = RESULT_BEAT.fx + 1700;
+
 /** Lo que espera la pantalla después del final si no hay un golpe en el aire. */
 export const RESULT_WAIT = 1600;
 
@@ -350,6 +358,7 @@ export function createResult(node, { audio = null } = {}) {
       const sound = { win: 'win', lose: 'lose', tie: 'tie' }[view.outcome];
       preloadVfx(sound);
       audio?.sfx(sound, { delay: wait + RESULT_BEAT.fx });
+      later(wait + RESULT_MUSIC, () => audio?.music?.('menu'));
       // Cada objeto del botín hace su ruido al caer.
       view.rewards.forEach((_, i) => audio?.sfx('take', { delay: wait + RESULT_BEAT.loot + 150 + i * 350 }));
 

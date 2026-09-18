@@ -369,7 +369,7 @@ async function listening(seed = 3) {
 
 // La vida corta cambia el tema, y el final lo apaga.
 {
-  const { game, heard } = await listening();
+  const { game, audio, heard } = await listening();
   // Al jugador le queda el 20% de la vida, y su golpe deja sin vida a la CPU: con la
   // partida resuelta no hay reparto, la CPU devuelve el golpe y ahí cierra.
   game.state.totals.p2 = TARGET * 0.8;
@@ -381,6 +381,12 @@ async function listening(seed = 3) {
   for (let i = 0; i < 400 && game.state.phase !== 'matchEnd'; i++) await idle();
   assert.equal(game.state.phase, 'matchEnd', 'la partida se cerró');
   assert.equal(heard[heard.length - 1].music, null, 'la música se apaga para el remate');
+  // Después del remate la pantalla del final pone la del menú (ver `RESULT_MUSIC`), y
+  // un repintado de la mesa terminada no la vuelve a cortar.
+  audio.music('menu');
+  game.refresh();
+  await idle();
+  assert.equal(heard[heard.length - 1].music, 'menu', 'repintar el final no apaga la música del menú');
   // El remate lo larga la pantalla del final, con su efecto (ver `test/result.test.js`).
   assert.equal(heard.filter((h) => ['win', 'lose', 'tie'].includes(h.key)).length, 0,
     'el resultado no suena desde las señales');

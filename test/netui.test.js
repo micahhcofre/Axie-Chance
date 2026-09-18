@@ -124,9 +124,22 @@ ws.push({ t: 'rooms', rooms: [SALA, { ...SALA, code: 'X<b>', name: '<img src=x o
 assert.equal(nodes['net-lobby'].hidden, false);
 assert.equal(nodes['net-room'].hidden, true);
 assert.match(nodes['net-title'].textContent, /Salas/);
+// En la lista la barra vuelve a la portada, y la ficha es tuya: tu Axie —que se puede
+// cambiar antes de crear, porque la sala se llama por él— y el botón de crear.
+assert.equal(nodes['net-home'].hidden, false, 'en la lista se vuelve a la portada');
+assert.equal(nodes['net-close'].hidden, true, 'y no hay sala de la que salir');
+assert.equal(nodes['net-code'].hidden, true, 'ni código que dictar');
+assert.equal(nodes.net.dataset.sheet, 'true', 'la ficha está');
+assert.equal(nodes['net-axie'].hidden, false, 'con tu Axie, que se puede cambiar antes de crear');
+assert.match(nodes['net-axie-now'].innerHTML, /Colmillo/);
+assert.match(nodes['net-axie-art'].innerHTML, /class="axie/, 'y dibujado');
+assert.equal(nodes['net-create'].hidden, false, 'con el botón de crear');
+assert.equal(nodes['net-ready'].hidden, true, 'y sin el de listo, que es de adentro');
 assert.match(nodes['net-rooms'].innerHTML, /data-sala="KJ7M"/, 'se listan las salas que hay');
 assert.match(nodes['net-rooms'].innerHTML, /Sala de Colmillo/, 'con el nombre de quien la creó');
-assert.doesNotMatch(nodes['net-rooms'].innerHTML, /<img src=x|onerror=|X<b>/,
+// El naipe de cada sala trae dibujado al Axie de quien la creó, y sus capas llevan su
+// propio `onerror` (ver `axieArt`): lo que se busca es el del otro navegador.
+assert.doesNotMatch(nodes['net-rooms'].innerHTML, /<img src=x|onerror=alert|X<b>/,
   'lo que cuenta otro navegador se dibuja sin marcado');
 assert.match(nodes['net-list'].innerHTML, /192\.168\.1\.5:8000\/\?red/,
   'y con qué dirección entra el otro aparato de la red');
@@ -155,6 +168,13 @@ assert.equal(nodes['net-room'].hidden, false, 'y queda la sala');
 assert.match(nodes['net-title'].textContent, /Sala de Colmillo/);
 assert.match(nodes['net-seats'].innerHTML, /Jugador 2/);
 assert.match(nodes['net-seats'].innerHTML, /netbox-you/, 'se marca cuál de los dos sos');
+assert.match(nodes['net-seats'].innerHTML, /data-here="true"[\s\S]*seat-vs[\s\S]*data-here="true"/,
+  'los dos asientos, frente a frente');
+assert.equal(nodes['net-home'].hidden, true, 'adentro, la barra ya no vuelve a la portada');
+assert.equal(nodes['net-close'].hidden, false, 'sale de la sala');
+assert.equal(nodes['net-code'].hidden, false, 'con el código a la vista');
+assert.equal(nodes['net-code'].textContent, 'KJ7M');
+assert.equal(nodes['net-create'].hidden, true, 'adentro no se crea otra');
 
 // ---- la invitación ----------------------------------------------------------
 // Con los dos sentados no hay a quién invitar. Con un asiento libre aparece el QR, y
@@ -396,6 +416,49 @@ console.log('  ✓ lobby, sala, listo y partida');
   assert.equal(nodes['net-lobby'].hidden, false, 'y volvés a la lista');
   void mia;
   console.log('  ✓ tu propia sala: corre acá, invita con QR y atiende a las pantallas de afuera');
+}
+
+// ---- las salas en la misma página que la portada ------------------------------
+// Con la mesa de la página (`table`), la sala no monta otra: sienta la de la página
+// frente a su partida, y al irse la devuelve y vuelve a la lista sin recargar. "Volver"
+// desde la lista guarda la pantalla, cierra el cable y le devuelve la página a la
+// portada. Así la música de los menús no se corta nunca.
+{
+  const sentadas = [];
+  let devueltas = 0;
+  let salidas = 0;
+  const table = { attach: (_g, opts) => sentadas.push(opts), detach: () => { devueltas++; } };
+  const red = connect({ chooseAxie: () => {}, table, onExit: () => { salidas++; } });
+  await settle();
+  const cable = FakeWebSocket.last;
+  cable.onopen();
+  await settle();
+  click(nodes['net-rooms'], '[data-sala]', { sala: 'KJ7M' });
+  await fromHost(cable, { t: 'hello', seat: 'p2', room: { ...SALA, seats: { p1: true, p2: true } } }, 1);
+  await fromHost(cable, { t: 'state', state: turnOfP1 }, 2);
+  assert.equal(sentadas.length, 1, 'la partida sienta a la mesa de la página');
+  assert.equal(sentadas[0].seat, 'p2', 'con tu asiento');
+  assert.equal(sentadas[0].net, true);
+  assert.equal(nodes.net.hidden, true, 'y la sala se guarda mientras se juega');
+
+  await sentadas[0].leave();
+  assert.ok(cable.lastSent('act', (b) => b.action === 'leave'), 'irse se le avisa a la sala');
+  assert.equal(devueltas, 1, 'la mesa vuelve a la partida de la página');
+  assert.equal(nodes.net.hidden, false, 'y se vuelve a la lista, sin recargar');
+  assert.equal(nodes['net-lobby'].hidden, false);
+
+  let evitado = false;
+  nodes['net-home'].handlers.click({ preventDefault() { evitado = true; } });
+  assert.ok(evitado, '"Volver" no navega: la portada está en esta misma página');
+  assert.equal(salidas, 1, 'se la devuelve a la portada');
+  assert.equal(nodes.net.hidden, true, 'la sala se guarda');
+  assert.equal(cable.closed, true, 'y cierra el cable: en la portada no se mira ninguna lista');
+
+  red.show();
+  await settle();
+  assert.notEqual(FakeWebSocket.last, cable, 'volver a las salas abre un cable nuevo');
+  assert.equal(nodes.net.hidden, false);
+  console.log('  ✓ las salas en la misma página: la mesa se sienta y se levanta sin recargar');
 }
 
 // ---- el que llega tarde mira -------------------------------------------------
