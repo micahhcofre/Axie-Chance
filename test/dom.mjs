@@ -111,5 +111,12 @@ export function fakeDom() {
   };
   globalThis.localStorage = bag();
   globalThis.sessionStorage = bag();
+  // El dispositivo de mentira habla español: sin preferencia guardada, `currentLang()`
+  // sigue al dispositivo (ver `deviceLang` en `i18n.js`), y los tests miran textos en
+  // español. Con `defineProperty` porque en Node `navigator` es un accessor propio.
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { language: 'es-AR', languages: ['es-AR', 'es'] },
+    configurable: true, writable: true,
+  });
   return nodes;
 }

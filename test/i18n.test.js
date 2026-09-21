@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fakeDom } from './dom.mjs';
-import { tr, currentLang, setLang, translateDom, LANG_KEY, LANGS } from '../src/i18n.js';
+import { tr, currentLang, setLang, deviceLang, translateDom, LANG_KEY, LANGS } from '../src/i18n.js';
 import { EN_STRINGS } from '../src/i18n-en.js';
 
 fakeDom();
@@ -25,10 +25,42 @@ assert.equal(currentLang(), 'en', 'setLang(en) debe activar inglés');
 setLang('es');
 assert.equal(currentLang(), 'es', 'setLang(es) debe activar español');
 
-// Idioma desconocido debe caer en fallback español
+// Sin preferencia válida guardada manda el idioma del dispositivo
+const realNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+const withDevice = (nav, fn) => {
+  Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true, writable: true });
+  try { fn(); } finally {
+    if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator);
+    else delete globalThis.navigator;
+  }
+};
 setLang('fr');
-assert.equal(currentLang(), 'es', 'idioma desconocido debe hacer fallback a español');
-console.log('✓ currentLang y setLang ok');
+withDevice({ language: 'es-AR', languages: ['es-AR', 'es'] }, () => {
+  assert.equal(deviceLang(), 'es', 'dispositivo en español debe detectarse como es');
+  assert.equal(currentLang(), 'es', 'sin preferencia válida manda el dispositivo (es)');
+});
+withDevice({ language: 'en-GB', languages: ['en-GB', 'en'] }, () => {
+  assert.equal(currentLang(), 'en', 'sin preferencia válida manda el dispositivo (en)');
+});
+withDevice({ language: 'fr-FR', languages: ['fr-FR', 'pt-BR', 'es-ES'] }, () => {
+  assert.equal(deviceLang(), 'es', 'se toma el primer idioma del dispositivo que hablamos');
+});
+withDevice({ language: 'fr-FR', languages: ['fr-FR', 'de'] }, () => {
+  assert.equal(deviceLang(), 'en', 'dispositivo en un idioma ajeno cae en inglés');
+  assert.equal(currentLang(), 'en', 'idioma desconocido guardado + dispositivo ajeno = inglés');
+});
+withDevice({ language: 'PT' }, () => {
+  assert.equal(deviceLang(), 'en', 'sin languages y con language ajeno cae en inglés');
+});
+withDevice(undefined, () => {
+  assert.equal(deviceLang(), 'en', 'sin navigator cae en inglés');
+});
+// La preferencia guardada le gana al dispositivo
+setLang('es');
+withDevice({ language: 'en-US', languages: ['en-US'] }, () => {
+  assert.equal(currentLang(), 'es', 'la preferencia guardada le gana al dispositivo');
+});
+console.log('✓ currentLang, setLang y deviceLang ok');
 
 // ---- función tr() ----------------------------------------------------------
 // En español: texto original y reemplazo de parámetros

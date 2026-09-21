@@ -136,6 +136,12 @@ globalThis.localStorage = {
   setItem: (k, v) => memoria.set(k, String(v)),
   removeItem: (k) => memoria.delete(k),
 };
+// El dispositivo de mentira habla español: sin preferencia guardada, la portada sigue
+// al dispositivo (ver `deviceLang` en `i18n.js`) y este test mira textos en español.
+Object.defineProperty(globalThis, 'navigator', {
+  value: { language: 'es-AR', languages: ['es-AR', 'es'] },
+  configurable: true, writable: true,
+});
 
 const { createLobby, symbolTally } = await import('../src/lobby.js');
 const { deckFor } = await import('../src/axies.js');

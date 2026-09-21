@@ -7,17 +7,37 @@ export const LANG_KEY = 'axie-chance:lang';
 export const LANGS = ['es', 'en'];
 
 /**
- * Devuelve el idioma actual ('es' o 'en'). Sin `document` no hay pantalla —es el
- * servidor de salas en Node— y habla en español: preguntarle a Node por su
- * `localStorage` experimental solo deja un aviso en la consola.
+ * Idioma del dispositivo: el primero de `navigator.languages` (o `navigator.language`)
+ * cuya base ('es' de 'es-AR', 'en' de 'en-US') esté en LANGS. Si el dispositivo no
+ * habla ninguno de los nuestros, inglés.
+ */
+export function deviceLang() {
+  try {
+    const nav = globalThis.navigator;
+    const tags = nav?.languages?.length ? nav.languages : [nav?.language];
+    for (const tag of tags) {
+      const base = String(tag ?? '').toLowerCase().split('-')[0];
+      if (LANGS.includes(base)) return base;
+    }
+  } catch {
+    // sin navigator no hay dispositivo que consultar
+  }
+  return 'en';
+}
+
+/**
+ * Devuelve el idioma actual ('es' o 'en'): el guardado en localStorage y, si no hay
+ * uno válido, el del dispositivo (`deviceLang`, con inglés de respaldo). Sin `document`
+ * no hay pantalla —es el servidor de salas en Node— y habla en español: preguntarle a
+ * Node por su `localStorage` experimental solo deja un aviso en la consola.
  */
 export function currentLang() {
   if (!globalThis.document) return 'es';
   try {
     const lang = globalThis.localStorage?.getItem(LANG_KEY);
-    return LANGS.includes(lang) ? lang : 'es';
+    return LANGS.includes(lang) ? lang : deviceLang();
   } catch {
-    return 'es';
+    return deviceLang();
   }
 }
 
