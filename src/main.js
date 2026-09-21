@@ -8,6 +8,13 @@ import { currentLang, translateDom } from './i18n.js';
 document.documentElement.lang = currentLang();
 translateDom(document.body);
 
+// Los dibujos no se arrastran (ver `-webkit-user-drag` en `styles.css`); Firefox no
+// conoce esa propiedad, así que acá se frena el arrastre de imágenes y de texto. Lo que
+// sí se escribe o se copia (campos de texto, el link de la sala) sigue igual.
+document.addEventListener('dragstart', (e) => {
+  if (!e.target.closest?.('input, textarea, [contenteditable], .netbox-link')) e.preventDefault();
+});
+
 // Una sola página para todo: la portada, sus menús, la mesa y las salas de la red.
 // Antes `?red` era otra página y pasar del menú a las salas recargaba: la música del
 // menú se cortaba, y como el navegador no deja sonar nada hasta que el jugador toca
