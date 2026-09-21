@@ -23,7 +23,9 @@ export const IDS = [
   'net-lobby', 'net-room', 'net-rooms', 'net-seats', 'net-create', 'net-close', 'net-ready',
   // Con qué Axie entrás a la sala. El botón abre la pantalla de elección de la
   // portada, que es la única del juego donde se elige (ver `main.js`).
-  'net-axie', 'net-axie-now',
+  'net-axie', 'net-axie-now', 'net-axie-art',
+  // Las dos puertas de la barra —volver a la portada o salir de la sala— y el código.
+  'net-home', 'net-code',
   // La invitación: el QR y el link de la sala, mientras falte alguien.
   'net-invite', 'net-qr', 'net-link',
 ];

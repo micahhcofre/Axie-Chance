@@ -81,7 +81,7 @@ export function createCues(audio) {
     last = snapshot(state);
     // Partida nueva: el estado es otro y comparar contra el anterior daría cualquier
     // cosa —una cadena de 5 cartas que "vuelve" a 1, la vida entera de golpe—.
-    if (!before || state.round < before.round || state.hitId < before.hitId) return music(state);
+    if (!before || state.round < before.round || state.hitId < before.hitId) return music(state, null);
 
     // Si en este repintado se soltó un ataque, todo lo que venga con él tiene que
     // esperar a que el golpe llegue: el estado cambia al soltarlo, pero el impacto se
@@ -123,7 +123,7 @@ export function createCues(audio) {
     // El remate del final no sale de acá: lo larga la pantalla del final (ver
     // `result.js`), que sabe cuándo aparece y hace coincidir el pico con su efecto.
 
-    music(state);
+    music(state, before);
   }
 
   /**
@@ -131,8 +131,14 @@ export function createCues(audio) {
    * ya está sonando, así que acá solo hay que decir en qué situación estamos: alguien
    * con la vida corta cambia el tema, y el final lo apaga —el remate suena solo—.
    */
-  function music(state) {
-    if (state.phase === 'matchEnd') return audio.music(null);
+  function music(state, before) {
+    // El final apaga el combate una sola vez, al llegar: el remate suena solo y después
+    // la pantalla del final pone la música de la portada (ver `RESULT_MUSIC` en
+    // `result.js`). Pedir silencio en cada repintado la volvería a cortar.
+    if (state.phase === 'matchEnd') {
+      if (before?.phase !== 'matchEnd') audio.music(null);
+      return;
+    }
     const low = PLAYERS.some((p) => hpOf(state, p) <= TARGET * LOW_HP);
     audio.music(low ? 'boss' : 'battle');
   }
@@ -142,5 +148,10 @@ export function createCues(audio) {
   // importan ya suenan por lo que hacen, y el de robar quedaba con dos cosas encima,
   // el toque y el tic. Lo que se oye al robar tiene que ser el tic y nada más, que es
   // el que va contando cómo crece la cadena.
-  return { watch };
+  /** Olvida la foto: la próxima partida que se mire es otra mesa (ver `swap` en `ui.js`). */
+  function reset() {
+    last = null;
+  }
+
+  return { watch, reset };
 }

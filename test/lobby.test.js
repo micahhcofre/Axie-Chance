@@ -407,6 +407,67 @@ assert.equal(nodes['vision-modal'].open, true, 'la visión del producto se abre 
   assert.equal(nodes['lobby-menu'].hidden, true, 'y tampoco al menú de modos');
 }
 
+// ---- el Modo Aventura ------------------------------------------------------------
+// La misma pantalla que la elección de Axie: el mapa de naipes a la izquierda —uno por
+// nivel, con el rival adentro— y la ficha del tocado a la derecha. Se abre parado en
+// el nivel que toca jugar, los cerrados no se tocan y las flechas recorren los abiertos.
+{
+  memoria.set('axie-chance:adventure', JSON.stringify({ unlockedLevel: 3, completedLevels: [1, 2] }));
+  const mapa = () => nodes['adventure-levels'].innerHTML;
+  const ficha = () => nodes['adventure-card'].innerHTML;
+  const tocarNivel = (n) => fire('lobby-adventure', 'click',
+    { target: { closest: (sel) => (sel === '[data-adv-level]' ? { dataset: { advLevel: String(n) } } : null) } });
+  const antes = started.length;
+
+  fire('lobby-play', 'click');
+  fire('lobby-menu', 'click', { target: { closest: () => ({ dataset: { play: 'adventure' } }) } });
+  assert.equal(nodes['lobby-adventure'].hidden, false, 'la Aventura se abre desde el menú');
+  assert.equal(nodes['lobby-menu'].hidden, true, 'y el menú se guarda');
+  assert.equal((mapa().match(/class="roster-tile adv-tile"/g) ?? []).length, 6, 'un naipe por nivel');
+  assert.match(mapa(), /data-adv-level="3" data-state="open"\s+aria-pressed="true"/,
+    'se abre parado en el nivel que toca jugar');
+  assert.match(mapa(), /data-adv-level="1" data-state="done"/, 'los ganados, superados');
+  assert.match(mapa(), /data-adv-level="4" data-state="locked"\s+aria-pressed="false" disabled/,
+    'y los que faltan, cerrados');
+  assert.equal((mapa().match(/class="roster-name">\?\?\?</g) ?? []).length, 3,
+    'de los cerrados no se dice contra quién');
+  assert.match(nodes['adventure-progress'].innerHTML, /2\/6/, 'la cuenta de la campaña');
+  assert.match(ficha(), /El Arte del Mercado/, 'la ficha es la del nivel elegido');
+  assert.match(ficha(), /adv-rival-stage[\s\S]*class="axie/, 'con el rival dibujado');
+  assert.match(ficha(), /data-diff="normal">Normal</, 'y su dificultad');
+  assert.equal((ficha().match(/class="adv-power"/g) ?? []).length, 2, 'con los dos poderes que estrena');
+
+  tocarNivel(4);
+  assert.match(ficha(), /El Arte del Mercado/, 'un nivel cerrado no se abre');
+  tocarNivel(1);
+  assert.match(ficha(), /Primeros Pasos/, 'tocar un nivel abierto lo pone en la ficha');
+  assert.match(ficha(), /Volver a Jugar/, 'y si ya se ganó, se vuelve a jugar');
+  flecha('ArrowRight');
+  assert.match(ficha(), /Defensa y Estrategia/, 'la flecha pasa al siguiente');
+  flecha('ArrowRight');
+  flecha('ArrowRight');
+  assert.match(ficha(), /Primeros Pasos/, 'sin pasar a los cerrados: del último abierto vuelve al primero');
+  flecha('ArrowLeft');
+  assert.match(ficha(), /El Arte del Mercado/);
+
+  fire('lobby-adventure', 'click',
+    { target: { closest: (sel) => (sel === '#lobby-adventure-play' ? {} : null) } });
+  assert.equal(started.length, antes + 1, 'el botón arranca la partida');
+  assert.equal(started.at(-1).mode, 'adventure');
+  assert.equal(started.at(-1).adventureLevel, 3, 'en el nivel de la ficha');
+  assert.equal(nodes.lobby.hidden, true, 'y la portada se va');
+
+  // Ganado el nivel, la puerta del final vuelve al mapa parado en el siguiente.
+  memoria.set('axie-chance:adventure', JSON.stringify({ unlockedLevel: 4, completedLevels: [1, 2, 3] }));
+  fire('result', 'click', { target: { closest: (sel) => (sel.includes('adv-map') ? {} : null) } });
+  assert.equal(nodes['lobby-adventure'].hidden, false, 'el final vuelve al mapa');
+  assert.match(mapa(), /data-adv-level="4" data-state="open"\s+aria-pressed="true"/,
+    'parado en el nivel que se acaba de abrir');
+  fire('lobby-adventure-back', 'click');
+  assert.equal(nodes['lobby-menu'].hidden, false, '"Volver" sale al menú de modos');
+  console.log('  ✓ la Aventura: mapa de naipes, niveles cerrados, flechas y la vuelta al siguiente');
+}
+
 portada.close();
 assert.equal(nodes.lobby.hidden, true);
 console.log('✓ la portada ok (tu Axie por un lado, jugar por el otro)');
@@ -465,6 +526,45 @@ console.log('✓ la portada ok (tu Axie por un lado, jugar por el otro)');
   fire('lobby-choose-back', 'click');
   assert.equal(nodes.lobby.hidden, true, '"Volver" sale a la sala');
   console.log('  ✓ en una sala se abre la misma elección, encima');
+}
+
+// ---- las salas, en la misma página ---------------------------------------------
+// Pasar del menú a las salas no recarga: la música del menú seguiría cortándose y, sin
+// un toque nuevo del jugador, el navegador no la dejaría volver. La portada se guarda,
+// la sala la abre `openNet`, y "Volver" trae de nuevo el menú de modos.
+{
+  const urls = [];
+  globalThis.location ??= { search: '', pathname: '/' };
+  globalThis.history ??= {};
+  const replace = globalThis.history.replaceState;
+  globalThis.history.replaceState = (_s, _t, url) => urls.push(url);
+  const temas = [];
+  let salas = 0;
+  const mesaRed = { restart() {}, abortMatch() {}, audio: { music: (t) => temas.push(t) }, _game: null };
+  const conSalas = createLobby(mesaRed, { openNet: () => { salas++; } });
+  conSalas.open('menu');
+
+  conSalas.toNet();
+  assert.equal(salas, 1, 'el menú abre las salas en la misma página');
+  assert.equal(nodes.lobby.hidden, true, 'y la portada se guarda');
+  assert.equal(nodes['menu-btn'].hidden, true, 'la salida de la mesa pasa a ser de la sala');
+
+  // Tu Axie se cambia encima de la sala, y elegir vuelve a ella.
+  conSalas.open('choose');
+  assert.equal(nodes.lobby.hidden, false, 'la elección se abre encima de la sala');
+  assert.equal(nodes['lobby-choose'].hidden, false);
+  fire('lobby-start', 'click');
+  assert.equal(nodes.lobby.hidden, true, 'elegir vuelve a la sala');
+  assert.equal(nodes['menu-btn'].hidden, true, 'sin prender la salida de la mesa');
+
+  conSalas.leaveNet();
+  assert.equal(nodes.lobby.hidden, false, '"Volver" de las salas trae la portada');
+  assert.equal(nodes['lobby-menu'].hidden, false, 'en el menú de modos, que es de donde se fue');
+  assert.equal(urls.at(-1), '/', 'y la dirección vuelve a ser la de la portada');
+  assert.ok(temas.length && temas.every((t) => t === 'menu'), 'y todo el recorrido pide la música del menú');
+  conSalas.close();
+  globalThis.history.replaceState = replace;
+  console.log('  ✓ las salas se abren en la misma página y "Volver" trae el menú');
 }
 
 // ---- la visión del producto se lee en los dos idiomas -------------------------

@@ -818,3 +818,28 @@ console.log('✓ render ok (los dos asientos de una sala)');
 
   console.log('✓ levantarse de la mesa ok');
 }
+
+// ---- la misma mesa, otra partida ----------------------------------------------
+// La sala en red se abre en la misma página que la portada (ver `main.js`): la mesa no
+// se monta de nuevo —sus escuchas se ponen una sola vez— sino que se sienta frente a la
+// partida de la sala, con su asiento, y al irse vuelve a la de acá. Lo que pinta es lo
+// de la partida a la que está sentada, y la otra ya no la mueve.
+{
+  const otra = createGame({ pace: 0, seed: 11 });
+  otra.newMatch({ mode: 'cpu', axie: 'plant' });
+  await idle();
+  screen.swap(otra, { seat: 'p2', net: true });
+  assert.equal(screen._game, otra, 'la mesa queda sentada frente a la otra partida');
+  assert.equal(nodes['fighter-p2'].dataset.side, 'left', 'con el asiento de la sala de este lado');
+  const pintado = nodes.scoreboard.innerHTML;
+
+  screen.swap(game);
+  assert.equal(screen._game, game, 'y al irse vuelve a la de la página');
+  assert.equal(nodes['fighter-p1'].dataset.side, 'left', 'con el asiento de siempre');
+  const antes = nodes.field.innerHTML;
+  await otra.stand();
+  await idle();
+  assert.equal(nodes.field.innerHTML, antes, 'la partida de la sala ya no pinta la mesa');
+  assert.ok(pintado.length > 0);
+  console.log('✓ la misma mesa, otra partida ok');
+}

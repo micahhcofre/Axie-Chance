@@ -49,7 +49,6 @@ import { netAvailable } from './net.js';
 import { createTutorial } from './tutorial.js';
 import {
   ADVENTURE_LEVELS, getAdventureProgress, getAdventureLevel, isLevelUnlocked,
-  DIFFICULTY_LABELS,
 } from './adventure.js';
 import { openHud, ghostOut } from './ui.js';
 import { tr, currentLang, setLang } from './i18n.js';
@@ -85,6 +84,9 @@ const DRIFT = 0.5;
  * presentarse, así que se aburre mucho más seguido que en la mesa.
  */
 const RIVAL_FIDGET = [1400, 3200];
+
+/** La dificultad de un nivel, con las mismas palabras que el selector del Vs CPU. */
+const DIFF_CHIP = { facil: 'Fácil', normal: 'Normal', duro: 'Duro' };
 
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
 
@@ -355,9 +357,11 @@ function rosterTileHtml(id, { equipped, boosted }) {
  *   elección de Axie, y se abre encima de la sala. No hay tapa ni menú —a la sala ya
  *   entraste— ni puertas de vuelta, y elegir cierra en vez de volver a la tapa.
  *   `onPick` es que elegiste otro: lo escucha la sala, que tiene que contárselo al
- *   servidor antes de que reparta.
+ *   servidor antes de que reparta. `openNet` pone la pantalla de las salas en esta
+ *   misma página (ver `main.js`): sin recargar, la música de los menús sigue sonando
+ *   de una pantalla a la otra. Sin él, a las salas se entra por la URL.
  */
-export function createLobby(ui, { net = false, onPick = null } = {}) {
+export function createLobby(ui, { net = false, onPick = null, openNet = null } = {}) {
   const lobby = el('lobby');
   const front = el('lobby-front');
   const menu = el('lobby-menu');
@@ -368,7 +372,15 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   const advCard = el('adventure-card');
   const board = el('lobby-cast');
   let strollers = null;
-  let selectedAdvLevel = 1;
+  /**
+   * Si la pantalla de las salas está puesta. Ahí la portada se guarda, y de ella se usa
+   * una sola pantalla —la elección de Axie, abierta encima de la sala—, como en la
+   * página que es solo de la sala (`net`).
+   */
+  let inNet = false;
+  const overRoom = () => net || inNet;
+  /** El nivel de la ficha. Arranca vacío: al abrir el mapa se pone en el que toca jugar. */
+  let selectedAdvLevel = null;
   /** El rival del nivel en su cuadro. Se vuelve a crear con cada ficha que se pinta. */
   let rivalMotion = null;
   /** Lo que elegiste la última vez, si esta máquina se acuerda (ver `loadout.js`). */
@@ -633,15 +645,40 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     markRoster({ reveal: true });
   }
 
+  /**
+   * Abre el mapa parado en el nivel que toca jugar. Se queda en el que estaba solo si
+   * todavía no lo ganaste —perdiste y volvés a intentar—; uno ya superado no es a lo
+   * que se vuelve después de ganarlo, así que el mapa salta al siguiente.
+   */
   function toAdventure() {
     const progress = getAdventureProgress();
-    if (!isLevelUnlocked(selectedAdvLevel)) {
-      selectedAdvLevel = progress.unlockedLevel;
-    }
+    const stay = selectedAdvLevel && isLevelUnlocked(selectedAdvLevel)
+      && !progress.completedLevels.includes(selectedAdvLevel);
+    if (!stay) selectedAdvLevel = progress.unlockedLevel;
     paintAdventure();
     view('adventure');
   }
 
+  /** Un nivel para adelante o para atrás en el mapa, sin pasar a los cerrados. */
+  function browseLevels(step) {
+    const open = ADVENTURE_LEVELS.filter((l) => isLevelUnlocked(l.id)).map((l) => l.id);
+    const i = open.indexOf(selectedAdvLevel);
+    const next = open[(i + step + open.length) % open.length];
+    if (next === undefined || next === selectedAdvLevel) return;
+    selectedAdvLevel = next;
+    paintAdventure();
+  }
+
+  /**
+   * El mapa y la ficha de la Aventura.
+   *
+   * El mapa es un naipe por nivel, el mismo de la colección de Axies: el rival dibujado
+   * sobre el color de su clase, el número del nivel en un aro y su nombre al pie. Los
+   * superados llevan la estrella; los cerrados, la silueta del rival y un candado —se
+   * sabe que ahí hay alguien, no quién—. La ficha es la del nivel tocado: el rival vivo
+   * sobre su terreno, el nombre del nivel, contra quién y en qué dificultad, los
+   * poderes que se estrenan y el botón.
+   */
   function paintAdventure() {
     if (!advLevels || !advCard) return;
     const progress = getAdventureProgress();
@@ -651,86 +688,75 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
 
     advLevels.innerHTML = ADVENTURE_LEVELS.map((lvl) => {
       const unlocked = isLevelUnlocked(lvl.id);
-      const completed = progress.completedLevels.includes(lvl.id);
-      const active = lvl.id === selectedAdvLevel;
-      const statusIcon = completed ? '★' : (unlocked ? `${lvl.id}` : '<span class="adv-lock" aria-hidden="true"></span>');
-      const cls = [
-        'adv-level-btn',
-        active ? 'active' : '',
-        completed ? 'completed' : '',
-        !unlocked ? 'locked' : '',
-      ].filter(Boolean).join(' ');
-
-      return `<button class="${cls}" data-adv-level="${lvl.id}" ${!unlocked ? 'disabled' : ''}>` +
-        `<span class="adv-level-num">${statusIcon}</span>` +
-        `<span class="adv-level-name">${tr('Nivel {n}', { n: lvl.id })}</span>` +
-      `</button>`;
+      const done = progress.completedLevels.includes(lvl.id);
+      const rival = axie(lvl.rival);
+      const state = done ? 'done' : unlocked ? 'open' : 'locked';
+      const mark = done
+        ? `<span class="roster-mark adv-mark" aria-hidden="true">★</span>`
+        : unlocked ? '' : `<span class="roster-mark adv-mark adv-mark--lock" aria-hidden="true"><i class="adv-lock"></i></span>`;
+      const label = tr('Nivel {n}', { n: lvl.id });
+      return `<button class="roster-tile adv-tile" data-adv-level="${lvl.id}" data-state="${state}"
+        aria-pressed="${lvl.id === selectedAdvLevel}" ${unlocked ? '' : 'disabled'}
+        style="--c:${SYMBOLS[rival.class].color}" title="${label}${unlocked ? ` · ${rival.name}` : ''}">
+        <span class="roster-art">${axieArt(rival.id, { alts: false })}</span>
+        <span class="adv-tile-no">${lvl.id}</span>${mark}
+        <span class="roster-name">${unlocked ? rival.name : '???'}</span>
+      </button>`;
     }).join('');
 
-    const showcase = current.showcase ?? [];
-    const powersToShow = [...(current.newPowers ?? []), ...showcase];
+    const total = ADVENTURE_LEVELS.length;
+    const won = progress.completedLevels.length;
+    el('adventure-progress').innerHTML = `<b>★</b> ${won}/${total}`;
+    el('adventure-progress').title = tr('{won} de {total} niveles superados', { won, total });
 
     // La definición de cada poder es su `note`, la misma del `title` de los íconos en
     // la mesa: una sola redacción para todo el juego.
-    const powersHtml = powersToShow.map((pId) => {
+    const powers = [...(current.newPowers ?? []), ...(current.showcase ?? [])];
+    const powersHtml = powers.map((pId) => {
       const p = POWERS[pId];
-      const owner = p.symbol ? SYMBOLS[p.symbol].name : tr('Comodín');
-      return `<div class="adv-power-item">` +
-        `<div class="adv-power-icon">${powerIcon(pId, 'lg')}</div>` +
-        `<div class="adv-power-text">` +
-          `<b>${p.name} <span>· ${owner}</span></b>` +
-          `<p>${p.note[0].toUpperCase()}${p.note.slice(1)}.</p>` +
-        `</div>` +
-      `</div>`;
+      const color = p.symbol ? SYMBOLS[p.symbol].color : '#d9a05b';
+      const owner = p.symbol ? `${crest(p.symbol, 'sm')}${SYMBOLS[p.symbol].name}` : tr('Comodín');
+      return `<div class="adv-power" style="--c:${color}">
+        <span class="adv-power-icon">${powerIcon(pId, 'lg')}</span>
+        <span class="adv-power-text">
+          <span class="adv-power-name"><b>${p.name}</b><span class="adv-power-owner">${owner}</span></span>
+          <span class="adv-power-note">${p.note[0].toUpperCase()}${p.note.slice(1)}.</span>
+        </span>
+      </div>`;
     }).join('');
 
     const completed = progress.completedLevels.includes(current.id);
-    const diffLabel = DIFFICULTY_LABELS[current.difficulty] ?? current.difficulty;
-    const count = current.newPowers?.length ?? 0;
-    let sectionTitle;
-    if (showcase.length > 0) {
-      const extra = showcase
-        .map((pId) => (pId === 'freegame' ? 'Free Game' : (POWERS[pId]?.name ?? pId)))
-        .join(' + ');
-      sectionTitle = tr('Nuevos poderes y especiales en este nivel (+{count} poderes + {extra})', { count, extra });
-    } else if (count > 0) {
-      sectionTitle = tr('Nuevos poderes en este nivel (+{count})', { count });
-    } else {
-      sectionTitle = tr('Poderes en este nivel');
-    }
+    // La chapa va sola, sin "Dificultad:" adelante: dice lo mismo que las del Vs CPU.
+    const diffLabel = tr(DIFF_CHIP[current.difficulty] ?? current.difficulty);
+    // "Nivel 3: El Arte del Mercado" se parte en dos: el número va chico arriba y el
+    // nombre grande, como el nombre del Axie en su ficha. Si una traducción no trae los
+    // dos puntos, va entero como nombre.
+    const cut = current.name.indexOf(': ');
+    const kicker = cut > 0 ? current.name.slice(0, cut) : tr('Nivel {n}', { n: current.id });
+    const title = cut > 0 ? current.name.slice(cut + 2) : current.name;
 
     advCard.innerHTML = `
-      <div class="adv-card-header">
-        <div class="adv-card-title-group">
-          <span class="adv-badge ${completed ? 'adv-badge--won' : ''}">${completed ? tr('★ Nivel Superado') : tr('Combate Disponible')}</span>
-          <h2 class="adv-card-title">${current.name}</h2>
-          <p class="adv-card-desc">${current.description}</p>
+      <div class="adv-head">
+        <div class="adv-rival-stage" data-arena="${rivalAxie.class}">${axieArt(rivalAxie.id)}</div>
+        <div class="adv-info">
+          <span class="adv-kicker">${kicker}</span>
+          <h2 class="adv-card-title">${title}</h2>
+          <span class="choose-tags">
+            <span class="choose-class" style="--c:${rivalSym.color}">${crest(rivalAxie.class)}${rivalAxie.name}</span>
+            <span class="adv-diff" data-diff="${current.difficulty}">${diffLabel}</span>
+            ${completed ? `<span class="choose-on">${tr('Superado')}</span>` : ''}
+          </span>
         </div>
       </div>
-
-      <div class="adv-card-section">
-        <h3 class="adv-section-title">${sectionTitle}</h3>
-        <div class="adv-powers-grid">${powersHtml}</div>
+      <div class="adv-body">
+        <p class="adv-card-desc">${current.description}</p>
+        <p class="choose-label">${current.newPowers?.length ? tr('Poderes nuevos') : tr('Poderes en este nivel')}</p>
+        <div class="adv-powers">${powersHtml}</div>
         <p class="adv-powers-foot">${tr('«Al pegar» es plantarte con un ataque que haga daño: si te cortás, esos poderes no salen.')}</p>
       </div>
-
-      <div class="adv-card-section">
-        <h3 class="adv-section-title">${tr('Rival')}</h3>
-        <div class="adv-rival-box">
-          <div class="adv-rival-stage" data-arena="${rivalAxie.class}">${axieArt(rivalAxie.id)}</div>
-          <div class="adv-rival-info">
-            <b>${rivalAxie.name}</b>
-            <span class="adv-rival-class" style="--c:${rivalSym.color}">${crest(rivalAxie.class, 'sm')} ${rivalSym.name}</span>
-            <span class="adv-rival-diff">${tr('Dificultad: {diff}', { diff: tr(diffLabel) })}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="adv-card-actions">
-        <button class="lobby-play choose-go" id="lobby-adventure-play">
-          ${completed ? tr('Volver a Jugar') : tr('Comenzar Nivel')}
-        </button>
-      </div>
+      <button class="lobby-play choose-go" id="lobby-adventure-play">
+        ${completed ? tr('Volver a Jugar') : tr('Comenzar Nivel')}
+      </button>
     `;
     // El rival vivo: respira y cada tanto hace un gesto, con el mismo reproductor de la
     // mesa. La ficha se acaba de pintar entera, así que el Axie es otro nodo.
@@ -778,7 +804,7 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     onPick?.();
     // En una sala esta pantalla es una visita: se abrió encima de la sala y al elegir
     // se va, porque atrás está lo que estabas haciendo. Acá atrás está la portada.
-    if (net) return close();
+    if (overRoom()) return close();
     paintFront();
     view('front');
   }
@@ -807,10 +833,10 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     // El paseo es de la portada. En una sala se abre una sola de estas pantallas —la
     // elección—, y tapa el terreno entero: poner cuatro Axies a caminar detrás sería
     // trabajo que el navegador hace para nadie.
-    if (!strollers && !net) populate();
+    if (!strollers && !overRoom()) populate();
     // En una sala no hay reparto que sortee el terreno —no hay nadie paseándose—, así
     // que lo pone el tuyo: la pantalla es tuya y el fondo es tu casa.
-    if (net) lobby.dataset.arena = axie(pick).class;
+    if (overRoom()) lobby.dataset.arena = axie(pick).class;
     paintFront();
     // La elección se abre parada en el Axie que tenés puesto y con las diez cartas ya
     // dibujadas, venga del botón de la portada o de la sala: las dos cosas las hace
@@ -821,14 +847,14 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     lobby.hidden = false;
     // En la portada no hay partida que abandonar: la salida del menú se guarda y vuelve
     // a aparecer cuando la portada se va y empieza una. En una sala la maneja `net.js`.
-    if (!net) el('menu-btn').hidden = true;
+    if (!overRoom()) el('menu-btn').hidden = true;
     for (const s of strollers ?? []) s.wake();
   }
 
-  function close() {
-    if (!lobby.hidden) ghostOut(lobby, document.body);
+  function close({ instant = false } = {}) {
+    if (!lobby.hidden && !instant) ghostOut(lobby, document.body);
     lobby.hidden = true;
-    if (!net) el('menu-btn').hidden = false;
+    if (!overRoom()) el('menu-btn').hidden = false;
     heroMotion.stop();
     rivalMotion?.stop();
     for (const s of strollers ?? []) s.sleep();
@@ -845,13 +871,16 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
     if (e.target?.closest?.('#lobby-menu, #lobby-play, #lobby-settings-btn')) return;
     view('front');
   });
-  el('lobby-choose-back').addEventListener('click', () => (net ? close() : view('front')));
+  el('lobby-choose-back').addEventListener('click', () => (overRoom() ? close() : view('front')));
   advBack.addEventListener('click', () => view('menu'));
   adv.addEventListener('click', (e) => {
     const lvlBtn = e.target.closest('[data-adv-level]');
     if (lvlBtn) {
-      selectedAdvLevel = Number(lvlBtn.dataset.advLevel);
-      paintAdventure();
+      const id = Number(lvlBtn.dataset.advLevel);
+      if (id !== selectedAdvLevel && isLevelUnlocked(id)) {
+        selectedAdvLevel = id;
+        paintAdventure();
+      }
       return;
     }
     const playBtn = e.target.closest('#lobby-adventure-play');
@@ -903,10 +932,12 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   menu.addEventListener('click', (e) => {
     const mode = e.target.closest?.('[data-play]:not([disabled])')?.dataset?.play;
     if (mode) {
-      // La sala es otra pantalla: la sirve el mismo servidor y la maneja `net.js`, así
-      // que se entra por la URL igual que entra el que llega del celular.
+      // La sala es otra pantalla y la maneja `net.js`. Se abre en esta misma página,
+      // así la música del menú sigue; sin quien la abra, se entra por la URL igual que
+      // entra el que llega del celular.
       if (mode === 'net') {
-        location.search = '?red';
+        if (openNet) toNet();
+        else location.search = '?red';
         return;
       }
       if (mode === 'adventure') {
@@ -937,12 +968,16 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   // Las flechas del teclado recorren la colección, en el orden de la grilla. Solo esas
   // dos: Enter y las letras ya las tiene tomadas la mesa
   // (ver el `keydown` de `ui.js`), y con la portada encima seguirían llegando allá.
+  // En el mapa de la Aventura hacen lo mismo con los niveles abiertos.
   document.addEventListener('keydown', (e) => {
-    if (choose.hidden || lobby.hidden) return;
+    if (lobby.hidden) return;
+    const step = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+    if (!step) return;
+    if (!adv.hidden) return browseLevels(step);
+    if (choose.hidden) return;
     // Escribiendo en el buscador las flechas mueven el cursor, no el Axie.
     if (e.target?.tagName === 'INPUT') return;
-    if (e.key === 'ArrowLeft') browse(-1);
-    else if (e.key === 'ArrowRight') browse(1);
+    browse(step);
   });
 
   // Tu Axie viene puesto desde el arranque —sorteado, si es la primera vez que se abre
@@ -960,13 +995,35 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   }
 
   /**
+   * Pone la pantalla de las salas: la portada se guarda y deja de ser la dueña de la
+   * salida del menú, que pasa a manejar la sala (ver `paint` en `net.js`).
+   */
+  function toNet({ instant = false } = {}) {
+    inNet = true;
+    close({ instant });
+    el('menu-btn').hidden = true;
+    openNet();
+  }
+
+  /** Vuelve de las salas al menú de modos, que es de donde se fue. */
+  function leaveNet() {
+    inNet = false;
+    history.replaceState?.(null, '', location.pathname);
+    open('menu');
+  }
+
+  /**
    * La vuelta desde la mesa: al menú de modos, salvo saliendo del tutorial.
    *
    * De una partida se vuelve al menú y no al botón grande —el que abandona en el medio
    * ya sabe a qué vino—, pero el tutorial no es una partida que se quiera repetir: se
    * sale a la portada, igual que cuando se termina solo (ver `onDone` más arriba).
    */
-  const backFromTable = () => open(activeTutorial ? 'front' : 'menu');
+  const backFromTable = () => {
+    // Con las salas puestas, la salida de la mesa es de la sala (ver `quit` en `net.js`).
+    if (inNet) return;
+    open(activeTutorial ? 'front' : 'menu');
+  };
 
   // Abandonar la partida: la puerta de vuelta, adentro del menú de las tres rayitas.
   // La prende la portada al irse (ver `close`) —con la partida en red no hay portada a
@@ -1007,5 +1064,5 @@ export function createLobby(ui, { net = false, onPick = null } = {}) {
   });
 
   open();
-  return { open, close };
+  return { open, close, toNet, leaveNet };
 }

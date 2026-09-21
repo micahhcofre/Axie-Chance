@@ -370,18 +370,21 @@
     </div>
   </div>
 
-  <!-- El Modo Aventura: lista de niveles, poderes y combate -->
+  <!-- El Modo Aventura. Es la misma pantalla que la elección de Axie con otra
+       pregunta: a la izquierda el mapa —un naipe por nivel, con el rival que te espera
+       dibujado adentro— y a la derecha la ficha del que tocaste, con el rival vivo
+       sobre su terreno, los poderes que se estrenan y el botón. Parada, el mapa es una
+       fila arriba y la ficha se queda con el resto. Lo llena `lobby.js`. -->
   <div class="lobby-adventure" id="lobby-adventure" hidden>
     <div class="choose-bar">
       <button class="btn btn-ghost" id="lobby-adventure-back">← Volver</button>
       <p class="choose-step o-title" id="lobby-adventure-title">Modo Aventura</p>
+      <span class="adv-progress" id="adventure-progress"></span>
     </div>
-    <div class="adventure-stage">
-      <div class="adventure-levels o-well" id="adventure-levels"></div>
-      <div class="adventure-card o-panel" id="adventure-card">
-        <button class="lobby-play choose-go" id="lobby-adventure-play">Comenzar Nivel</button>
-      </div>
+    <div class="adventure-map o-panel">
+      <div class="adventure-levels" id="adventure-levels"></div>
     </div>
+    <div class="adventure-card o-panel" id="adventure-card"></div>
   </div>
 </div>
 
@@ -389,73 +392,74 @@
      primero la lista de salas, después la sala con los dos asientos y el botón de
      listo. Se van solas al llegar el primer estado y vuelven si se corta el cable.
 
-     Es una pantalla del juego y no un cartel del navegador, así que está hecha con lo
-     mismo que la portada: el terreno de tu Axie atrás, el logo arriba, y las salas
-     apoyadas en un panel del Origins —tabla de madera, cartel tallado y las cintas de
-     siempre para lo que se aprieta—. Ver `.netbox` en el CSS. -->
+     Es una pantalla del juego y no un cartel del navegador, así que está hecha como la
+     elección de Axie: el terreno de tu Axie atrás y apagado, la cinta de volver y el
+     título arriba, lo que se elige a la izquierda —las salas, o los dos asientos frente
+     a frente— y a la derecha tu ficha: tu Axie vivo, lo que hace falta para que entre el
+     otro y el botón grande. Parada, la ficha va abajo con el botón al pie. Ver
+     `.netbox` en el CSS. -->
 <div class="netbox" id="net" hidden>
   <!-- El terreno, colgado igual que en la mesa y en la portada: `data-arena` lo pone
        `net.js` con la clase de tu Axie, que es de donde salen el dibujo, la altura de
        su línea de suelo y el color con el que sigue el piso. -->
   <div class="netbox-art" aria-hidden="true"><i></i></div>
 
-  <div class="netbox-stack">
-    <!-- La marca, en la versión con contorno blanco: es la que se apoya sobre el
-         dibujo. Chica, porque acá lo que hay que mirar son las salas. -->
-    <img class="netbox-logo" src="Icons/logo-outline.png" alt="Axie Chance"
-      width="360" height="268">
+  <div class="netbox-screen">
+    <div class="choose-bar">
+      <!-- Dos puertas y una sola a la vista: en la lista se vuelve a la portada; en
+           una sala, la de salir la cierra (si es tuya) y vuelve a la lista. -->
+      <a class="btn btn-ghost" id="net-home" href="./">← Volver</a>
+      <button class="btn btn-ghost" id="net-close" hidden>← Salir</button>
+      <p class="choose-step o-title" id="net-title">Salas</p>
+      <span class="netbox-code" id="net-code" hidden></span>
+    </div>
 
-    <section class="netbox-panel">
-      <!-- El nombre de la pantalla va en un cartel de madera colgado del borde de
-           arriba del panel, que es donde el Origins pone los suyos. -->
-      <h2 class="netbox-banner" id="net-title">Salas</h2>
-      <!-- La cruz de la esquina: la puerta de salida de la sala. Solo existe adentro de
-           una —atrás está la lista, que es a donde vuelve—; en la lista no hay nada que
-           cerrar y la puerta es "Jugar solo", que va a otro lado y por eso se lee. -->
-      <button class="netbox-x" id="net-close" title="Salir de la sala"
-        aria-label="Salir de la sala" hidden></button>
+    <section class="netbox-main o-panel">
       <p class="netbox-note" id="net-note"></p>
 
       <div class="netbox-view" id="net-lobby">
         <ul class="netbox-rooms" id="net-rooms"></ul>
-        <div class="netbox-actions">
-          <button class="btn btn-primary" id="net-create">Crear sala</button>
-          <a class="btn btn-ghost" href="./">Jugar solo</a>
-        </div>
-
-        <div class="netbox-urls" id="net-urls" hidden>
-          <span class="netbox-label">Desde el otro aparato, en la misma red:</span>
-          <ul id="net-list"></ul>
-        </div>
       </div>
 
       <div class="netbox-view" id="net-room" hidden>
         <ul class="netbox-seats" id="net-seats"></ul>
-        <!-- La invitación: un QR con el link de esta sala, para que el otro aparato
-             entre apuntándole con la cámara, y el link escrito por si no tiene. Solo
-             mientras falte alguien; lo arma `invitePaint` en `net.js`. -->
-        <div class="netbox-invite" id="net-invite" hidden>
-          <div class="netbox-qr" id="net-qr"></div>
-          <div class="netbox-invite-text">
-            <span class="netbox-label">Escaneá para entrar</span>
-            <span class="netbox-link" id="net-link"></span>
-          </div>
-        </div>
-        <!-- Con qué Axie entrás. No es un roster: abre la misma pantalla de elección de
-             la portada, encima de la sala (ver `net.js`). Está acá porque a una sala se
-             llega también por el link del otro, sin pasar por la portada, y porque el
-             rato de esperar al otro es justo cuando uno se acuerda de que quería cambiar
-             de bicho. Con la partida repartida se va: ahí lo único que se hace es jugar. -->
-        <button class="netbox-mine" id="net-axie" hidden>
+      </div>
+    </section>
+
+    <aside class="netbox-sheet o-panel" id="net-sheet">
+      <!-- Con qué Axie entrás. No es un roster: abre la misma pantalla de elección de
+           la portada, encima de la sala (ver `net.js`). Está porque a una sala se llega
+           también por el link del otro, sin pasar por la portada, y porque el rato de
+           esperar al otro es justo cuando uno se acuerda de que quería cambiar de bicho.
+           Con la partida repartida se va: ahí lo único que se hace es jugar. -->
+      <button class="netbox-mine" id="net-axie" hidden>
+        <span class="netbox-mine-art" id="net-axie-art"></span>
+        <span class="netbox-mine-info">
           <span class="netbox-mine-label">Tu Axie</span>
           <span class="netbox-mine-now" id="net-axie-now"></span>
           <span class="netbox-mine-cta">Cambiar</span>
-        </button>
-        <div class="netbox-actions">
-          <button class="btn btn-primary" id="net-ready">Estoy listo</button>
+        </span>
+      </button>
+
+      <!-- La invitación: un QR con el link de esta sala, para que el otro aparato
+           entre apuntándole con la cámara, y el link escrito por si no tiene. Solo
+           mientras falte alguien; lo arma `invitePaint` en `net.js`. -->
+      <div class="netbox-invite" id="net-invite" hidden>
+        <div class="netbox-qr" id="net-qr"></div>
+        <div class="netbox-invite-text">
+          <span class="netbox-label">Escaneá para entrar</span>
+          <span class="netbox-link" id="net-link"></span>
         </div>
       </div>
-    </section>
+
+      <div class="netbox-urls" id="net-urls" hidden>
+        <span class="netbox-label">Desde el otro aparato, en la misma red:</span>
+        <ul id="net-list"></ul>
+      </div>
+
+      <button class="lobby-play choose-go" id="net-create">Crear sala</button>
+      <button class="lobby-play choose-go" id="net-ready" hidden>Estoy listo</button>
+    </aside>
   </div>
 </div>
 
