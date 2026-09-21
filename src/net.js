@@ -318,7 +318,7 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
     why = null;
     if (msg.t === 'hello') {
       seat = msg.seat === 'p1' || msg.seat === 'p2' ? msg.seat : null;
-      room = cleanRoom(msg.room);
+      if (msg.room) room = cleanRoom(msg.room);
       // Recién acá se sabe si hay asiento y cuál, así que recién acá se puede decir
       // con qué Axie entra. Va en cada `hello` y no una sola vez: si se corta el
       // cable y se vuelve a entrar, la sala puede haber olvidado el asiento —y con él,
@@ -345,9 +345,17 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
     if (n !== undefined) {
       // Solo una pantalla de afuera recibe envíos, y solo de la sala en la que está.
       if (hosted || !sala || !['hello', 'room', 'state'].includes(msg.t)) return;
-      const kind = msg.t === 'hello' ? 'room' : msg.t;
-      if (n <= (seen[kind] ?? 0)) return;
-      seen[kind] = n;
+      if (n <= (seen[msg.t] ?? 0)) return;
+      seen[msg.t] = n;
+      // El `hello` lleva su propio número: trae el asiento, que ningún `room` repite,
+      // y en AWS el `room` que sale justo después lo pasa por el cable la mitad de las
+      // veces. Contarlo como un `room` viejo era quedarse sin asiento: mirando la
+      // partida propia. La sala que trae es tan vieja como él: si ya llegó una más
+      // nueva, de él vale solo el asiento.
+      if (msg.t === 'hello') {
+        if (n > (seen.room ?? 0)) seen.room = n;
+        else msg = { ...msg, room: undefined };
+      }
       receive(msg);
       return;
     }

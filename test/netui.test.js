@@ -162,7 +162,14 @@ const join = ws.lastSent('join');
 assert.equal(join.code, 'KJ7M', 'entrar le pide la sala al cartero');
 assert.equal(nodes['net-title'].textContent, 'Entrando…', 'y mientras contesta, se dice');
 
-await fromHost(ws, { t: 'hello', seat: 'p2', room: { ...SALA, seats: { p1: true, p2: true } } }, 1);
+// En AWS cada mensaje despierta su propia Lambda, y el `room` que el anfitrión manda
+// justo después del `hello` lo pasa por el cable la mitad de las veces. El `hello` es
+// el único que dice cuál es tu asiento: llegue cuando llegue, se lee.
+await fromHost(ws, { t: 'room', room: { ...SALA, seats: { p1: true, p2: true } } }, 2);
+assert.doesNotMatch(nodes['net-seats'].innerHTML, /netbox-you/, 'sin el hello todavía no se sabe cuál sos');
+await fromHost(ws, { t: 'hello', seat: 'p2', room: SALA }, 1);
+assert.match(nodes['net-seats'].innerHTML, /netbox-you/, 'el hello que llega después del room igual da el asiento');
+assert.equal(nodes['net-invite'].hidden, true, 'pero la sala que trae es más vieja: se queda la llena');
 assert.equal(nodes['net-lobby'].hidden, true, 'el lobby se va');
 assert.equal(nodes['net-room'].hidden, false, 'y queda la sala');
 assert.match(nodes['net-title'].textContent, /Sala de Colmillo/);
@@ -180,11 +187,11 @@ assert.equal(nodes['net-create'].hidden, true, 'adentro no se crea otra');
 // Con los dos sentados no hay a quién invitar. Con un asiento libre aparece el QR, y
 // desde `localhost` apunta a la IP de la red: el celular no llega a `localhost`.
 assert.equal(nodes['net-invite'].hidden, true, 'sala llena: sin QR');
-await fromHost(ws, { t: 'room', room: SALA }, 2);
+await fromHost(ws, { t: 'room', room: SALA }, 3);
 assert.equal(nodes['net-invite'].hidden, false, 'con un asiento libre, está el QR');
 assert.equal(nodes['net-link'].textContent, 'http://192.168.1.5:8000/?red&sala=KJ7M');
 assert.match(nodes['net-qr'].innerHTML, /^<svg[\s\S]*<path fill="#1b1008" d="M/, 'y el QR dibujado');
-await fromHost(ws, { t: 'room', room: { ...SALA, seats: { p1: true, p2: true } } }, 3);
+await fromHost(ws, { t: 'room', room: { ...SALA, seats: { p1: true, p2: true } } }, 4);
 assert.equal(nodes['net-invite'].hidden, true, 'y se va cuando llega el otro');
 // Por el cable los envíos pueden llegar desordenados: uno viejo no pisa lo nuevo.
 await fromHost(ws, { t: 'room', room: SALA }, 2);
@@ -215,7 +222,7 @@ nodes['net-ready'].handlers.click();
 await settle();
 assert.equal(acts('ready').at(-1).code, 'KJ7M', 'el listo se manda a la sala en que estás');
 
-await fromHost(ws, { t: 'room', room: { ...SALA, seats: { p1: true, p2: true }, ready: { p1: false, p2: true } } }, 4);
+await fromHost(ws, { t: 'room', room: { ...SALA, seats: { p1: true, p2: true }, ready: { p1: false, p2: true } } }, 5);
 assert.equal(nodes['net-ready'].textContent, 'Ya no', 'el botón se puede desdecir');
 assert.match(nodes['net-note'].textContent, /Esperando/, 'y se espera al otro');
 assert.equal(nodes.net.hidden, false, 'con uno solo listo no empieza nada');
