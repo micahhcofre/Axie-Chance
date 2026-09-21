@@ -15,8 +15,10 @@
     "amuletos": "node scripts/amuletos.mjs",
     "build": "node scripts/build.mjs",
     "balance": "node scripts/balance.mjs",
-    "deploy": "npm run build && cd infra && npx cdk deploy --require-approval never --profile dev",
-    "cdk:diff": "cd infra && npx cdk diff --profile dev",
+    "deploy": "npm run build && cd infra && npx cdk deploy --all --require-approval never --profile ${AWS_PROFILE:-axie-chance}",
+    "deploy:dns": "cd infra && npx cdk deploy AxieChanceDnsStack --require-approval never --profile ${AWS_PROFILE:-axie-chance}",
+    "cdk:bootstrap": "cd infra && npx cdk bootstrap --profile ${AWS_PROFILE:-axie-chance}",
+    "cdk:diff": "cd infra && npx cdk diff --all --profile ${AWS_PROFILE:-axie-chance}",
     "cdk:synth": "cd infra && npx cdk synth"
   }
 }

@@ -38,8 +38,10 @@ npm run poses          # Regenera src/axie-poses.js (animaciones y poses hornead
 npm run vfx            # Procesa y regenera el atlas de efectos visuales (src/vfx-clips.js)
 npm run sfx            # Regenera src/audio-clips.js (mediciones y duraciones de SFX)
 npm run result-art     # Corta de las pantallas de resultado del kit las piezas Icons/result-*.png
-npm run deploy         # Construye y despliega automáticamente a AWS S3 y CloudFront vía CDK
-npm run cdk:diff       # Inspecciona diferencias pendientes de infraestructura AWS en perfil dev
+npm run deploy         # Construye y despliega los dos stacks (zona DNS + sitio y relay) vía CDK
+npm run deploy:dns     # Solo la zona de sindados.com.ar: primer paso en una cuenta nueva (delegar en NIC.ar)
+npm run cdk:bootstrap  # Prepara la cuenta para CDK (una sola vez por cuenta)
+npm run cdk:diff       # Inspecciona diferencias pendientes de infraestructura AWS (perfil `axie-chance`, o el de `AWS_PROFILE`)
 npm run cdk:synth      # Sintetiza la plantilla CloudFormation de la infraestructura
 ```
 
@@ -261,17 +263,21 @@ Se ejecutan con `npm test` en Node.js puro usando `test/dom.mjs` como shim míni
 
 ## Infraestructura y Despliegue en AWS
 
-- **CDK Stack (`infra/lib/axie-chance-stack.ts`)**:
-  - Bucket **S3 Privado** (`SiteBucket`): Bloqueo total de acceso público, cifrado gestionado, SSL forzado.
+- **Cuenta y perfil**: cuenta propia del dueño (nueva desde 2026-09-18), región fija `us-east-1` (CloudFront solo acepta certificados de ahí). La cuenta sale del perfil `axie-chance` (o `AWS_PROFILE`); no hay IDs de cuenta ni de zona en el código. **Nunca usar los perfiles `saml` ni `default`: son del trabajo.**
+- **Stack de DNS (`infra/lib/dns-stack.ts`, `AxieChanceDnsStack`)**: la zona pública de `sindados.com.ar` (se conserva aunque se destruya el stack) y la salida `NameServers` para delegar en NIC.ar. Único recurso con costo fijo (0,50 USD/mes). En una cuenta nueva va primero: `npm run cdk:bootstrap`, `npm run deploy:dns`, delegar en NIC.ar, esperar a que resuelva y recién ahí `npm run deploy` (el certificado se valida por DNS y sin delegación se queda esperando).
+- **Stack del sitio (`infra/lib/axie-chance-stack.ts`, `AxieChanceStack`)**, recibe la zona del stack de DNS:
+  - Bucket **S3 Privado** (`SiteBucket`): Bloqueo total de acceso público, cifrado gestionado, SSL forzado. Sube la raíz del proyecto sin `dist/`, tests, scripts ni docs (~34 MB).
+  - Certificado ACM validado por DNS y registros A/AAAA de `sindados.com.ar` y `www` hacia CloudFront.
   - Distribución **CloudFront** (`SiteDistribution`): Origen S3 vía **Origin Access Control (OAC)**, redirección forzada a HTTPS, política de compresión y caché optimizada, encabezados de seguridad (`SECURITY_HEADERS`).
   - Enrutamiento SPA: Errores HTTP 403 y 404 redirigen a `/index.html` con código 200 y TTL de 1 min.
   - Invocación de despliegue con invalidación automática de caché `/*`.
   - Relay de salas: tabla DynamoDB on-demand con TTL, Lambda Node 22 ARM (`relay/`), API Gateway WebSocket (stage `net`, throttle 50 rps / ráfaga 100) con una integración por ruta (compartirla deja permiso solo para `$connect`). El deploy escribe `net.json` con la URL `wss://` del relay.
+  - Alarma de presupuesto (`MonthlyBudget`, AWS Budgets): 10 USD/mes sobre toda la cuenta, mail al 80% real y al 100% proyectado. El único seguro que necesita un stack pago por uso.
 - **Comando de Deploy**:
   ```sh
   npm run deploy
   ```
-  Empaqueta con `npm run build` y ejecuta `cd infra && npx cdk deploy --require-approval never --profile dev`.
+  Empaqueta con `npm run build` y ejecuta `cd infra && npx cdk deploy --all --require-approval never --profile ${AWS_PROFILE:-axie-chance}`. El perfil `axie-chance` es propio del proyecto: nunca usar los perfiles `saml` ni `default`, que son del trabajo.
 
 ---
 
