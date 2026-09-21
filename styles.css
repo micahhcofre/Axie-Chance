@@ -6296,6 +6296,9 @@ body .topbar-actions .topbar-cfg-btn {
   z-index: 10002;
   pointer-events: none;
 }
+/* Con un panel abierto encima —el mazo, que el tutorial pide abrir— la flecha y la
+   burbuja esperan afuera: señalan la mesa, que ahora está atrás. */
+body:has(dialog[open]) .tuto-overlay { opacity: 0; }
 /* La barra y el menú de configuración se elevan sobre el centro y sobre la capa del tutorial
    para que no queden tapados y se pueda acceder a la configuración o abandonar en cualquier momento */
 body:has(#tutorial-overlay) .topbar,
@@ -6399,6 +6402,24 @@ body:has(#tutorial-overlay) .topbar,
   box-shadow: 0 0 16px rgba(75, 184, 240, .9), 0 0 32px rgba(75, 184, 240, .5) !important;
   animation: tuto-pulse 1.3s ease-in-out infinite !important;
 }
+/* Tu Axie, que es tu mazo: el halo sigue la silueta del dibujo y respira, porque acá el
+   brillo no es para mirar sino para tocar (ver `#peek-p1` en index.html). El aro de los
+   demás brillos no sirve: la caja del bicho es un rectángulo y el dibujo, no. */
+.board-axie.tuto-hl .axie {
+  filter: drop-shadow(0 0 2px #e4f5ff) drop-shadow(0 0 8px rgba(75, 184, 240, 1))
+    drop-shadow(0 0 20px rgba(75, 184, 240, .8));
+  animation: tuto-axie-glow 1.3s ease-in-out infinite !important;
+}
+@keyframes tuto-axie-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px #e4f5ff) drop-shadow(0 0 8px rgba(75, 184, 240, 1))
+      drop-shadow(0 0 20px rgba(75, 184, 240, .8));
+  }
+  50% {
+    filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 14px rgba(75, 184, 240, 1))
+      drop-shadow(0 0 32px rgba(75, 184, 240, .95));
+  }
+}
 .plate-hp.tuto-hl .hpbar {
   box-shadow: 0 0 10px rgba(75, 184, 240, .9), 0 0 20px rgba(75, 184, 240, .5) !important;
   animation: tuto-pulse 1.3s ease-in-out infinite !important;
@@ -6423,7 +6444,8 @@ body:has(#tutorial-overlay) .topbar,
 
 @media (prefers-reduced-motion: reduce) {
   .tuto-arrow, .tuto-arrow i, .tuto-bubble, .tuto-allowed,
-  .tuto-hl, .tuto-hl .odds-dial, .tuto-hl .hpbar { animation: none !important; }
+  .tuto-hl, .tuto-hl .odds-dial, .tuto-hl .hpbar,
+  .tuto-hl .axie { animation: none !important; }
 }
 
 /* =============================================================================

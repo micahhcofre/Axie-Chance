@@ -181,12 +181,18 @@ Cada paso tiene tres niveles, y solo se sube de nivel si el jugador no avanza:
       corte a él. Además lo ve pasar en el **rival**, en cámara lenta: la carta que no
       encaja se queda un momento en el aire antes de caer, para que no se pierda.
 - [x] **Centro:** se abre por primera vez al final de la ronda 1: dos cartas sin poder
-      (se **recomiendan** las de su color con el brillo). En la ronda 4 da el Rocket Stamp.
+      **de su color** —las otras se ven pero no se pueden llevar (`tutorialOwnColor`), y
+      tampoco se puede dejar pasar el reparto—, porque son las que alargan la cadena de
+      las rondas que siguen. En la ronda 4 da el Rocket Stamp.
 - [x] **Final:** el Rocket sale en la 3ª carta y se coloca en la 2ª columna para **revivir
-      la racha de Planta**, pegando un golpe de 18 que deja al rival en 0 (Last Chance).
+      la racha de Planta**, pegando un golpe de 13 que deja al rival en 0 (Last Chance).
       El rival se corta en su última oportunidad. La victoria muestra **"¡TUTORIAL
       COMPLETADO!"** con dos botones: **Ir a modo Aventura** y **Menú principal**.
       Sin lista de lo aprendido.
+- [x] **Mazo:** no se cuenta, se abre. Sin ronda propia: dos veces el guión frena la mesa
+      —los dos botones apagados— hasta que el jugador **toca su Axie** y ve sus cartas. Al
+      empezar la ronda 2, con las dos que se llevó del centro ya adentro, y con el Rocket
+      recién comprado, que aparece ahí mismo.
 - [x] **Personaje:** sin narrador. **El Axie propio reacciona** a lo que pasa (ver §10).
 
 ---
@@ -194,16 +200,23 @@ Cada paso tiene tres niveles, y solo se sube de nivel si el jugador no avanza:
 ## 9. Recorrido
 
 Una idea por ronda: **cadena y centro → corte del rival → corte propio → Rocket Stamp del centro →
-revivir la cadena con el Rocket para el remate en Last Chance**. Los mazos están guionados en `createDecks()` y la rueda
-de chances mira el mazo propio, así que el guión también decide qué marca la rueda.
+revivir la cadena con el Rocket para el remate en Last Chance**.
+
+El guión **no inventa cartas**: el mazo de cada ronda es el mazo de verdad —las diez de
+fábrica del Axie más lo que se llevó del centro— ordenado para que salgan primero las que
+pide `SCRIPT`, y el resto queda abajo sin salir (`arrange()` en
+[src/tutorial.js](../src/tutorial.js)). Así todo lo que se roba en la mesa está en el mazo
+que se abre tocando el Axie, los dos números del panel cierran y la rueda de chances mide
+el mazo que de verdad queda. Los golpes salen de esas cartas: **10 · 35 · 0 · 46 · 13**,
+que es justo la vida del rival, y él pega **5 · 0 · 5 · 5 · 0**.
 
 | Ronda | Idea | Qué pasa en la mesa | Brilla | Burbujas |
 |---|---|---|---|---|
-| 1 | **Cadena y centro** | Apertura con cadenas vivas; roba la 2ª carta para alargar la cadena y ataca (más daño). Al atacar se abre el centro: draftea 2 cartas recomendando su color. Después el rival ataca. | cadenas vivas · el daño · cartas de su color | "Cadenas vivas" · "Cadenas largas hacen más daño" · "Buscá tu color" |
-| 2 | **Corte del rival** | Arma racha de 4 cartas y ataca (33 de daño). La CPU roba de más y se corta **en cámara lenta**. | el número de daño | "¡Cadena rota! No comparte símbolos" |
-| 3 | **Corte propio** | Arma racha de 3 cartas; la rueda de chances pasa a rojo y la 4ª carta no encaja (you busted). | la rueda de chances | "Chances de seguir la cadena" · "¡Cadena rota! No comparte símbolos" |
-| 4 | **Práctica + Rocket** | Cinco cartas que encajan todas: pega 51, dejando al rival en 11. Del centro solo se puede llevar el Rocket Stamp. | el Rocket en el centro | "Llevate el cohete" |
-| 5 | **Rocket Stamp** | El Rocket sale tercero; la 4ª carta se coloca en la 2ª columna para **revivir la racha de Planta**, alcanzando 18 de daño y dejando al rival en 0 (Last Chance). El rival se corta en su turno. Remate, "¡TUTORIAL COMPLETADO!". | el Rocket · la 2ª columna · el daño | "Montala en la 2ª carta" · "¡Rematalo!" |
+| 1 | **Cadena y centro** | Apertura con cadenas vivas; roba dos cartas más para alargar la cadena y ataca (10 de daño). Al atacar se abre el centro: draftea 2 cartas de su color (las ajenas se ven apagadas). Después el rival ataca. | cadenas vivas · el daño · cartas de su color | "Cadenas vivas" · "Cadenas largas hacen más daño" · "Buscá tu color" |
+| 2 | **Corte del rival** | Al abrir, tu Axie brilla y la mesa espera: tocándolo se abre el mazo, con las dos cartas que se llevó del centro adentro. Después arma racha de 5 cartas —las dos del centro adelante— y ataca (35 de daño). La CPU roba de más y se corta **en cámara lenta**. | tu Axie · el número de daño | "Tocá tu Axie: es tu mazo" · "¡Cadena rota! No comparte símbolos" |
+| 3 | **Corte propio** | La racha va por **Bestia**, que en el mazo son tres cartas y nada más: con las tres afuera la rueda marca **0%** y la 4ª carta corta de verdad (you busted). | la rueda de chances | "Chances de seguir la cadena" · "¡Cadena rota! No comparte símbolos" |
+| 4 | **Práctica + Rocket** | Seis cartas que encajan todas: pega 46, dejando al rival en 9. Del centro solo se puede llevar el Rocket Stamp. Con el Rocket comprado, la mesa vuelve a esperar hasta que toca su Axie y lo ve en el mazo. | el Rocket en el centro · tu Axie | "Llevate el cohete" · "Tocá tu Axie: sumaste el cohete" |
+| 5 | **Rocket Stamp** | El Rocket sale tercero; la 4ª carta (Confinamiento, que trae Planta) se coloca en la 2ª columna para **revivir la racha de Planta**, alcanzando 13 de daño y dejando al rival en 0 (Last Chance). El rival se corta en su turno. Remate, "¡TUTORIAL COMPLETADO!". | el Rocket · la 2ª columna · el daño | "Montala en la 2ª carta" · "¡Rematalo!" |
 
 El centro se saltea en las rondas 2, 3 y 5 (`tutorialSkipDraft`). Cuántas cartas
 roba la CPU lo dice `BOT_STAND_AT` (sin tope en las rondas 2 y 5: se corta). En la

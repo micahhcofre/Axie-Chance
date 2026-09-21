@@ -912,6 +912,8 @@ export const EN_STRINGS = {
   'Cadena rota! No comparte símbolos': 'Broken chain! No matching symbols',
   'Buscá tu color': 'Look for your color',
   'Llevate el cohete': 'Take the rocket',
+  'Tocá tu Axie: es tu mazo': 'Tap your Axie: your deck',
+  'Tocá tu Axie: sumaste el cohete': 'Tap your Axie: rocket inside',
   'Sumala a tu cadena': 'Add it to your chain',
   'Montala en la 2ª carta': 'Stack it on the 2nd card',
   '¡Rematalo!': 'Finish it!',

@@ -4,93 +4,66 @@
 // el jugador se queda quieto. Lineamientos completos en docs/tutorial.md.
 //
 // Cinco rondas, una idea por ronda: el objetivo, la cadena, el corte (y el centro), el
-// Rocket Stamp que sale del centro, y el Rocket salvando la cadena para el remate.
+// Rocket Stamp que sale del centro, y el Rocket salvando la cadena para el remate. De
+// paso, el mazo, que no se cuenta sino que se abre: dos veces el guión frena la mesa
+// hasta que el jugador toca su Axie y mira las cartas que juntó.
 
 import { makeCard } from './data.js';
 import { hpOf, swingOf } from './game.js';
 import { tr } from './i18n.js';
 
-// ---- Mazos guionados por ronda -----------------------------------------------
-// En game.js `draw(player)` saca con `.pop()` del final del array: el último elemento
-// es la primera carta en salir. La rueda de chances mira el mazo propio, así que estos
-// mazos también deciden qué marca la rueda en cada robo.
+// ---- El guión de cada ronda ---------------------------------------------------
+//
+// El mazo de la mesa es el mazo de verdad: las diez cartas de fábrica del Axie (ver
+// `baseDeck` en data.js) más lo que se fue llevando del centro. El guión no inventa
+// cartas —una carta que no está en el mazo se robaba en la mesa y no aparecía al abrirlo
+// (`#peek-p1`), y eso no es el juego—: solo dice cuáles salen primero y en qué orden,
+// nombrándolas por sus símbolos. El resto del mazo queda abajo, sin salir, que es lo que
+// mide la rueda de chances.
+//
+// `CENTER` es una de las cartas que se llevó del centro (cualquiera: las tres que ofrece
+// la ronda 1 llevan los mismos dos símbolos y alargan la misma cadena) y `ROCKET` el
+// Rocket Stamp de la ronda 4.
 
-function createDecks() {
-  return {
-    // Ronda 1 — objetivo, cadena y centro: encadenar dos cartas Pez, atacar y draftear de tu color.
-    1: {
-      p1: [
-        makeCard(['aquatic', 'bug']),     // 1º robo
-        makeCard(['aquatic', 'beast']),   // apertura
-      ],
-      p2: [
-        makeCard(['plant', 'bug']),       // 1º robo
-        makeCard(['plant', 'beast']),     // apertura
-      ],
-    },
+const CENTER = 'centro';
+const ROCKET = 'cohete';
 
-    // Ronda 2 — cadena larga y corte del rival: cuatro cartas que encajan; la CPU se corta.
-    2: {
-      p1: [
-        makeCard(['aquatic', 'bird']),            // 4ª
-        makeCard(['aquatic', 'bird', 'reptile']), // 3ª
-        makeCard(['aquatic', 'bird']),            // 2ª
-        makeCard(['aquatic', 'bird', 'bug']),     // apertura
-      ],
-      p2: [
-        makeCard(['bird', 'bug']),        // 3ª: no encaja con Planta → se corta
-        makeCard(['plant', 'reptile']),   // 2ª
-        makeCard(['plant', 'beast']),     // apertura
-      ],
-    },
+const SCRIPT = {
+  // Ronda 1 — la cadena: tres cartas de Marea, todas con su símbolo (10 de daño).
+  1: {
+    p1: [['aquatic', 'bird'], ['aquatic', 'bug'], ['aquatic', 'reptile']],
+    p2: [['plant', 'beast'], ['plant', 'bug']],
+  },
 
-    // Ronda 3 — corte propio: racha de 3 cartas, la 4ª no coincide y corta (you busted).
-    3: {
-      p1: [
-        makeCard(['bug', 'reptile']),     // 4ª: corta, sin 'aquatic'
-        makeCard(['aquatic', 'beast']),   // 3ª
-        makeCard(['aquatic', 'bird']),    // 2ª
-        makeCard(['aquatic', 'plant']),   // apertura
-      ],
-      p2: [
-        makeCard(['plant', 'bug']),       // 2ª
-        makeCard(['plant', 'reptile']),   // apertura
-      ],
-    },
+  // Ronda 2 — cadena larga con lo que se llevó del centro (35) y corte del rival: sus
+  // dos primeras van de Planta y la tercera no la lleva.
+  2: {
+    p1: [CENTER, CENTER, ['aquatic', 'bird'], ['aquatic', 'bug'], ['aquatic', 'reptile']],
+    p2: [['plant', 'beast'], ['plant', 'reptile'], ['bird', 'reptile']],
+  },
 
-    // Ronda 4 — práctica y Rocket Stamp: pega fuerte y se lleva el Rocket Stamp del centro.
-    4: {
-      p1: [
-        makeCard(['aquatic', 'bird']),            // 5ª
-        makeCard(['aquatic', 'bird']),            // 4ª
-        makeCard(['aquatic', 'bird']),            // 3ª
-        makeCard(['aquatic', 'bird']),            // 2ª
-        makeCard(['aquatic', 'bird', 'plant']),   // apertura
-      ],
-      p2: [
-        makeCard(['plant', 'bird']),      // 2ª
-        makeCard(['plant', 'reptile']),   // apertura
-      ],
-    },
+  // Ronda 3 — corte propio, y honesto: la racha va por Bestia, que en el mazo son tres
+  // cartas y nada más. Con las tres afuera la rueda marca 0% y la cuarta corta de verdad.
+  3: {
+    p1: [['aquatic', 'beast'], ['beast', 'bird'], ['beast', 'bug'], ['aquatic', 'plant']],
+    p2: [['aquatic', 'plant'], ['plant', 'bird']],
+  },
 
-    // Ronda 5 — Rocket en 3ª carta, revivir Planta y Last Chance:
-    // El Rocket sale 3º; la 4ª carta robada tiene Planta y se coloca en la 2ª carta para revivir
-    // la racha de Planta. El golpe deja al rival en 0 de vida (Last Chance); el rival se corta.
-    5: {
-      p1: [
-        makeCard(['plant', 'beast']),                 // 4ª: se apila en la 2ª carta
-        makeCard(['aquatic', 'plant'], 'freegame'),   // 3ª: el Rocket Stamp
-        makeCard(['aquatic', 'bug']),                 // 2ª: mata la racha de planta al no tenerla
-        makeCard(['aquatic', 'plant']),               // apertura
-      ],
-      p2: [
-        makeCard(['bird', 'bug']),        // 3ª: se corta en su última chance
-        makeCard(['plant', 'reptile']),   // 2ª
-        makeCard(['plant', 'beast']),     // apertura
-      ],
-    },
-  };
-}
+  // Ronda 4 — la cadena más larga de todas (46) y el Rocket del centro.
+  4: {
+    p1: [CENTER, CENTER, ['aquatic', 'bird'], ['aquatic', 'bug'], ['aquatic', 'reptile'],
+      ['aquatic', 'plant']],
+    p2: [['plant', 'bug'], ['plant', 'reptile']],
+  },
+
+  // Ronda 5 — el Rocket sale tercero y la cuarta, montada en la 2ª carta, revive la
+  // racha de Planta que murió ahí: 13 de daño, los que le quedan al rival (Last
+  // Chance). El rival se corta en su último golpe.
+  5: {
+    p1: [['aquatic', 'plant'], ['aquatic', 'bug'], ROCKET, ['plant', 'reptile']],
+    p2: [['plant', 'beast'], ['plant', 'reptile'], ['aquatic', 'bird']],
+  },
+};
 
 /** Con cuántas cartas ataca la CPU en cada ronda. Sin tope, roba hasta cortarse. */
 const BOT_STAND_AT = { 1: 2, 2: Infinity, 3: 2, 4: 2, 5: Infinity };
@@ -98,21 +71,51 @@ const BOT_STAND_AT = { 1: 2, 2: Infinity, 3: 2, 4: 2, 5: Infinity };
 /** Las rondas en que se abre el centro: la del color (1) y la del Rocket (4). */
 const DRAFT_ROUNDS = new Set([1, 4]);
 
+const sameSymbols = (card, symbols) => card.symbols.length === symbols.length
+  && [...card.symbols].sort().join() === [...symbols].sort().join();
+
+/** Dónde está en el mazo la carta que pide el guión. */
+function findCard(deck, want, added) {
+  if (want === ROCKET) return deck.findIndex((c) => c.power === 'freegame');
+  if (want === CENTER) return deck.findIndex((c) => !c.power && added.includes(c));
+  return deck.findIndex((c) => !c.power && sameSymbols(c, want));
+}
+
+/**
+ * El mazo de la ronda: el mazo entero del jugador, con las cartas que pide el guión
+ * arriba de todo y el resto abajo. `draw` saca del final del array, así que la primera
+ * en salir va última.
+ */
+function arrange(own, wants, added) {
+  const rest = [...own];
+  const top = [];
+  for (const want of wants) {
+    const at = findCard(rest, want, added);
+    if (at >= 0) top.push(...rest.splice(at, 1));
+  }
+  return [...rest, ...top.reverse()];
+}
+
+/**
+ * El centro del tutorial. `refillMarket` saca del final: las seis últimas son lo que se
+ * ve al abrirlo. Las tres de tu color llevan tu símbolo **y** el de la Boca (Pez +
+ * Pájaro), así que cualquier par que agarres alarga las mismas dos rachas y la ronda 2
+ * pega lo mismo; las otras dos no llevan tu color, que es lo que la ronda enseña a
+ * mirar, y la reposición tampoco: el centro no vuelve a ofrecer color hasta el Rocket.
+ */
 function buildTutorialPool() {
   const plain = (list) => list.map((syms) => makeCard(syms));
-  // `refillMarket` saca del final: las seis últimas son el centro que se ve primero.
-  // Dos cartas de tu color, tres ajenas y el Rocket, que espera hasta la ronda 4.
   const reserve = plain([
-    ['beast', 'plant'], ['aquatic', 'bug'], ['bird', 'bug'], ['aquatic', 'plant'],
-    ['beast', 'reptile'], ['bug', 'reptile'], ['aquatic', 'bird'], ['plant', 'bird'],
+    ['beast', 'plant'], ['bird', 'bug'], ['plant', 'bird'], ['beast', 'bug'],
+    ['beast', 'reptile'], ['bug', 'reptile'], ['plant', 'reptile'], ['beast', 'bird'],
   ]);
   const market = [
-    makeCard(['beast', 'bird']),
-    makeCard(['aquatic', 'reptile']),
     makeCard(['plant', 'bug']),
+    makeCard(['aquatic', 'bird', 'bug']),
+    makeCard(['beast', 'reptile']),
     makeCard(['aquatic', 'bird'], 'freegame'),
-    makeCard(['bird', 'reptile']),
-    makeCard(['aquatic', 'beast']),
+    makeCard(['plant', 'aquatic', 'bird']),
+    makeCard(['aquatic', 'bird', 'reptile']),
   ];
   return [...reserve, ...market];
 }
@@ -121,18 +124,23 @@ function buildTutorialPool() {
 // Cada paso:
 //   id, round
 //   allowed: la única acción habilitada ('hit' | 'stand' | 'any' | 'none')
-//   draft: reglas del centro mientras dura ({ plainOnly } o { power: 'freegame' })
+//   draft: reglas del centro mientras dura ({ plainOnly, ownColor } o { power: 'freegame' })
 //   target(state): selector de lo que señala la flecha, o null para no señalar nada
 //   glow(state): selector de lo que brilla en celeste (lo que hay que mirar)
 //   bubble: texto de la burbuja (≤ 6 palabras; opcional)
 //   delay: ms sin actuar antes de que aparezca la flecha (por defecto HINT_DELAY)
 //   now: la burbuja sale junto con la flecha en vez de esperar BUBBLE_AFTER
-//   done(state): cuándo se pasa al siguiente paso
+//   done(state, seen): cuándo se pasa al siguiente paso. `seen.deck` es cuántas veces el
+//     jugador abrió y cerró su mazo desde que empezó este paso.
 
 const HINT_DELAY = 3000;
 const BUBBLE_AFTER = 4000;
 
 const HIT = '#controls [data-action="hit"]';
+// Tu Axie es tu mazo: tocándolo se abre. El brillo va sobre el dibujo y la flecha sobre
+// el botón transparente que lo abre (ver `.peek` en index.html), que es lo que se toca.
+const MY_AXIE = '#axie-p1';
+const MY_DECK = '#peek-p1';
 const STAND = '#controls [data-action="stand"]';
 // El centro no exige tu color: se recomienda. Brillan las que lo llevan (el Pez de Marea).
 const MARKET_COLOR = '#market .market-card[data-syms~="aquatic"]:not([disabled])';
@@ -163,7 +171,7 @@ function createSteps() {
       bubble: tr('Cadenas vivas'),
       delay: 0,
       now: true,
-      done: (s) => cardsOf(s) >= 2,
+      done: (s) => cardsOf(s) >= 3,
     },
     {
       id: 'r1-chain',
@@ -181,7 +189,7 @@ function createSteps() {
       id: 'r1-color',
       round: 1,
       allowed: 'none',
-      draft: { plainOnly: true },
+      draft: { plainOnly: true, ownColor: true },
       target: (s) => (picking(s) ? toConfirm(MARKET_COLOR) : null),
       side: 'top',
       glow: (s) => (picking(s) ? MARKET_COLOR : null),
@@ -192,12 +200,25 @@ function createSteps() {
     },
 
     // ── Ronda 2: racha larga y corte del rival ─────────────────────────
+    // Antes de robar, el mazo: lo que se llevó del centro ya está adentro. No se cuenta,
+    // se abre —la mesa espera hasta que toca su Axie y vuelve.
+    {
+      id: 'r2-deck',
+      round: 2,
+      allowed: 'none',
+      target: () => MY_DECK,
+      glow: () => MY_AXIE,
+      bubble: tr('Tocá tu Axie: es tu mazo'),
+      delay: 300,
+      now: true,
+      done: (s, seen) => seen.deck >= 1,
+    },
     {
       id: 'r2-draw',
       round: 2,
       allowed: 'hit',
       target: () => HIT,
-      done: (s) => cardsOf(s) >= 4,
+      done: (s) => cardsOf(s) >= 5,
     },
     {
       id: 'r2-attack',
@@ -254,7 +275,7 @@ function createSteps() {
       round: 4,
       allowed: 'hit',
       target: () => HIT,
-      done: (s) => cardsOf(s) >= 5,
+      done: (s) => cardsOf(s) >= 6,
     },
     {
       id: 'r4-attack',
@@ -274,7 +295,19 @@ function createSteps() {
       bubble: tr('Llevate el cohete'),
       delay: 500,
       now: true,
-      done: (s) => myTurn(s, 5),
+      done: (s) => s.decks?.p1?.some(isRocket) || myTurn(s, 5),
+    },
+    // El cohete que acaba de salir del centro ya es suyo: se lo ve abriendo el mazo.
+    {
+      id: 'r4-deck',
+      round: 4,
+      allowed: 'none',
+      target: () => MY_DECK,
+      glow: () => MY_AXIE,
+      bubble: tr('Tocá tu Axie: sumaste el cohete'),
+      delay: 0,
+      now: true,
+      done: (s, seen) => seen.deck >= 1,
     },
 
     // ── Ronda 5: Rocket Stamp en 3ª carta, revivir Planta y Last Chance ─
@@ -648,13 +681,22 @@ export function createOverlay({ onQuit = null } = {}) {
 // ---- Motor del tutorial ------------------------------------------------------
 
 export function createTutorial(game, onDone = () => {}) {
-  const decks = createDecks();
   const steps = createSteps();
   let index = 0;
   let pointing; // lo que la flecha señala ahora (undefined: todavía nada decidido)
   let gatedFor = null; // el paso cuyas reglas están puestas en la partida
   let finished = false;
   let unsub = null;
+  // El mazo se mira tocando tu Axie, que abre un panel encima de la mesa (ver `#peek-p1`
+  // en index.html). Los pasos que lo enseñan esperan ese toque, así que se cuentan las
+  // visitas y cada paso arranca con la cuenta en cero (`deckAt`).
+  let deckSeen = 0;
+  let deckAt = 0;
+
+  // El toque sobre tu Axie abre el mazo: con eso el paso que lo pedía ya está visto. Se
+  // cuenta al abrirlo y no al cerrarlo para que la mesa quede libre apenas sale el panel.
+  const peekBtn = document.getElementById?.('peek-p1');
+  const onPeek = () => { deckSeen++; sync(game.state); };
 
   const menuBtn = document.getElementById?.('menu-btn');
   const prevMenuText = menuBtn?.textContent;
@@ -669,6 +711,7 @@ export function createTutorial(game, onDone = () => {}) {
     finished = true;
     unsub?.();
     document.removeEventListener?.('pointerdown', lost, true);
+    peekBtn?.removeEventListener?.('click', onPeek);
     if (menuBtn) {
       menuBtn.removeEventListener?.('click', onMenuQuit);
       if (prevMenuText) menuBtn.textContent = prevMenuText;
@@ -680,6 +723,7 @@ export function createTutorial(game, onDone = () => {}) {
       st.tutorialAllowed = null;
       st.tutorialAllowedCol = null;
       st.tutorialPlainOnly = false;
+      st.tutorialOwnColor = false;
       st.tutorialAllowedCard = null;
       st.tutorialDisallowSkip = false;
       st.tutorialSkipDraft = false;
@@ -702,6 +746,8 @@ export function createTutorial(game, onDone = () => {}) {
       e.target?.closest?.(pointing) ||
       // Cambiar la carta marcada del centro no es perderse (ver `CONFIRM`).
       e.target?.closest?.('#market .market-card:not([disabled])') ||
+      // Con el mazo abierto, los toques son del panel: mirar las cartas y cerrarlo.
+      e.target?.closest?.('#deck-modal') ||
       e.target?.closest?.('.topbar-actions') ||
       e.target?.closest?.('#hud-menu')
     ) {
@@ -712,12 +758,16 @@ export function createTutorial(game, onDone = () => {}) {
     overlay.hurry();
   }
 
-  /** Pone las rondas en su lugar antes de que se repartan. */
+  /**
+   * Pone el mazo de cada ronda antes de que se reparta. No es un mazo aparte: es el de
+   * cada jugador —las diez de fábrica más lo que se llevó del centro— ordenado para que
+   * salgan primero las cartas del guión (ver `SCRIPT`).
+   */
   function setRound(st, round) {
-    const deck = decks[round];
-    if (deck) {
-      st.decks.p1 = deck.p1.map((c) => ({ ...c }));
-      st.decks.p2 = deck.p2.map((c) => ({ ...c }));
+    const script = SCRIPT[round];
+    for (const player of ['p1', 'p2']) {
+      const own = [...st.start[player], ...st.added[player]];
+      st.decks[player] = arrange(own, script?.[player] ?? [], st.added[player]);
     }
     st.tutorialBotStandAt = BOT_STAND_AT[round] ?? 2;
     st.tutorialSkipDraft = !DRAFT_ROUNDS.has(round);
@@ -729,7 +779,10 @@ export function createTutorial(game, onDone = () => {}) {
     st.tutorialAllowed = step.allowed;
     st.tutorialAllowedCol = step.col ?? null;
     st.tutorialPlainOnly = Boolean(rules.plainOnly);
-    st.tutorialDisallowSkip = Boolean(rules.power);
+    st.tutorialOwnColor = Boolean(rules.ownColor);
+    // Dejar pasar el reparto rompería el guión: las cartas del centro son las que
+    // alargan la cadena de las rondas siguientes.
+    st.tutorialDisallowSkip = Boolean(rules.power || rules.ownColor);
     st.tutorialAllowedCard = null;
     if (rules.power) {
       let card = st.market.find((c) => c.power === rules.power);
@@ -747,9 +800,10 @@ export function createTutorial(game, onDone = () => {}) {
   function sync(state) {
     if (finished || !state) return;
     let step = steps[index];
-    while (step && step.done(state)) {
+    while (step && step.done(state, { deck: deckSeen - deckAt })) {
       step = steps[++index];
       pointing = undefined;
+      deckAt = deckSeen;
     }
     if (!step) { finish(); return; }
 
@@ -782,6 +836,7 @@ export function createTutorial(game, onDone = () => {}) {
   game.state.tutorialAllowed = steps[0].allowed;
 
   unsub = game.subscribe(sync);
+  peekBtn?.addEventListener?.('click', onPeek);
   document.addEventListener?.('pointerdown', lost, true);
   // El primer paso, apenas la mesa está puesta.
   setTimeout(() => sync(game.state), 400);
@@ -789,4 +844,4 @@ export function createTutorial(game, onDone = () => {}) {
   return { destroy: cleanup };
 }
 
-export { createSteps, createDecks, buildTutorialPool };
+export { createSteps, buildTutorialPool, arrange, SCRIPT, CENTER, ROCKET };

@@ -657,6 +657,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       tutorialDisallowSkip: false,
       tutorialAllowRenew: false,
       tutorialPlainOnly: false,
+      tutorialOwnColor: false,
       tutorialSkipDraft: false,
       tutorialBotStandAt: null,
       tutorialAllowedCol: null,
@@ -1758,12 +1759,16 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   function pickable() {
     const player = drafter();
     if (!player) return [];
-    const list = draftable(player);
+    let list = draftable(player);
     if (state.tutorial && state.tutorialAllowedCard) {
       return list.filter((c) => c.uid === state.tutorialAllowedCard);
     }
-    if (state.tutorial && state.tutorialPlainOnly) {
-      return list.filter((c) => !c.power);
+    if (state.tutorial && state.tutorialPlainOnly) list = list.filter((c) => !c.power);
+    // El centro de la ronda que enseña a mirar el color ofrece solo cartas con el
+    // símbolo del que elige: lo que se lleve tiene que enlazar con su mazo, porque el
+    // guión de las rondas siguientes lo usa para alargar la cadena.
+    if (state.tutorial && state.tutorialOwnColor) {
+      list = list.filter((c) => c.symbols.includes(state.symbols[player]));
     }
     return list;
   }
