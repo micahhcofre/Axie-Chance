@@ -3,6 +3,7 @@ import { mount } from './ui.js';
 import { createLobby } from './lobby.js';
 import { connect } from './net.js';
 import { currentLang, translateDom } from './i18n.js';
+import { FREE_PLAY, withFree } from './loadout.js';
 
 // Establece el idioma del documento y traduce el HTML estático antes de montar la UI.
 document.documentElement.lang = currentLang();
@@ -27,8 +28,13 @@ document.addEventListener('dragstart', (e) => {
 //
 // El mezclador es uno solo y lo tiene la mesa: los toques de la portada y de la sala
 // son los que lo encienden, y cuando la partida empieza ya está andando.
-const local = createGame();
-const ui = mount(local, { start: false });
+// `?testeo` es la zona de testeo (ver `sandbox.js`): la misma mesa, sin reloj, con un
+// panel para fabricar la carta que sigue. Se carga aparte y solo ahí: no es del juego.
+const testing = new URLSearchParams(location.search).has('testeo');
+const local = createGame(testing ? { clock: null } : {});
+// En la zona de testeo las partidas no cuentan para las misiones: ahí la carta que sale
+// se elige a mano.
+const ui = mount(local, { start: false, missions: !testing });
 
 // La mesa, para la sala: se sienta frente a la partida de la sala —con su asiento— y
 // al irse vuelve a la de acá.
@@ -42,7 +48,7 @@ const lobby = createLobby(ui, {
   onPick: () => sala?.axieChanged(),
   openNet: () => {
     if (!new URLSearchParams(location.search).has('red')) {
-      history.replaceState(null, '', `${location.pathname}?red`);
+      history.replaceState(null, '', `${location.pathname}${withFree('?red')}`);
     }
     if (sala) sala.show();
     else {
@@ -59,3 +65,11 @@ const lobby = createLobby(ui, {
 // `?red` —el link de la sala, o el QR— entra derecho a las salas. La portada queda
 // armada atrás: "Volver" lleva a su menú sin recargar.
 if (new URLSearchParams(location.search).has('red')) lobby.toNet({ instant: true });
+
+if (testing) {
+  import('./sandbox.js').then(({ openSandbox }) => openSandbox({ game: local, ui, lobby }));
+} else if (FREE_PLAY) {
+  // `?libre` es el juego entero con todo abierto (ver `FREE_PLAY` en `loadout.js`); sus
+  // herramientas, como la zona de testeo, se cargan aparte y solo ahí.
+  import('./free-play.js').then(({ openFreePlay }) => openFreePlay());
+}

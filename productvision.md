@@ -62,10 +62,10 @@ That's the whole game. Two buttons: **draw** or **stand**.
 
 The Axie Core integration isn't a skin and it isn't a bought advantage: it's **consistency math**.
 
-Every Axie walks into the arena with a 10-card deck derived from its genetics:
+Every Axie walks into the arena with an 8-card deck derived from its genetics:
 
 - **6 favorable cards**, one per body part —Eyes, Ears, Horn, Mouth, Back, Tail—, each carrying its base class symbol plus a secondary symbol set by that part.
-- **4 unfavorable cards** derived from the Axie's rock-paper-scissors triad: ally and prey appear twice each, the counters barely once. The deck is tilted in your favor by design, not by chance.
+- **2 unfavorable cards**, one per rival rock-paper-scissors triad: the one you beat and the one that beats you. They share no symbol, so none of them guarantees your chain: even with every part evolved, one card can still cut you.
 
 **Part Evolution as a variance reducer.** Evolving a part on-chain adds a **third symbol** to that part's card. It doesn't raise your damage directly: it multiplies your ways to connect. More connections mean fewer busts, longer chains and the freedom to play more aggressively. Evolution doesn't necessarily make you hit harder; it makes you **braver**.
 

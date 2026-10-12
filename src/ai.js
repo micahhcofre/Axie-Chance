@@ -1,4 +1,4 @@
-import { playCard, scoreChain } from './rules.js';
+import { bestStack, isFreeStack, playCard, scoreChain, stackOnCard } from './rules.js';
 import { TUNING } from './data.js';
 
 // El mazo tiene 96 cartas pero solo 41 combinaciones distintas de símbolos.
@@ -18,38 +18,54 @@ function deckProfile(deck) {
 
 /**
  * Lo que la carta robada ya dio apenas salió, se corte o no la cadena después: la
- * pluma pega y el amuleto de fuerza suma. Solo lo cuenta "duro"; `NOTHING` es el
+ * pluma pega, y los demás poderes "al robarla" (garra, abanico, burbuja, daga,
+ * escáner, guantes, filo) dejan algo puesto. Solo lo cuenta "duro"; `NOTHING` es el
  * punto de partida de cada turno.
  */
-const NOTHING = { feather: 0, strength: 0 };
+const NOTHING = { feather: 0, value: 0 };
+const ON_DRAW = { rage: 5, strength: 4, fan: 3, maker: 7, dagger: 4, scanner: 5, gloves: 5, edge: 3 };
 const afterDraw = (drawn, card) => {
   if (card.power === 'feather') return { ...drawn, feather: drawn.feather + TUNING.featherDamage };
-  if (card.power === 'strength') return { ...drawn, strength: drawn.strength + TUNING.strengthStep };
+  if (ON_DRAW[card.power]) return { ...drawn, value: drawn.value + ON_DRAW[card.power] };
   return drawn;
 };
 
-// Valor de estar en `chain` pudiendo plantarse o seguir robando.
-function chainValue(chain, profile, remaining, depth, worth, drawn) {
+// Valor de estar en `chain` pudiendo plantarse o seguir robando. `saves` son los
+// huevos sanos que le quedan en la mesa: cada uno perdona un corte.
+function chainValue(chain, profile, remaining, depth, worth, drawn, saves = 0) {
   const stand = worth(chain, drawn);
   if (depth <= 0 || remaining <= 0) return stand;
-  return Math.max(stand, drawEV(chain, profile, remaining, depth, worth, drawn));
+  return Math.max(stand, drawEV(chain, profile, remaining, depth, worth, drawn, saves));
 }
+
+/**
+ * Cómo queda la cadena con la carta robada. El Rocket Stamp no se encadena: se monta
+ * gratis donde más suma, que es lo que hace la CPU con él (ver `botTurn`).
+ */
+const withCard = (chain, card) =>
+  isFreeStack(card) && chain.cards.length > 0
+    ? stackOnCard(chain, bestStack(chain, card), card)
+    : playCard(chain, card);
 
 // Lo que se espera ganar robando una carta más. La que corta vale lo que `worth` le dé
 // a una cadena cortada: 0 para "normal", y para "duro" lo que la carta ya dio al salir.
-function drawEV(chain, profile, remaining, depth, worth, drawn) {
+// Con un huevo sano el corte no pasa: la carta vuelve al mazo (el perfil no cambia) y
+// se sigue desde la misma cadena, con un huevo menos.
+function drawEV(chain, profile, remaining, depth, worth, drawn, saves = 0) {
   let ev = 0;
   for (const entry of profile) {
     if (entry.count === 0) continue;
     const p = entry.count / remaining;
     const got = afterDraw(drawn, entry);
-    const next = playCard(chain, entry);
+    const next = withCard(chain, entry);
     if (next.busted) {
-      ev += p * worth(next, got);
+      ev += p * (saves > 0
+        ? chainValue(chain, profile, remaining, depth - 1, worth, got, saves - 1)
+        : worth(next, got));
       continue;
     }
     entry.count--;
-    ev += p * chainValue(next, profile, remaining - 1, depth - 1, worth, got);
+    ev += p * chainValue(next, profile, remaining - 1, depth - 1, worth, got, saves);
     entry.count++;
   }
   return ev;
@@ -66,7 +82,7 @@ const pointsOnly = (chain) => scoreChain(chain).total;
 //
 // "Duro" no juega por puntos sino por la partida, y eso cambia qué vale una cadena:
 // - Pega contra la vida que hay: el escudo del rival se come la punta del golpe, la
-//   Gecko Mask la topea, y lo que se pase de la vida no suma —salvo que se pase tanto
+//   almohada le resta, y lo que se pase de la vida no suma —salvo que se pase tanto
 //   que le borre la última chance—.
 // - Dejarlo sin vida vale mucho más que el daño en sí. Esos saltos son los que hacen
 //   que mirar tres cartas adelante sí cambie decisiones.
@@ -83,83 +99,93 @@ const DURO = {
   // Dejarlo sin vida, con y sin la última chance de por medio.
   down: 15,
   knockout: 40,
-  // Un punto de fuerza rinde en cada ataque que queda.
-  strength: 3,
-  // La cáscara del huevo que se rompe le devuelve el golpe: pesa, pero no entero.
-  thorns: 0.5,
-  poison: 9,
-  octopus: 3,
-  bubble: 2,
-  snail: 3,
-  steelskin: 4,
-  eggThorns: 3,
+  // Las espinas del rival le vuelven al que pega: pesan, pero no enteras.
+  thorns: 0.8,
+  // Cada garra pone su sangrado en cada golpe que conecte.
+  claw: 3,
   // El ataque de la última chance: ganarla lo es todo.
   lastChance: 100,
 };
 
-/** Lo que "duro" asume de la mesa si no se la pasan: rival entero, nada puesto. */
-const QUIET_VIEW = {
-  strength: 0, weak: false, myHp: 100, myShield: 0, myCap: 0, myPoison: 0,
-  foeHp: 100, foeShield: 0, foeThorns: 0, foeCap: 0, foeStrength: 0, foeWeak: false,
-  lastChance: false,
+/**
+ * Lo que rinde cada poder de la mesa al plantarse, en puntos de vida: todos cobran con
+ * plantarse sin cortarse, pegue lo que pegue. Los de curar
+ * se recortan con la vida que le falta, y los que rinden en turnos que vienen no
+ * valen nada si el rival lo va a tumbar (`later`).
+ */
+const STAND_WORTH = {
+  poison: 12, octopus: 3, bubble: 2, jellyfish: 6, redbubble: 4, guard: 8, sage: 8, trickster: 5,
+  razor: 10, brutal: 7, snail: 5, cocoon: 12, steelskin: 8, viper: 3, pillow: 8,
 };
 
-/** Un golpe bueno del rival, sin contar fuerza: con esto se mide si el próximo lo tumba. */
-const FOE_HIT = 12;
+/** Lo que "duro" asume de la mesa si no se la pasan: rival entero, nada puesto. */
+const QUIET_VIEW = {
+  feathers: 0, rage: 0, weak: 0, claws: 0, myHp: 150, maxHp: 150, myShield: 0, myPillow: 0, myPoison: 0, myBleed: 0,
+  foeHp: 150, foeShield: 0, foeSpikes: 0, foePillow: 0, lastChance: false, saves: 0,
+};
+
+/** Un golpe bueno del rival: con esto se mide si el próximo lo tumba. */
+const FOE_HIT = 17;
 
 /**
  * Si el próximo golpe del rival lo deja sin vida: el veneno muerde al terminar este
- * turno, y después pega el rival contra su escudo y su máscara.
+ * turno, y después pega el rival contra su escudo y su almohada.
  */
 function doomedAt(view) {
-  let hit = FOE_HIT + view.foeStrength;
-  if (view.foeWeak) hit = Math.ceil(hit / TUNING.snailShare);
-  hit = Math.max(hit - view.myShield, 0);
-  if (view.myCap > 0) hit = Math.min(hit, view.myCap);
-  return view.myHp - view.myPoison <= hit;
+  let hit = Math.max(FOE_HIT - view.myShield, 0);
+  if (view.myPillow > 0) hit = Math.max(hit - TUNING.pillowCut, 0);
+  return view.myHp - view.myPoison - view.myBleed * TUNING.bleedDamage <= hit;
 }
 
 const unstacked = (cards) => cards.flatMap((c) => c.stackedCards || [c]);
+
+/** Los puntos de la cadena sin las `weak` mejores rachas (ver `pointsOf` en `game.js`). */
+const pointsWithout = (chain, weak) =>
+  scoreChain(chain).breakdown.slice(weak).reduce((sum, r) => sum + r.points, 0);
 
 /** Valor de plantarse con `chain`, en puntos de vida, para la mesa que describe `view`. */
 function attackWorth(view, chain, drawn) {
   const foeHp = Math.max(view.foeHp - drawn.feather, 0);
   const later = view.doomed || view.lastChance ? 0 : 1;
-  const early = drawn.feather + drawn.strength * DURO.strength * later;
+  const early = drawn.feather + drawn.value * later;
   if (view.lastChance && foeHp <= 0) return DURO.lastChance;
-  if (chain.busted) return view.lastChance ? 0 : early;
+  if (chain.busted) {
+    if (view.lastChance) return 0;
+    // El martillo le rompe el escudo, y el shuriken pega contra el que le quede.
+    const hand = unstacked([...chain.cards, ...(chain.bustCard ? [chain.bustCard] : [])]);
+    const hammer = hand.some((c) => c.power === 'hammer');
+    const shield = hammer ? 0 : view.foeShield;
+    const shurikens = hand.filter((c) => c.power === 'shuriken').length;
+    return early + (hammer ? view.foeShield : 0) + Math.max(shurikens * TUNING.shuriken - shield, 0);
+  }
 
-  const points = scoreChain(chain).total;
+  const points = pointsWithout(chain, view.weak ?? 0);
   const cards = unstacked(chain.cards);
-  const claws = cards.filter((c) => c.power === 'brutal').length;
-  const longest = Math.max(0, ...chain.runs.map((r) => r.length));
-  let swing = points > 0 ? points + view.strength + drawn.strength + claws * TUNING.brutalStep * longest : 0;
-  if (view.weak && swing > 0) swing = Math.ceil(swing / TUNING.snailShare);
+  const swing = points + (view.feathers ?? 0) * TUNING.fanStep + (view.rage ?? 0);
   const blocked = Math.min(view.foeShield, swing);
   let landed = swing - blocked;
-  if (view.foeCap > 0 && landed > view.foeCap) landed = view.foeCap;
+  if (view.foePillow > 0) landed = Math.max(landed - TUNING.pillowCut, 0);
   const downs = foeHp > 0 && landed >= foeHp;
 
-  if (view.lastChance) return downs ? DURO.lastChance : landed / 100;
+  if (view.lastChance) return downs ? DURO.lastChance : landed / view.maxHp;
 
   let value = early + Math.min(landed, foeHp) + DURO.stand * later;
-  if (blocked > 0 && blocked === view.foeShield) value -= view.foeThorns * DURO.thorns;
+  if (swing > 0) value -= view.foeSpikes * DURO.thorns;
   if (downs) value += landed - foeHp > TUNING.overkill ? DURO.knockout : DURO.down;
 
   // Los poderes de la mesa: se cobran plantándose, y se pierden si la cadena se corta.
-  const missing = 100 - view.myHp;
+  const missing = view.maxHp - view.myHp;
+  value += (view.claws ?? 0) * DURO.claw * later;
   for (const { power } of cards) {
-    if (!power || power === 'brutal' || power === 'feather' || power === 'strength') continue;
-    if (power === 'poison') value += DURO.poison * later;
-    else if (power === 'octopus') value += DURO.octopus * later;
-    else if (power === 'bubble') value += DURO.bubble * later;
-    else if (swing <= 0) continue;
-    else if (power === 'snail') value += DURO.snail;
-    else if (power === 'steelskin') value += DURO.steelskin;
-    else if (power === 'egg') value += Math.max(1, Math.floor(swing / TUNING.eggShare)) + DURO.eggThorns;
-    else if (power === 'pot') value += Math.min(swing, missing);
-    else if (power === 'leech') value += TUNING.leechDrain + Math.min(TUNING.leechDrain, missing);
-    else if (power === 'leaf') value += Math.min(TUNING.leafGain * TUNING.leafHeal, missing) * later;
+    if (!power) continue;
+    if (STAND_WORTH[power]) value += STAND_WORTH[power] * later;
+    else if (power === 'pot') value += Math.min(TUNING.potHeal, missing);
+    else if (power === 'leech') {
+      // La daga pega después del golpe, contra el escudo que el golpe le haya dejado.
+      const drain = Math.max(TUNING.leechDrain - Math.max(view.foeShield - swing, 0), 0);
+      value += drain + Math.min(drain, missing);
+    }
+    else if (power === 'leaf') value += Math.min(TUNING.leafTurns * TUNING.leafHeal, missing) * later;
   }
   return value;
 }
@@ -192,7 +218,7 @@ export const renewsMarket = (difficulty) => !STYLE[difficulty]?.sloppy;
  * @param {object} [opts.view]  la mesa desde su asiento (ver `attackViewOf` en
  *                              `game.js`); solo la usa "duro"
  */
-export function decideDraw(chain, deck, { needs = null, difficulty = 'normal', view = null } = {}) {
+export function decideDraw(chain, deck, { needs = null, difficulty = 'normal', view = null, saves = view?.saves ?? 0 } = {}) {
   if (deck.length === 0) return false;
   const style = STYLE[difficulty] ?? STYLE.normal;
 
@@ -204,7 +230,7 @@ export function decideDraw(chain, deck, { needs = null, difficulty = 'normal', v
     const stand = worth(chain, NOTHING);
     // Con el empate ya asegurado no hay nada que ganar robando.
     if (table.lastChance && stand >= DURO.lastChance) return false;
-    return drawEV(chain, deckProfile(deck), deck.length, style.depth, worth, NOTHING) > stand;
+    return drawEV(chain, deckProfile(deck), deck.length, style.depth, worth, NOTHING, saves) > stand;
   }
 
   const stand = scoreChain(chain).total;
@@ -218,7 +244,7 @@ export function decideDraw(chain, deck, { needs = null, difficulty = 'normal', v
   // el golpe final salía en 0 casi siempre. Juega su turno normal y pega lo que pueda.
   if (needs !== null && style.playsEndgame && stand >= needs) return false;
 
-  return drawEV(chain, deckProfile(deck), deck.length, style.depth, pointsOnly, NOTHING) > stand * style.margin;
+  return drawEV(chain, deckProfile(deck), deck.length, style.depth, pointsOnly, NOTHING, saves) > stand * style.margin;
 }
 
 // ---- elección de cartas de la reserva ---------------------------------------
@@ -263,9 +289,9 @@ function bestCards(options, deck, n) {
  * Cuánto vale cada poder para la CPU, medido en cartas: 1 es "tanto como sumar una
  * carta más al mazo".
  *
- * Salen de atar al jugador a un solo poder contra la CPU normal y contar partidas
- * ganadas, 800 sembradas por poder, contra un control que nunca agarra ninguno
- * (`npm run balance`). En puntos sobre ese control:
+ * Los primeros seis salieron de atar al jugador a un solo poder contra la CPU normal y
+ * contar partidas ganadas, 800 sembradas por poder, contra un control que nunca agarra
+ * ninguno (`npm run balance`). En puntos sobre ese control:
  *
  *   veneno +11.4 · pulpo +10.4 · huevo +8.9 · fuerza +8.4 · caracol +7.7 · maceta +6.5
  *
@@ -291,29 +317,92 @@ function bestCards(options, deck, n) {
  * conviene volver a correr el banco después de tocarlos. Por la misma razón, subir un
  * poder **baja** a los otros cinco: el rival también lo tiene.
  *
- * Y una advertencia de fecha: estos seis números salieron de un juego en el que la
- * fuerza cobraba con la cadena rota, el veneno bajaba de a 2, la cáscara era un tercio
- * del golpe y el caracol mordía un número fijo durante dos ataques. Cuatro reglas
- * cambiaron, y la del caracol es la más grande: mordía la mitad del golpe con que se
- * lo ponían, así que en manos del que venía pegando fuerte apagaba ataques enteros.
- * Su 1.15 es de esa versión y casi seguro está alto para la de ahora. Siguen siendo la
- * mejor estimación que hay, pero son de antes: hay que volver a correr el banco antes
- * de tratarlos como medidos.
+ * El Rocket Stamp se mide distinto. Desde que es gratis (no corta, se pone sobre la
+ * columna que uno elija), un jugador atado a él le saca +14.7 ±2.8 al control, pero el
+ * control pierde el 96% y veneno y maceta quedan pegados (+1.9, +1.5): las anclas se
+ * juntan en el ruido y no hay contra qué interpolar. Así que se midió lo que el peso
+ * tiene que lograr, que la CPU normal gane más contra un jugador que elige con los
+ * pesos de antes (`npm run balance -- --worth freegame=…`, pareado contra 1.2):
+ *
+ *   0.8 −2.4 ±2.7 · 1.6 +1.2 ±2.9 (800 por valor) · 2 −1.4 · 3 −5.9 · 5 −5.5 (400)
+ *
+ * Una loma chata con la punta cerca de 1.6: más arriba se lleva el Rocket en vez de dos
+ * cartas que enlazan, y pierde. Nada sale del ruido cerca de 1.2; es la mejor
+ * estimación, no un hecho.
+ *
+ * **Cada vez que se toca un poder** (su regla o sus números en `TUNING`) se vuelve a
+ * medir su peso con `--worth` y se actualiza acá, en el mismo cambio.
+ *
+ * El rebalanceo de 2026-10 (sangrado de 2 por carta, medusas en el mazo, Trickster
+ * que roba, víbora que cierra la cura de un turno, guantes al robar, martillo al
+ * cortarte, almohada que resta, y casi todos los números arriba) cambió cuánto vale
+ * cada poder, y los pesos se rehicieron enteros. Mover uno solo ±0.3 con `--worth` no
+ * sale del ruido (±0.5), así que no se pueden afinar de a uno. Se midió entonces lo que
+ * vale cada poder en un banco parejo: los dos jugadores eligen del centro como la CPU
+ * normal, uno se lleva el poder siempre que puede y el otro nunca; la diferencia,
+ * pareada por semilla, es lo que suma llevárselo en vez de lo que se habría llevado. El
+ * peso es 1.3 + 0.05 por punto. La tabla entera contra la de antes, con el mismo
+ * jugador enfrente: la CPU normal +0.8 ±1.2 (4000 partidas), la dura +0.5 ±1.5 (3000).
+ * Con 0.1 por punto daba −0.3 ±1.4: más pendiente no ayuda.
  */
-const POWER_WORTH = {
-  poison: 1.7,
-  octopus: 1.55,
-  bubble: 1.55,
-  leech: 1.45,
-  egg: 1.3,
-  feather: 1.3,
-  steelskin: 1.3,
-  strength: 1.25,
-  brutal: 1.25,
-  leaf: 1.2,
-  snail: 1.15,
-  pot: 0.95,
-  freegame: 1.2,
+export const POWER_WORTH = {
+  // Del rebalanceo de 2026-10: 1.3 + 0.05 por cada punto que le suma agarrar ese poder
+  // en vez de lo que se habría llevado (banco parejo, 2000 partidas, ±2.1; ver arriba),
+  // redondeado a 0.05 y entre 0.85 y 1.8. Entre paréntesis, ese punto.
+  // Pájaro
+  egg: 1.65, //        +6.6
+  fan: 1.55, //        +5.2
+  feather: 1.45, //    +2.7
+  shuriken: 1.25, //   −0.9
+  hammer: 0.9, //      −8.2
+  // Pez
+  jellyfish: 1.5, //   +3.9
+  redbubble: 1.5, //   +3.9
+  maker: 1.45, //      +3.0
+  bubble: 1.1, //      −4.3
+  octopus: 1.05, //    −5.0
+  // Bestia
+  strength: 1.6, //    +5.8
+  dagger: 1.5, //      +4.2
+  brutal: 1.45, //     +3.4
+  rage: 1.45, //       +2.9
+  razor: 1.4, //       +2.3
+  // Planta
+  leaf: 1.55, //       +4.5
+  guard: 1.4, //       +1.6
+  sage: 1.4, //        +1.6
+  pot: 1.35, //        +1.1
+  pillow: 1.2, //      −1.8
+  // Bicho
+  cocoon: 1.4, //      +2.5
+  leech: 1.4, //       +2.2
+  trickster: 1.3, //   +0.1
+  snail: 1.25, //      −0.9
+  scanner: 1.25, //    −1.4
+  // Reptil
+  gloves: 1.8, //      +10.1
+  poison: 1.4, //      +2.5
+  steelskin: 1.4, //   +2.5
+  edge: 1.4, //        +2.4
+  viper: 0.85, //      −8.6
+  // El Rocket no se mide así —hay 15 en la reserva y "priorizarlo" es llevárselo en
+  // casi todos los repartos—: queda el 1.6 que salió de `--worth` (ver arriba).
+  freegame: 1.6,
+  // Los neutrales de la Aventura: estimados, todavía sin medir. `--worth` corre partidas
+  // sueltas, donde no salen (ver `NEUTRAL_POWERS` en `data.js`); para medirlos hace falta
+  // un banco que los ponga en la reserva.
+  focus: 1.6,
+  mirror: 1.5,
+  tape: 1.5,
+  energy: 1.5,
+  papa: 1.4,
+  blood: 1.4,
+  spell: 1.35,
+  mama: 1.35,
+  dispel: 1.25,
+  lens: 1.2,
+  gift: 1.2,
+  stamp: 1.15,
 };
 
 /**
@@ -341,9 +430,13 @@ function plainPair(pool, deck) {
   return { two, perCard: two.cards.length ? two.value / two.cards.length : 0 };
 }
 
-/** Conectividad de la carta más lo que vale su efecto, si tiene. */
-const worth = (card, deck, perCard) =>
-  connectivity(card, deck) + (card.power ? POWER_WORTH[card.power] * TUNING.powerBias * perCard : 0);
+/**
+ * Conectividad de la carta más lo que vale su efecto, si tiene. `weights` es la tabla de
+ * pesos: la de la CPU salvo en el banco, que fija la del jugador simulado para medir la
+ * de la CPU (`npm run balance -- --worth`).
+ */
+const worth = (card, deck, perCard, weights = POWER_WORTH) =>
+  connectivity(card, deck) + (card.power ? weights[card.power] * TUNING.powerBias * perCard : 0);
 
 /** El primer elemento de `items` con el valor más alto por encima de `floor`. */
 function argmax(items, value, floor = -Infinity) {
@@ -371,8 +464,9 @@ function argmax(items, value, floor = -Infinity) {
  * incluso empeoraba. La diferencia de "duro" está en cuándo plantarse.
  *
  * @param {'stand'|'bust'} kind  se plantó (2 sin poder o 1 con poder) o se cortó (1 sin poder)
+ * @param {object} [weights]     los pesos de los poderes (ver `worth`)
  */
-export function planDraft(pool, deck, { kind }) {
+export function planDraft(pool, deck, { kind, weights = POWER_WORTH }) {
   if (pool.length === 0) return { mode: null, cards: [] };
 
   if (kind === 'bust') {
@@ -382,7 +476,7 @@ export function planDraft(pool, deck, { kind }) {
 
   const { two, perCard } = plainPair(pool, deck);
   const powered = pool.filter((c) => c.power);
-  const { best, bestValue } = argmax(powered, (card) => worth(card, deck, perCard), -1);
+  const { best, bestValue } = argmax(powered, (card) => worth(card, deck, perCard, weights), -1);
 
   if (best && bestValue > two.value) return { mode: 'power', cards: [best], value: bestValue };
   return two.cards.length ? { mode: 'plain', ...two } : { mode: null, cards: [] };

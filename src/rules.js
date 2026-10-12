@@ -77,13 +77,60 @@ export function isScoringCell(chain, cardIndex, symbol) {
   return Boolean(run && run.cards > cardIndex);
 }
 
-// Probabilidad de que la próxima carta del mazo continúe la cadena.
+// Probabilidad de que la próxima carta del mazo continúe la cadena. El Rocket Stamp
+// nunca corta: con la cadena abierta se monta gratis sobre una carta (ver `isFreeStack`).
 export function survivalOdds(chain, deck) {
   if (deck.length === 0) return { ok: 0, total: 0, p: 0 };
   if (chain.cards.length === 0) return { ok: deck.length, total: deck.length, p: 1 };
   const alive = activeSymbols(chain);
-  const ok = deck.filter((c) => c.symbols.some((s) => alive.includes(s))).length;
+  const ok = deck.filter((c) => isFreeStack(c) || c.symbols.some((s) => alive.includes(s))).length;
   return { ok, total: deck.length, p: ok / deck.length };
+}
+
+/**
+ * El Rocket Stamp es la carta gratis: al salir no entra en la cadena ni la puede
+ * cortar, se monta sobre la columna que elija su dueño (`stackOnCard`). Solo abre la
+ * cadena como cualquier otra cuando sale primera, que no hay dónde montarla.
+ */
+export const isFreeStack = (card) => card?.power === 'freegame';
+
+/**
+ * La columna donde montar `card` que deja la cadena con más puntos (ante un empate, la
+ * primera). La usa la CPU para elegir y el motor cuando nadie eligió a tiempo.
+ */
+export function bestStack(chain, card) {
+  let col = 0;
+  let best = -1;
+  for (let i = 0; i < chain.cards.length; i++) {
+    const points = stackPoints(chain, i, card);
+    if (points > best) {
+      best = points;
+      col = i;
+    }
+  }
+  return col;
+}
+
+/**
+ * Los puntos de `stackOnCard(chain, col, card)` sin armar la cadena: la CPU los pide en
+ * cada rama del lookahead, y armar cartas y rachas nuevas por columna triplicaba lo que
+ * tarda en pensar.
+ */
+function stackPoints(chain, col, card) {
+  const { cards } = chain;
+  const times = (i, symbol) => timesIn(cards[i], symbol) + (i === col ? timesIn(card, symbol) : 0);
+  const opening = col === 0 ? new Set([...cards[0].symbols, ...card.symbols]) : new Set(cards[0].symbols);
+  let total = 0;
+  for (const symbol of opening) {
+    let length = times(0, symbol);
+    for (let i = 1; i < cards.length; i++) {
+      const n = times(i, symbol);
+      if (n === 0) break;
+      length += n;
+    }
+    total += length * length;
+  }
+  return total;
 }
 
 /**
@@ -94,7 +141,7 @@ export function survivalOdds(chain, deck) {
  * rachas vivas que coincidan con los símbolos nuevos.
  */
 export function stackOnCard(chain, colIndex, card) {
-  if (chain.busted || colIndex < 0 || colIndex >= chain.cards.length) return chain;
+  if (chain.busted || !Number.isInteger(colIndex) || colIndex < 0 || colIndex >= chain.cards.length) return chain;
 
   const target = chain.cards[colIndex];
   const stacked = target.stackedCards ? [...target.stackedCards, card] : [target, card];

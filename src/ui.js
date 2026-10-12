@@ -1,20 +1,31 @@
 import { tr, currentLang, setLang } from './i18n.js';
-import { SYMBOLS, POWERS, cardLabel, crest, iconUrl, powerIcon, powersOf } from './data.js';
+import { SYMBOLS, SYMBOL_IDS, POWERS, MOMENTS, MOMENT_IDS, cardLabel, crest, iconUrl, momentTag, powerIcon, powersOf } from './data.js';
 import { axie, axieArt } from './axies.js';
 import { createMotion } from './axie-motion.js';
-import { isScoringCell, scoreChain, stackOnCard, survivalOdds } from './rules.js';
+import { bestStack, isScoringCell, scoreChain, stackOnCard, survivalOdds } from './rules.js';
 import { createVfx, hitDelay, preloadVfx } from './vfx.js';
 import { createCamera, CAMERA_REST } from './camera.js';
+import { createScenery } from './scenery.js';
 import { createAudio } from './audio.js';
 import { createCues, chainRate } from './audio-cues.js';
 import {
-  TARGET, PLAYERS, MARKET_SIZE, TUNING, hpOf, isBotSeat, lastChance,
-  matchResult, ownedBy,
-  seatVoice, swingOf, brutalBonusOf,
+  PLAYERS, MARKET_SIZE, TUNING, hpOf, isBotSeat, lastChance, maxHpOf,
+  matchResult, wonByKo, ownedBy,
+  seatVoice, projectedHit, swingOf, ONE_MORE_MS, ONE_MORE_FLIP, ONE_MORE_LAND,
+  koInOf, leavesLastChance, EGG_SAVE,
 } from './game.js';
-import { createPowerFx, preloadPowers, POWER_GAP } from './power-fx.js';
-import { markLevelCompleted, isFinalLevel, nextLevelId } from './adventure.js';
+import { createPowerFx, preloadPowers, warmPowers, POWER_GAP } from './power-fx.js';
+import { createStage } from './stage.js';
+import { fxLoadFonts } from './stage-kit.js';
+import {
+  flyCard, flyEpic, chainKeeper, surgeFrom, FLY_MS, chargeFx, lungeAxie, impactFx, knockOut, resetAxie, bigWord,
+  bustFx, shatterCards, BUST_BREAK, dropIn, flyBack,
+} from './table-fx.js';
+import { markLevelCompleted, isFinalLevel, nextLevelId, getAdventureProgress } from './adventure.js';
 import { createResult, RESULT_WAIT } from './result.js';
+import { claimPayout } from './payout.js';
+import { recordMatch } from './missions.js';
+import { createLoading, loadingView } from './loading.js';
 
 const $ = (id) => document.getElementById(id);
 const settled = new Set();
@@ -61,6 +72,13 @@ const isMine = (player) => (netPlay ? player === mySeat : true);
 const sideOf = (player) => (player === (mySeat ?? 'p1') ? 'left' : 'right');
 
 /**
+ * Si la carta que `player` acaba de sacar es la de "¿una más?": enganchada y cayendo
+ * ('draw') o la que cortó ('bust'). Esa vuela en cámara lenta (ver `flyEpic`).
+ */
+const epicDraw = (state, player) =>
+  state.oneMore?.player === player && (state.oneMore.stage === 'draw' || state.oneMore.stage === 'bust');
+
+/**
  * Cómo empieza un cartel que le habla al que tiene que apretar el botón. Contra la
  * CPU no hace falta decir a quién: hay un solo par de manos. Con dos jugadores el
  * "vos" de la pantalla cambia de silla en cada turno, así que el cartel arranca
@@ -74,17 +92,15 @@ function addressing(state, player) {
 
 // El símbolo va escrito en el casillero y no solo pintado: el recorrido de la cadena
 // necesita encontrar el eslabón de cada racha carta por carta (ver `traceChain`).
-//
-// `drink` marca el eslabón de la racha que mide la bebida (ver `brutalRunOf`).
-function symChip(symbol, on, drink = false) {
-  const mark = drink ? ' data-brutal="true"' : '';
-  return `<span class="sym" data-sym="${symbol}" data-on="${on}"${mark} style="--c:${SYMBOLS[symbol].color}">
+function symChip(symbol, on) {
+  return `<span class="sym" data-sym="${symbol}" data-on="${on}" style="--c:${SYMBOLS[symbol].color}">
     ${crest(symbol)}</span>`;
 }
 
 /**
  * El poder de una carta, colgado abajo y separado por una línea: la cadena no lo
- * mira, así que tampoco se lee como un eslabón más.
+ * mira, así que tampoco se lee como un eslabón más. La carta no lleva la categoría
+ * del poder (`MOMENTS`): esa va en la explicación, fuera de la carta.
  */
 function powerChip(card) {
   const powers = powersOf(card);
@@ -97,39 +113,36 @@ function powerChip(card) {
 }
 
 /**
- * La racha que mide la Energy Drink: la más larga de la cadena, que es la que le pone el
- * número a lo que suma al plantarse. Mientras dura el turno se va marcando en la mesa
- * para que se vea qué racha conviene estirar. Con empate, la viva: es la que todavía
- * puede crecer. `null` si la cadena no trae bebida o ya se cortó.
+ * La cara de una medusa (Paralyzing Jellyfish): no tiene símbolos, así que lleva el
+ * amuleto en el medio. Es lo que la hace leer como "esta no encadena con nada".
  */
-function brutalRunOf(chain) {
-  if (chain.busted || !chain.cards.some((c) => powersOf(c).includes('brutal'))) return null;
-  let best = null;
-  for (const run of chain.runs) {
-    if (!best || run.length > best.length || (run.length === best.length && run.alive && !best.alive)) best = run;
-  }
-  return best?.symbol ?? null;
-}
+const jellyFace = (card) => (card.jelly ? `<span class="card-jelly">${powerIcon('jellyfish')}</span>` : '');
+const jellyCls = (card) => (card.jelly ? ' card--jelly' : '');
 
-function cardHtml(chain, card, index, isStackTarget = false, drink = null) {
-  const giant = card.stackedCards ? ' card--giant' : '';
+// `hatched`: la carta trae un Secret Egg que ya se rompió este turno (ver `eggSaveFx`).
+function cardHtml(chain, card, index, isStackTarget = false, hatched = false) {
+  const giant = (card.stackedCards ? ' card--giant' : '') + jellyCls(card);
   const targetCls = isStackTarget ? ' card--stack-target' : '';
   const cls = (settled.has(card.uid) ? 'card is-settled' : 'card') + giant + targetCls;
   settled.add(card.uid);
   const syms = card.symbols.map((s) => {
     const on = isScoringCell(chain, index, s);
-    return symChip(s, on, on && s === drink);
+    return symChip(s, on);
   }).join('');
   const targetAttr = isStackTarget ? ` data-stack-col="${index}" role="button" tabindex="0" title="${tr('Alargar columna {n}', { n: index + 1 })}"` : '';
   const dropHint = isStackTarget ? '<span class="card-stack-drop-hint" aria-hidden="true">↓</span>' : '';
-  return `<div class="${cls}" data-col="${index}"${targetAttr}>${dropHint}${syms}${powerChip(card)}</div>`;
+  const hatchedAttr = hatched ? ' data-hatched="true"' : '';
+  return `<div class="${cls}" data-col="${index}"${targetAttr}${hatchedAttr}>${dropHint}${jellyFace(card)}${syms}${powerChip(card)}</div>`;
 }
 
-function bustCardHtml(card) {
-  const cls = settled.has(card.uid) ? 'card card--bust is-settled' : 'card card--bust';
+// `saved`: la que cortaba y perdonó el Secret Egg, que se ve cortando antes de volver
+// al mazo (ver `eggSaveFx`).
+function bustCardHtml(card, saved = false) {
+  const kind = (saved ? 'card card--bust card--saved' : 'card card--bust') + jellyCls(card);
+  const cls = settled.has(card.uid) ? `${kind} is-settled` : kind;
   settled.add(card.uid);
   const syms = card.symbols.map((s) => symChip(s, false)).join('');
-  return `<div class="card-gap"></div><div class="${cls}">${syms}${powerChip(card)}</div>`;
+  return `<div class="card-gap"></div><div class="${cls}">${jellyFace(card)}${syms}${powerChip(card)}</div>`;
 }
 
 // `chooser` es quién elige la columna cuando no es esta pantalla: en red, el rival ve
@@ -151,18 +164,47 @@ function pendingStackHtml(card, zoomAttr = '', chooser = null) {
     </div>`;
 }
 
-function runsHtml(chain, drink = null) {
+/**
+ * La Novice Spell esperando: su dueño elige entre curarse, escudarse o pegar, con tres
+ * botones sobre la mesa. En la pantalla del otro solo se ve que está eligiendo.
+ */
+function spellDockHtml(state, player) {
+  const pending = state.pendingSpell;
+  if (pending?.player !== player) return '';
+  const n = pending.count * TUNING.spellAmount;
+  if (!isMine(player)) {
+    return `<div class="spell-dock" data-wait="true">${powerIcon('spell')}<span>${tr('{name} elige', { name: seatVoice(state, player).name })}</span></div>`;
+  }
+  const opt = (kind, icon, label, title) =>
+    `<button class="spell-opt" type="button" data-spell="${kind}" data-kind="${kind}" title="${title}"><img src="${iconUrl(icon)}" alt=""><b>${label}</b></button>`;
+  return `<div class="spell-dock" role="group" aria-label="${POWERS.spell.name}">
+      ${powerIcon('spell')}
+      ${opt('heal', 'status-leaf.png', `+${n}`, tr('Te curás {n}', { n }))}
+      ${opt('shield', 'shield.png', `+${n}`, tr('Ganás {n} de escudo', { n }))}
+      ${opt('hit', 'status-rage.png', `−${n}`, tr('Le pegás {n} al rival', { n }))}
+    </div>`;
+}
+
+/**
+ * Lo que mostró la Lens of Revelation: las cartas que siguen en el mazo, en el orden en
+ * que van a salir. Solo las ve su dueño.
+ */
+function peekHtml(state, player) {
+  const peek = state.peek;
+  if (peek?.player !== player || !isMine(player) || !peek.cards.length) return '';
+  const mini = (card) => `<span class="peek-card${card.jelly ? ' card--jelly' : ''}">${card.symbols
+    .map((s) => `<span class="sym" data-on="true" style="--c:${SYMBOLS[s].color}">${crest(s, 'sm')}</span>`).join('')}${card.power ? powerIcon(card.power, 'sm') : ''}</span>`;
+  return `<div class="peek-strip" title="${tr('Lo que sigue en tu mazo')}">${powerIcon('lens', 'sm')}${peek.cards.map(mini).join('')}</div>`;
+}
+
+// `weak` son las mejores rachas que el caracol le apaga al próximo ataque: se ven
+// tachadas, así se lee por qué el número grande es más chico que la suma.
+function runsHtml(chain, weak = 0) {
   if (chain.cards.length === 0) return `<span class="runs-empty">${tr('sin cartas')}</span>`;
   if (chain.busted) return '';
   return scoreChain(chain)
-    .breakdown.map((run) => {
-      // La racha de la bebida lleva su amuleto y lo que va a sumar al plantarse.
-      const extra = run.symbol === drink
-        ? `<span class="run-brutal">${powerIcon('brutal', 'sm')}+${brutalBonusOf(chain)}</span>`
-        : '';
-      return `<span class="run" data-alive="${run.alive}"${run.symbol === drink ? ' data-brutal="true"' : ''} style="--c:${SYMBOLS[run.symbol].color}">
-        ${crest(run.symbol, 'sm')} ×${run.length} <b>${run.points}</b>${extra}</span>`;
-    })
+    .breakdown.map((run, i) => `<span class="run" data-alive="${run.alive}"${i < weak ? ' data-weak="true"' : ''} style="--c:${SYMBOLS[run.symbol].color}">
+        ${crest(run.symbol, 'sm')} <span class="run-math">${run.length} × ${run.length} =</span> <b>${run.points}</b></span>`)
     .join('');
 }
 
@@ -177,40 +219,90 @@ export function statusHtml(state, player) {
   // amuleto llega (ver `holdPip` en `power-fx.js`).
   const pipIcon = (id, src, value, title) =>
     `<span class="pip-status" data-pip="${id}" title="${title}"><img src="${src}" alt=""><b>${value}</b></span>`;
-  const pip = (id, value, title) => pipIcon(id, iconUrl(`status-${id}.png`), value, title);
+  // El ícono es el que el kit le dibujó a ese estado (`Icons/status-*.png`, ver
+  // `scripts/status-icons.mjs`); `icon` cuando no se llama como la marca.
+  const pip = (id, value, title, icon = id) => pipIcon(id, iconUrl(`status-${icon}.png`), value, title);
+  const T = TUNING;
 
   const chips = [];
-  // La cáscara del huevo: se ve mientras haya escudo que romper y daño cargado. El
-  // escudo solo, sin huevo (el de la máscara), ya lo cuenta la chapa.
-  if (st.egg && st.eggBreak) {
-    const breakDmg = st.eggBreak;
-    chips.push(pip('egg', breakDmg,
-      tr('{name}: {dmg} de daño acumulado al romperse (escudo: {shield})', {
-        name: POWERS.egg.name,
-        dmg: breakDmg,
-        shield: st.egg,
-      })));
-  }
+  // Lo que le pusieron.
   if (st.poison) {
     chips.push(pip('poison', st.poison,
-      tr('{name}: {poison} de daño al finalizar su turno, después se parte al medio', {
-        name: POWERS.poison.name,
-        poison: st.poison,
-      })));
+      tr('{name}: {poison} de daño al finalizar su turno, después baja 1', { name: POWERS.poison.name, poison: st.poison })));
+  }
+  if (st.bleed) {
+    chips.push(pip('razor', st.bleed, st.wound
+      ? tr('Sangrado: sus próximas {bleed} cartas le sacan {dmg} de vida cada una (herida abierta: lo que sangre cura al rival)', { bleed: st.bleed, dmg: T.bleedDamage })
+      : tr('Sangrado: sus próximas {bleed} cartas le sacan {dmg} de vida cada una', { bleed: st.bleed, dmg: T.bleedDamage }),
+      st.wound ? 'wound' : 'bleed'));
   }
   if (st.weak) {
     chips.push(pip('weak', st.weak, st.weak === 1
-      ? tr('Debilitado: su próximo ataque pega la mitad')
-      : tr('Debilitado: sus próximos {weak} ataques pegan la mitad', { weak: st.weak })));
+      ? tr('Debilitado: en su próximo ataque no cuenta su mejor racha')
+      : tr('Debilitado: en su próximo ataque no cuentan sus {weak} mejores rachas', { weak: st.weak })));
   }
-  if (st.strength) {
-    chips.push(pip('strength', `+${st.strength}`,
-      tr('{name}: +{strength} de daño en cada ataque', {
-        name: POWERS.strength.name,
-        strength: st.strength,
-      })));
+  if (st.healBlock || st.healShut) {
+    chips.push(pip('viper', st.healShut ? '✕' : st.healBlock, st.healShut
+      ? tr('{name}: este turno no le entra ninguna cura', { name: POWERS.viper.name })
+      : tr('{name}: el próximo turno en que se cure, no le entra nada ({n} turnos)', { name: POWERS.viper.name, n: st.healBlock }),
+      'healblock'));
+  }
+  // Las medusas son cartas de su mazo: se cuentan ahí.
+  const jellies = state.decks?.[player]?.filter((c) => c.jelly).length ?? 0;
+  if (jellies) {
+    chips.push(pip('jellyfish', jellies,
+      tr('{name}: {n} medusas en su mazo, que lo cortan al salir', { name: POWERS.jellyfish.name, n: jellies }), 'stun'));
+  }
+  if (st.noPowers) {
+    chips.push(pip('redbubble', st.noPowers,
+      tr('{name}: sin cartas con poder del centro hasta llevarse {n} sin poder', { name: POWERS.redbubble.name, n: st.noPowers }), 'silence'));
+  }
+  // Lo propio.
+  if (st.claws) {
+    chips.push(pip('strength', st.claws,
+      tr('{name}: cada ataque pone {bleed} de sangrado', { name: POWERS.strength.name, bleed: st.claws * T.clawBleed })));
+  }
+  if (st.rage) {
+    chips.push(pip('rage', st.rage >= T.rageMax ? tr('¡Furia!') : st.rage,
+      st.rage >= T.rageMax
+        ? tr('{name}: Furia, +{dmg} en el próximo golpe que conecte', { name: POWERS.rage.name, dmg: st.rage * T.rageStep + T.furyBonus })
+        : tr('{name}: {rage} de Rage, +{dmg} de daño en cada golpe', { name: POWERS.rage.name, rage: st.rage, dmg: st.rage * T.rageStep }),
+      st.rage >= T.rageMax ? 'fury' : 'rage'));
+  }
+  if (st.feathers) {
+    chips.push(pip('fan', st.feathers,
+      tr('{name}: +{dmg} de daño en el próximo golpe que conecte', { name: POWERS.fan.name, dmg: st.feathers * T.fanStep }), 'plume'));
+  }
+  if (st.bomb) {
+    chips.push(pip('maker', `${st.bomb}/${T.bombAt}`,
+      tr('{name}: con {at} burbujas, bomba de {dmg}', { name: POWERS.maker.name, at: T.bombAt, dmg: T.bombDamage }), 'bubblemaker'));
+  }
+  if (st.spikes) {
+    chips.push(pip('steelskin', st.spikes,
+      tr('{name}: el próximo golpe rival que conecte recibe {spikes}', { name: POWERS.steelskin.name, spikes: st.spikes })));
+  }
+  if (st.antidote && st.poison) {
+    chips.push(pip('gloves', '+',
+      tr('{name}: al final de este turno su veneno le cura', { name: POWERS.gloves.name }), 'antidote'));
+  }
+  if (st.pillow) {
+    chips.push(pip('pillow', st.pillow,
+      tr('{name}: los ataques rivales le sacan {cut} menos durante {n} turnos', { name: POWERS.pillow.name, cut: T.pillowCut, n: st.pillow })));
+  }
+  if (st.cleanser) {
+    chips.push(pip('guard', st.cleanser,
+      tr('Limpiador: cancela los próximos {n} efectos que te pongan', { n: st.cleanser }), 'cleanser'));
+  }
+  if (st.leaf > 0) {
+    chips.push(pip('leaf', st.leaf,
+      tr('{name}: {turns} turnos de brote, {heal} de cura al empezar cada uno', { name: POWERS.leaf.name, turns: st.leaf, heal: T.leafHeal })));
+  }
+  if (st.cocoon > 0) {
+    chips.push(pip('cocoon', st.cocoon,
+      tr('{name}: {turns} turnos de capullo, {shield} de escudo al empezar cada uno', { name: POWERS.cocoon.name, turns: st.cocoon, shield: T.cocoonShield })));
   }
   if (st.stacked) {
+    // El kit no tiene un estado de carta extra: el pulpo lleva su amuleto.
     chips.push(pipIcon('octopus', POWERS.octopus.icon, st.stacked,
       st.stacked === 1
         ? tr('{name}: +1 carta extra para tu mazo al cerrar el turno', { name: POWERS.octopus.name })
@@ -220,35 +312,30 @@ export function statusHtml(state, player) {
           })));
   }
   if (st.bubbles) {
-    chips.push(pipIcon('bubble', POWERS.bubble.icon, st.bubbles,
+    chips.push(pip('bubble', st.bubbles,
       st.bubbles === 1
         ? tr('{name}: la carta que elijas del centro abrirá tu próxima ronda', { name: POWERS.bubble.name })
         : tr('{name}: {bubbles} cartas apiladas abrirán tu próxima ronda como carta gigante', {
             name: POWERS.bubble.name,
             bubbles: st.bubbles,
-          })));
+          }), 'bubble'));
   }
   if (state.bubbleCard?.[player]) {
-    chips.push(pipIcon('bubble', POWERS.bubble.icon, '🫧',
+    chips.push(pip('bubble', '✓',
       tr('{name}: apertura lista para la próxima ronda', { name: POWERS.bubble.name })));
   }
-  if (st.leaf > 0) {
-    const heal = st.leaf * TUNING.leafHeal;
-    chips.push(pip('leaf', st.leaf,
-      st.leaf === 1
-        ? tr('{name}: 1 hoja (cura +{heal} al inicio de tu turno y consume 1)', { name: POWERS.leaf.name, heal })
-        : tr('{name}: {leaf} hojas (cura +{heal} al inicio de tu turno y consume 1)', {
-            name: POWERS.leaf.name,
-            leaf: st.leaf,
-            heal,
-          })));
+  // Los neutrales: el kit no les dibujó un estado, así que llevan su amuleto.
+  if (st.focus) {
+    chips.push(pipIcon('focus', POWERS.focus.icon, `+${st.focus * T.focusStep}`,
+      tr('{name}: +{dmg} de daño en cada ataque, para toda la partida', { name: POWERS.focus.name, dmg: st.focus * T.focusStep })));
   }
-  if (st.steelskin) {
-    chips.push(pip('steelskin', `≤${st.steelskin}`,
-      tr('{name}: el próximo ataque rival te saca {cap} de vida como máximo', {
-        name: POWERS.steelskin.name,
-        cap: st.steelskin,
-      })));
+  if (st.gift) {
+    chips.push(pipIcon('gift', POWERS.gift.icon, `+${st.gift}`,
+      tr('{name}: +{dmg} en el próximo ataque', { name: POWERS.gift.name, dmg: st.gift })));
+  }
+  if (st.stamps) {
+    chips.push(pipIcon('stamp', POWERS.stamp.icon, st.stamps,
+      tr('{name}: {n} cartas del centro de regalo', { name: POWERS.stamp.name, n: st.stamps })));
   }
   return chips.length ? `<span class="plate-status">${chips.join('')}</span>` : '';
 }
@@ -279,8 +366,8 @@ export function plateHtml(state, player) {
       <span class="plate-who">${
         player === mySeat ? tr('Vos') : seatVoice(state, player).short}</span>
     </span>
-    <span class="plate-hp" data-low="${hp <= TARGET / 4}">
-      <span class="hpbar"><i></i></span>
+    <span class="plate-hp" data-low="${hp <= maxHpOf(state, player) / 4}">
+      <span class="hpbar"><span class="hp-trail"></span><i></i><span class="hp-ghost"></span></span>
       <b>${hp}</b>
       ${shieldBadge}
     </span>
@@ -312,18 +399,15 @@ function focusOf(state, picking) {
  * Es uno solo para los dos jugadores, como la mesa: muestra el del que la tiene puesta
  * (ver `focusOf`).
  */
-// `held` es daño que ya está en el estado pero que el número todavía no muestra: el de la
-// bebida que viene volando a sumarse (ver `holdSwing` en `mount`). Y antes de eso, hasta
-// que se planta, la bebida no entra en el número: se vuelca encima al plantarse (ver
-// `poured` en `game.js`) y mientras tanto se marca la racha que la mide.
+// `held` es daño que ya está en el estado pero que el número todavía no muestra: el de
+// un poder que viene volando a sumarse (ver `holdSwing` en `mount`).
 function swingHtml(state, player, held = 0) {
   const chain = state.chains[player];
-  const poured = Boolean(state.poured?.[player]);
   // El número grande es el daño que se va a aplicar de verdad, no el de la cadena
-  // pelada: si la fuerza o el caracol lo mueven, el número ya los trae. De dónde sale
+  // pelada: si las plumas o el caracol lo mueven, el número ya los trae. De dónde sale
   // no se escribe al pie: lo cuenta el registro, y cada poder lo muestra con su
   // animación encima del número (ver `power-fx.js`).
-  const points = Math.max(swingOf(state, player, { brutal: poured }) - held, 0);
+  const points = Math.max(swingOf(state, player) - held, 0);
 
   // Las dos medidas que necesita el CSS para elegir el cuerpo de la letra, y las dos
   // son del número y no de la pantalla:
@@ -341,7 +425,8 @@ function swingHtml(state, player, held = 0) {
   // El `data-up` es el salto del momento en que sube, y sale de comparar contra lo
   // último que se pintó: la pantalla se repinta a cada rato y sin esta cuenta el
   // número estaría rebotando todo el tiempo por cosas que no son él.
-  const grew = lastPoints[player] !== null && points > lastPoints[player];
+  const prev = lastPoints[player];
+  const grew = prev !== null && points > prev;
   lastPoints[player] = points;
 
   // El color de la clase no se escribe acá: lo cuelga el nodo entero desde `mount`,
@@ -352,14 +437,32 @@ function swingHtml(state, player, held = 0) {
   // cuerpo de la letra sale de cuántas tiene la palabra en el idioma de la pantalla (ver
   // `.swing-cap` en el CSS): "DAMAGE" no entra en el ancho de "DAÑO".
   const cap = tr('DAÑO');
+  // La cuenta atrás del K.O. (ver `koInOf`): cuántas cartas que enganchen le faltan
+  // para el K.O., sin última chance para el rival. Aparece de `KO_COUNTDOWN` para abajo
+  // pegada al número —va adentro de su caja para medirse con su letra— y sin ocupar
+  // lugar: la columna no se mueve. Arriba, si plantarse ahora lo deja en cero pero se
+  // levanta (ver `leavesLastChance`), el aviso: eso todavía no es el K.O.
+  const koIn = koInOf(state, player);
+  const rises = leavesLastChance(state, player);
+  const lines = [
+    rises ? `<i class="swing-ko-lc">${tr('QUEDA CON ÚLTIMA CHANCE')}</i>` : '',
+    koIn > 0 ? `<span>${koIn === 1 ? tr('¡A UNA DEL K.O.!') : tr('A {n} DEL K.O.', { n: `<b>${koIn}</b>` })}</span>` : '',
+  ].join('');
+  const tempt = lines
+    ? `<span class="swing-ko-at"><span class="swing-ko" data-near="${koIn > 0 && koIn <= 3}" data-lc="${rises}">${lines}</span></span>`
+    : '';
   return `
     <span class="swing-dmg"${grew ? ' data-up="true"' : ''} data-busted="${
-      chain.busted}"${size}>${points}</span>
+      chain.busted}"${size}>${tempt}${grew ? `<i class="swing-old" aria-hidden="true">${prev}</i>` : ''}<b>${points}</b></span>
     <span class="swing-cap" style="--cap-chars:${cap.length}">${cap}</span>`;
 }
 
+// Cuántas cartas van por renglón con la pantalla parada (ver `wrapStrip`): la séptima
+// sube a un renglón nuevo.
+const ROW_CARDS = 6;
+
 // El zoom de partida de la mesa, antes de mirar la ventana: cuánto se achica de entrada
-// una carta apilada alta, el dock del Free Game o una cadena larga. Es una apuesta a
+// una carta apilada alta o el dock del Free Game. Es una apuesta a
 // ciegas —acá no se sabe cuánto mide la ventana— que después corrige `fitField`.
 function baseZoom(state, player) {
   const chain = state.chains[player];
@@ -372,7 +475,6 @@ function baseZoom(state, player) {
   // Zoom out dinámico y progresivo:
   // 1. Durante Free Game (pendingStack): el dock y la hilera de cartas conviven verticalmente.
   // 2. Al apilar símbolos en Free Game (4+ símbolos): reduce la altura vertical de la carta.
-  // 3. Al acumular cartas en la cadena (5+ cartas): escala hacia afuera progresivamente.
   let zoom = 1;
   if (isStackTarget) {
     const base = Math.max(maxSyms, 3);
@@ -383,12 +485,9 @@ function baseZoom(state, player) {
       : maxSyms === 6 ? 0.56
       : 0.48;
   }
-  if (chain?.cards?.length >= 5) {
-    const cardZoom = chain.cards.length === 5 ? 0.90
-      : chain.cards.length === 6 ? 0.82
-      : 0.74;
-    zoom = Math.min(zoom, cardZoom);
-  }
+  // Una cadena larga ya no achica de entrada: acostada la pantalla entra en su renglón
+  // a tamaño entero (y si no entra, las cartas se aprietan solas, ver `.card`), y parada
+  // la achica `wrapStrip`, que es el que sabe cuántas van por renglón.
   return zoom;
 }
 
@@ -401,13 +500,14 @@ function fieldHtml(state, player, fit = 1) {
   // La columna la elige solo el dueño de la carta: en la pantalla del rival no hay
   // columnas que tocar.
   const placing = isStackTarget && isMine(player);
-  // La racha de la bebida se marca hasta que sale el golpe: ahí ya se volcó y sumó.
-  const drink = state.roundScores[player] === null ? brutalRunOf(chain) : null;
+  const hatched = state.hatched?.[player] ?? [];
   const cards = chain.cards.map((c, i) => {
     const colAllowed = !state.tutorial || state.tutorialAllowedCol == null || state.tutorialAllowedCol === i;
-    return cardHtml(chain, c, i, placing && colAllowed, drink);
+    const broke = (c.stackedCards ?? [c]).some((x) => hatched.includes(x.uid));
+    return cardHtml(chain, c, i, placing && colAllowed, broke);
   }).join('');
-  const bust = chain.bustCard ? bustCardHtml(chain.bustCard) : '';
+  const save = state.eggSave?.player === player ? state.eggSave : null;
+  const bust = chain.bustCard ? bustCardHtml(chain.bustCard) : save ? bustCardHtml(save.card, true) : '';
 
   const zoom = Math.min(1, Math.round(baseZoom(state, player) * fit * 100) / 100);
   const zoomAttr = zoom < 1 ? ` style="--zoom:${zoom}"` : '';
@@ -416,9 +516,9 @@ function fieldHtml(state, player, fit = 1) {
     : '';
 
   return `
-    ${pending}
+    ${pending}${spellDockHtml(state, player)}${peekHtml(state, player)}
     <div class="strip"${zoomAttr}>${cards}${bust}</div>
-    <div class="runs"${zoomAttr}>${runsHtml(chain, drink)}</div>`;
+    <div class="runs"${zoomAttr}>${runsHtml(chain, state.status[player]?.weak ?? 0)}</div>`;
 }
 
 // Arriba solo queda dónde estamos parados: la vida se lee sobre cada Axie y las cartas
@@ -458,7 +558,7 @@ function setClock(el, clock) {
 
 const clockColor = (state, clock) => SYMBOLS[axie(state.axies[clock.seat]).class].color;
 
-function marketCardHtml(card, pickable, chosen = false) {
+function marketCardHtml(card, pickable, chosen = false, fit = null) {
   const syms = card.symbols
     .map((s) => `<span class="sym" data-on="true" style="--c:${SYMBOLS[s].color}">${crest(s)}</span>`)
     .join('');
@@ -468,7 +568,7 @@ function marketCardHtml(card, pickable, chosen = false) {
   const label = card.symbols.map((s) => SYMBOLS[s].name).join(tr(' y '))
     + (card.power ? tr(', con {power}', { power: POWERS[card.power].name }) : '');
   return `<button class="${cls}" data-uid="${card.uid}"${pickable ? '' : ' disabled'}
-    data-power="${card.power ?? ''}" data-syms="${card.symbols.join(' ')}"
+    data-power="${card.power ?? ''}" data-syms="${card.symbols.join(' ')}"${fit ? ` data-fit="${fit}"` : ''}
     ${pickable ? `aria-pressed="${chosen}"` : ''}
     aria-label="${label}">${syms}${powerChip(card)}</button>`;
 }
@@ -487,6 +587,90 @@ function confirmHtml(card) {
   const syms = card.symbols.map((s) => crest(s, 'sm')).join('');
   return `<button class="btn btn-primary market-confirm" data-action="confirm">
     <span>${tr('Confirmar selección')}</span><span class="market-confirm-syms">${syms}</span></button>`;
+}
+
+/**
+ * El medidor de compatibilidad del centro: cuánto encadena la carta marcada con tu mazo.
+ *
+ * Una carta sirve en la medida en que comparte símbolos con las que ya tenés: esas son
+ * las que la pueden seguir en una cadena, o a las que ella puede seguir. El aro marca
+ * qué parte del mazo entero —las ocho de fábrica y todo lo que te llevaste del centro—
+ * comparte al menos un símbolo con ella, y debajo va cuántas cartas tuyas llevan cada
+ * uno de sus símbolos. Sin carta marcada, el aro espera vacío: el panel no cambia de
+ * alto al marcar.
+ */
+export function fitOf(state, player, card) {
+  if (!card || !player || !state.start?.[player]) return null;
+  const deck = [...state.start[player], ...(state.added?.[player] ?? [])];
+  if (!deck.length) return null;
+  const syms = [...new Set(card.symbols)];
+  const links = deck.filter((c) => c.symbols.some((x) => syms.includes(x))).length;
+  const per = syms.map((x) => ({ symbol: x, n: deck.filter((c) => c.symbols.includes(x)).length }));
+  const pct = Math.round((100 * links) / deck.length);
+  return { pct, links, total: deck.length, per, level: pct >= 70 ? 'high' : pct >= 45 ? 'mid' : 'low' };
+}
+
+/**
+ * Las dos cartas del centro que mejor encadenan con tu mazo, entre las que te podés
+ * llevar este turno: la mejor queda `best` y la segunda `good`, y la fila las hace
+ * brillar (más la primera). Es el mismo número del aro, sin tener que tocar carta por
+ * carta para encontrarlo. Una que no comparte nada con el mazo no brilla aunque quede
+ * entre las dos primeras; a igual compatibilidad gana la que está antes en la fila.
+ */
+export function fitRanks(state, player, cards) {
+  const ranked = cards
+    .map((card) => ({ card, fit: fitOf(state, player, card) }))
+    .filter(({ fit }) => fit?.links > 0)
+    .sort((a, b) => b.fit.pct - a.fit.pct);
+  return new Map(ranked.slice(0, 2).map(({ card }, i) => [card.uid, i === 0 ? 'best' : 'good']));
+}
+
+const FIT_WORD = { low: tr('Baja'), mid: tr('Media'), high: tr('Alta') };
+
+/** Los renglones de al lado del aro: el nombre, la franja y un chip por símbolo. */
+function fitTextHtml(fit) {
+  if (!fit) {
+    return `<span class="fit-title">${tr('Compatibilidad')}</span>
+      <span class="fit-note">${tr('Tocá una carta para ver cuánto encadena con tu mazo.')}</span>`;
+  }
+  const chips = fit.per.map(({ symbol, n }) => `<span class="fit-chip" style="--c:${SYMBOLS[symbol].color}"
+    title="${tr('{n} de tus cartas llevan {symbol}', { n, symbol: SYMBOLS[symbol].name })}">${crest(symbol, 'sm')}<b>${n}</b></span>`).join('');
+  return `<span class="fit-title">${tr('Compatibilidad')} <em>${FIT_WORD[fit.level]}</em></span>
+    <span class="fit-syms">${chips}</span>`;
+}
+
+function fitHtml(state, player, card) {
+  const fit = fitOf(state, player, card);
+  return `<div class="market-fit" data-level="${fit?.level ?? 'idle'}" role="status"
+    aria-label="${fit ? tr('Compatibilidad con tu mazo: {pct}%', { pct: fit.pct }) : tr('Compatibilidad')}">
+    <div class="fit-dial" style="--p:${fit?.pct ?? 0}" aria-hidden="true">
+      <svg class="fit-ring" viewBox="0 0 100 100">
+        <circle class="fit-track" cx="50" cy="50" r="42"/>
+        <circle class="fit-arc" cx="50" cy="50" r="42" pathLength="100"/>
+      </svg>
+      <b class="fit-pct">${fit ? `${fit.pct}<i>%</i>` : '–'}</b>
+    </div>
+    <div class="fit-text">${fitTextHtml(fit)}</div>
+  </div>`;
+}
+
+/**
+ * Retoca el medidor ya puesto en vez de reescribirlo: así el arco camina de una marca a
+ * la otra (la transición de `--p`) y el aro da un saltito cada vez que cambia la carta.
+ */
+function paintFit(el, fit) {
+  el.dataset.level = fit?.level ?? 'idle';
+  const dial = el.querySelector?.('.fit-dial');
+  if (dial) {
+    dial.style.setProperty('--p', String(fit?.pct ?? 0));
+    dial.classList.remove('is-bump');
+    void dial.offsetWidth;
+    if (fit) dial.classList.add('is-bump');
+  }
+  const pct = el.querySelector?.('.fit-pct');
+  if (pct) pct.innerHTML = fit ? `${fit.pct}<i>%</i>` : '–';
+  const text = el.querySelector?.('.fit-text');
+  if (text) text.innerHTML = fitTextHtml(fit);
 }
 
 /**
@@ -513,15 +697,49 @@ function powerTipRows(powers) {
     const color = p.symbol ? SYMBOLS[p.symbol].color : '#f5c542';
     const times = n > 1 ? ` <i class="market-tip-times">×${n}</i>` : '';
     return `<p class="market-tip-row" style="--c:${color}">${powerIcon(id, 'sm')}
-      <span><b>${p.name}${times}</b>${p.tip}</span></p>`;
+      <span><b>${p.name}${times}${momentTag(p.moment)}</b>${p.tip}</span></p>`;
   }).join('');
+}
+
+/**
+ * La etapa del Trickster's Card: antes del centro, el que lo jugó elige una carta con
+ * poder del rival para robársela. Se ven las cartas del rival en lugar del centro, con
+ * el mismo panel y los mismos botones.
+ */
+function trickHtml(state, picking, targets, chosen) {
+  const choice = targets.find((c) => c.uid === chosen) ?? null;
+  const left = state.status[picking]?.tricks ?? 0;
+  const title = `${powerIcon('trickster', 'sm')} ${tr("Trickster's Card")}`;
+  let head;
+  let actions = '';
+  if (isBotSeat(state, picking) || !isMine(picking)) {
+    head = `<span class="overlay-title">${title}</span>` +
+      `<p class="overlay-note">${tr('{at}está eligiendo qué carta robar…', { at: addressing(state, picking) })}</p>`;
+  } else {
+    const note = left === 1
+      ? tr('Elegí una carta del rival: pasa a tu mazo.')
+      : tr('Elegí {n} cartas del rival: pasan a tu mazo.', { n: left });
+    head = `<span class="overlay-title">${addressing(state, picking)}${title}</span>` +
+      `<p class="overlay-note">${note}</p>`;
+    actions = `<div class="overlay-actions">
+      <button class="btn" data-action="skip" title="${tr('Perdés el Trickster')}">${tr('No robar')}</button>
+      ${confirmHtml(choice)}</div>`;
+  }
+  const slots = targets.map((c) => marketCardHtml(c, true, c === choice)).join('');
+  return `<div class="overlay-panel o-panel">
+    ${marketTipHtml(choice)}
+    <div class="overlay-head">${head}</div>
+    <div class="market-row market-row--trick" data-choosing="${Boolean(choice)}">${slots}</div>
+    ${actions}
+  </div>`;
 }
 
 /**
  * El centro. No está siempre puesto: aparece encima del combate recién cuando alguien
  * cierra su turno, que es cuando hay algo que elegir, y se va al terminar el reparto.
  */
-function marketHtml(state, { picking, pickable, canRenew, chosen = null }) {
+function marketHtml(state, { picking, pickable, canRenew, chosen = null, targets = [] }) {
+  if (state.draft?.step === 'trick') return trickHtml(state, picking, targets, chosen);
   const open = new Set(pickable.map((c) => c.uid));
   // Solo vale marcada una carta que todavía se puede llevar.
   const isPickable = (c) => {
@@ -555,7 +773,7 @@ function marketHtml(state, { picking, pickable, canRenew, chosen = null }) {
     head = `<span class="overlay-title">${addressing(state, picking)}` +
       `${powerIcon('octopus', 'sm')} ${tr('Carta del pulpo')}</span>` +
       `<p class="overlay-note">${note}</p>`;
-    actions = `<div class="overlay-actions">
+    actions = `<div class="overlay-actions">${fitHtml(state, picking, choice)}
       <button class="btn" data-action="skip"
         title="${tr('Perdés la carta que te debe el pulpo')}">${tr('No agarrar')}</button>
       ${confirmHtml(choice)}</div>`;
@@ -571,8 +789,15 @@ function marketHtml(state, { picking, pickable, canRenew, chosen = null }) {
         ? tr('Vas por cartas sin poder: te queda 1.')
         : tr('Vas por cartas sin poder: te quedan {remaining}.', { remaining });
     }
+    // Lo que le pusieron al centro, dicho donde se nota.
+    const st = state.status[picking];
+    const lock = (id, text) => `<span class="market-lock">${powerIcon(id, 'sm')}<span>${text}</span></span>`;
+    const locks = [
+      st.noPowers ? lock('redbubble', tr('Sin poderes hasta llevarte {n} sin poder.', { n: st.noPowers })) : '',
+    ].filter(Boolean);
     head = `<span class="overlay-title">${addressing(state, picking)}${tr('Elegí del centro')}</span>` +
-      `<p class="overlay-note">${note}</p>`;
+      `<p class="overlay-note">${note}</p>` +
+      (locks.length ? `<p class="overlay-note market-locks">${locks.join('')}</p>` : '');
     // Nada de lo que podés llevarte lleva tu símbolo: te queda una renovación del centro.
     const renew = (canRenew && !(state.tutorial && !state.tutorialAllowRenew))
       ? `<button class="btn" data-action="renew"
@@ -580,14 +805,19 @@ function marketHtml(state, { picking, pickable, canRenew, chosen = null }) {
       : '';
     const skipDisabled = (state.tutorial && state.tutorialDisallowSkip) ? 'disabled style="opacity:0.3;pointer-events:none;"' : '';
     const skipLabel = state.draft.took ? tr('No agarrar más') : tr('No agarrar');
-    actions = `<div class="overlay-actions">${renew}
+    actions = `<div class="overlay-actions">${fitHtml(state, picking, choice)}${renew}
       <button class="btn" data-action="skip" ${skipDisabled}
         title="${tr('Cerrá el reparto sin sumar cartas al mazo')}">${skipLabel}</button>
       ${confirmHtml(choice)}</div>`;
   }
 
+  // Las que mejor encadenan brillan solo para quien elige: la CPU y el rival en red no
+  // necesitan la pista, y el tutorial ya señala la suya con su propio brillo.
+  const ranks = isMine(picking) && !isBotSeat(state, picking) && !state.tutorial
+    ? fitRanks(state, picking, state.market.filter(isPickable))
+    : new Map();
   const slots = state.market
-    .map((c) => marketCardHtml(c, isPickable(c), c === choice))
+    .map((c) => marketCardHtml(c, isPickable(c), c === choice, ranks.get(c.uid)))
     .join('');
   const empty = '<div class="market-slot"></div>'.repeat(
     Math.max(MARKET_SIZE - state.market.length, 0),
@@ -652,6 +882,23 @@ function endActionsHtml(state) {
     + (netPlay ? btn('leave', tr('Volver a las salas')) : btn('menu', tr('Menú principal')));
 }
 
+/**
+ * De quién es el turno, en el lugar de los botones.
+ *
+ * Cuando jugaba el otro, el pie quedaba vacío y la cadena del rival salía en el mismo
+ * lugar y con el mismo dibujo que la propia: lo único que avisaba el cambio de mano era
+ * que los botones se iban. Acá queda dicho con el nombre y el color del Axie que juega,
+ * que es lo que se ve arriba en la mesa. Los tres puntos laten con `opacity` y nada más.
+ */
+function turnTagHtml(state, player) {
+  const who = axie(state.axies[player]);
+  const c = SYMBOLS[who.class].color;
+  return `<p class="turn-tag" style="--c:${c}" role="status">
+    ${crest(who.class, 'sm')}<span>${tr('Turno de {name}', { name: who.name })}</span>
+    <i class="turn-dots" aria-hidden="true"><b></b><b></b><b></b></i>
+  </p>`;
+}
+
 function controlsHtml(state, { picking, acting }) {
   // El centro ya lo dice todo: su propio cartel abre con quién elige y con qué
   // llevarse (ver `marketHtml`). Repetirlo acá abajo era el mismo dato dos veces
@@ -666,9 +913,9 @@ function controlsHtml(state, { picking, acting }) {
     return pie('');
   }
 
-  if (!acting || !isMine(acting)) {
-    return pie('');
-  }
+  // `acting` es solo el asiento que juega una persona: con la CPU en su turno viene
+  // vacío, y el cartel va igual —es justo el turno que más hay que anunciar—.
+  if (!acting || !isMine(acting)) return pie(state.turn ? turnTagHtml(state, state.turn) : '');
 
   const off = (action) => (state.busy || gated(state, action) ? 'disabled' : '');
   const lit = (action) => (state.tutorial && state.tutorialAllowed === action ? ' tuto-allowed' : '');
@@ -712,6 +959,10 @@ const oddsLabel = (pct) => tr('La próxima carta continúa la cadena: {pct}%.', 
 function oddsHtml({ pct, risk }) {
   return `
     <div class="odds-dial" data-risk="${risk}" style="--p:${pct}" aria-hidden="true">
+      <svg class="odds-ring" viewBox="0 0 100 100">
+        <circle class="odds-track" cx="50" cy="50" r="42"/>
+        <circle class="odds-arc" cx="50" cy="50" r="42" pathLength="100"/>
+      </svg>
       <b class="odds-pct"><span class="odds-num">${pct}</span><i>%</i></b>
     </div>
     <span class="sr-only">${oddsLabel(pct)}</span>`;
@@ -757,18 +1008,143 @@ function cardTitle(card) {
  * Una carta como se ve en un mazo: sin número de orden, porque acá no hay orden —el
  * mazo se rebaraja entero al empezar cada intercambio— y con su poder colgado si lo
  * trae, que es lo que separa una carta ganada de una de fábrica.
+ *
+ * Con `blanks` suma casilleros con un "?" después de los símbolos, y con `blankPower`
+ * pone un "?" en lugar del poder: lo que todavía no se sabe de la carta que va a salir
+ * de una fusión (ver `paintMerge` en `lobby.js`).
  */
-function sheetCardHtml(card) {
+export function sheetCardHtml(card, { blanks = 0, blankPower = false } = {}) {
   const syms = card.symbols
     .map((sym) => `<span class="sym" data-on="true" style="--c:${SYMBOLS[sym].color}">${crest(sym)}</span>`)
-    .join('');
-  return `<div class="card card--deck" title="${cardTitle(card)}">${syms}${powerChip(card)}</div>`;
+    .join('') + '<span class="sym sym--blank" aria-hidden="true"><i>?</i></span>'.repeat(blanks);
+  const power = blankPower ? '<span class="card-power card-power--blank" aria-hidden="true"><i>?</i></span>' : powerChip(card);
+  return `<div class="card card--deck" title="${cardTitle(card)}">${syms}${power}</div>`;
+}
+
+// ---- la rueda del mazo --------------------------------------------------------
+// Vive acá y no en la portada porque la usan dos pantallas: el inventario de un Axie y
+// su evolución (ver `evolve-view.js`), que la muestra con lo que cambiaría cada carta.
+
+/**
+ * Cuántas veces aparece cada símbolo en un mazo, de mayor a menor.
+ *
+ * Es el número que dice para qué sirve un Axie. Los mazos iniciales tienen todos la
+ * misma forma —cinco pares del color propio, uno solo y dos cartas ajenas—, así que
+ * lo único que los distingue es **de qué color** son esas repeticiones: seis del propio
+ * y de dos para abajo del resto. Puesto como cuenta, elegir un Axie deja de ser elegir
+ * un dibujo.
+ *
+ * Ordenado por cantidad y no por el orden fijo de los símbolos: así el color propio
+ * queda siempre primero, sin tener que decirlo aparte.
+ */
+export function symbolTally(cards) {
+  const count = new Map();
+  for (const card of cards) {
+    for (const sym of card.symbols) count.set(sym, (count.get(sym) ?? 0) + 1);
+  }
+  return [...count.entries()]
+    .map(([symbol, n]) => ({ symbol, n }))
+    .sort((a, b) => b.n - a.n || SYMBOL_IDS.indexOf(a.symbol) - SYMBOL_IDS.indexOf(b.symbol));
+}
+
+/**
+ * Porcentajes enteros que suman 100 (resto mayor): 6/19 es 31,6 y cinco redondeos
+ * sueltos daban 102. Se reparten los puntos que faltan entre los que más perdieron.
+ */
+export function mixPercents(tally) {
+  const total = tally.reduce((t, x) => t + x.n, 0) || 1;
+  const raw = tally.map((x) => (x.n * 100) / total);
+  const pct = raw.map(Math.floor);
+  const order = raw.map((r, i) => [r - pct[i], i]).sort((a, b) => b[0] - a[0]);
+  // Lo que falta se cuenta una vez: medido adentro del bucle, cada punto repartido
+  // achicaba el tope y quedaban puntos sin dar (la torta sumaba 98).
+  const missing = 100 - pct.reduce((t, p) => t + p, 0);
+  for (let k = 0; k < missing; k++) pct[order[k][1]]++;
+  return pct;
+}
+
+/**
+ * Cuántos puntos cambia el porcentaje de cada símbolo de `from` a `tally`, por símbolo.
+ * Los dos se redondean igual (ver `mixPercents`), así lo que dice la leyenda es la resta
+ * de los dos números que se ven y no la de dos fracciones que nadie ve.
+ */
+export function mixShift(from, tally) {
+  const before = new Map(from.map((x, i) => [x.symbol, mixPercents(from)[i]]));
+  const after = mixPercents(tally);
+  return new Map(tally.map((x, i) => [x.symbol, after[i] - (before.get(x.symbol) ?? 0)]));
+}
+
+/**
+ * La torta del mazo: de qué colores está hecho. Hecha con el material de las cartas
+ * —la placa de nogal y los símbolos en su casillero teñido (ver `.sym` y `.card`)—
+ * para que se lea como una pieza más del mazo que tiene debajo: cada tajada es el
+ * color de su clase sobre la madera, con el borde en su color y el símbolo adentro.
+ * Tu clase va primero, arrancando a las doce. Sin números: el porcentaje de cada uno
+ * va en la leyenda de al lado, en los mismos casilleros de las cartas.
+ *
+ * Los colores son los de las clases y no se tocan, pero entre ellos hay pares que se
+ * confunden (el rosa de Pájaro y el rojo de Bicho, el ámbar y el verde para un
+ * daltónico): por eso cada tajada lleva su símbolo encima, van separadas por un hueco,
+ * y la leyenda repite símbolo y porcentaje. El color nunca es lo único que dice cuál
+ * es cuál.
+ *
+ * Con `from` (otra cuenta del mismo mazo) la torta es la de `tally` y cada porcentaje
+ * de la leyenda lleva al lado cuánto cambió desde `from`: así la evolución muestra cómo
+ * queda el mazo antes de pagarla. Con `legend: false`, la torta sola: el inventario del
+ * Axie la muestra así, sin números, porque ahí se mira de qué colores es el mazo y no
+ * cuánto pesa cada uno.
+ */
+export function deckMixHtml(tally, { from = null, legend: withLegend = true } = {}) {
+  const pct = mixPercents(tally);
+  const shift = from ? mixShift(from, tally) : null;
+  const total = tally.reduce((t, x) => t + x.n, 0) || 1;
+  const R = 48;
+  const pt = (share, r) => {
+    const a = share * 2 * Math.PI - Math.PI / 2;
+    return [50 + r * Math.cos(a), 50 + r * Math.sin(a)];
+  };
+  // La torta se dibuja con las fracciones exactas y no con los porcentajes redondeados:
+  // así cierra siempre, sume lo que sume el redondeo de la leyenda.
+  let at = 0;
+  const wedges = [];
+  const marks = [];
+  const legend = [];
+  tally.forEach(({ symbol, n }, i) => {
+    const share = n / total;
+    const sym = SYMBOLS[symbol];
+    const label = tr('{name}: {n} en el mazo', { name: sym.name, n });
+    const [x0, y0] = pt(at, R);
+    const [x1, y1] = pt(at + share, R);
+    const d = share >= 1
+      ? `M50 ${50 - R} A${R} ${R} 0 1 1 49.99 ${50 - R}Z`
+      : `M50 50 L${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 ${share > 0.5 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}Z`;
+    wedges.push(`<path class="mix-wedge" style="--c:${sym.color}" d="${d}"><title>${label} · ${pct[i]}%</title></path>`);
+    // El símbolo, en el medio de su tajada y del tamaño que le entra: el ancho de la
+    // tajada a esa altura (su cuerda), con aire, y nunca más que el de las grandes.
+    // Las chicas lo llevan más afuera, donde la tajada es más ancha.
+    const r = R * (share < 0.2 ? 0.7 : 0.6);
+    const chord = 2 * r * Math.sin(Math.min(share, 0.5) * Math.PI);
+    const size = Math.max(8, Math.min(21, chord * 0.72, (R - r) * 1.7));
+    const [mx, my] = pt(at + share / 2, r);
+    marks.push(`<span class="mix-mark" style="left:${mx.toFixed(2)}%;top:${my.toFixed(2)}%;width:${size.toFixed(2)}%">${crest(symbol)}</span>`);
+    const moved = shift?.get(symbol) ?? 0;
+    const delta = moved
+      ? `<em class="mix-delta" data-sign="${moved > 0 ? 'up' : 'down'}">${moved > 0 ? '+' : '−'}${Math.abs(moved)}</em>`
+      : '';
+    legend.push(`<span class="tally" style="--c:${sym.color}" title="${label}"><i class="mix-chip">${crest(symbol)}</i><b>${pct[i]}%</b>${delta}</span>`);
+    at += share;
+  });
+  return `<div class="mix-ring">
+      <svg viewBox="0 0 100 100" aria-hidden="true">${wedges.join('')}</svg>
+      ${marks.join('')}
+    </div>${withLegend ? `
+    <div class="mix-legend">${legend.join('')}</div>` : ''}`;
 }
 
 /**
  * El mazo entero de un jugador, partido en dos por donde de verdad está partido: las
  * diez con las que arrancó —que salen de su clase y son las mismas todas las partidas—
- * y lo que se fue llevando del centro, que es la partida que jugó.
+ * y lo que fue sumando en la partida (del centro, y lo que le robó el Trickster).
  *
  * Las dos listas salen de `state.start` y `state.added` y no de `state.decks`, que se
  * baraja de una ronda a la otra: acá el orden tiene que quedarse quieto.
@@ -779,13 +1155,44 @@ function deckSheetHtml(state, player) {
     <div class="sheet-row">${cards.map(sheetCardHtml).join('')}</div>`;
   return sheet(tr('Mazo inicial · {count} cartas', { count: state.start[player].length }), state.start[player])
     + (added.length
-      ? sheet(tr('Sumadas del centro · {count}', { count: added.length }), added)
-      : `<p class="sheet-label">${tr('Sumadas del centro')}</p>
+      ? sheet(tr('Sumadas en la partida · {count}', { count: added.length }), added)
+      : `<p class="sheet-label">${tr('Sumadas en la partida')}</p>
          <p class="sheet-empty">${tr('Todavía ninguna: las cartas del centro se ganan atacando.')}</p>`);
 }
 
-function logHtml(state) {
-  return state.log.map((e) => `<li data-kind="${e.kind}">${e.text}</li>`).join('');
+/**
+ * El registro se pinta con `innerHTML` porque sus líneas traen los íconos de símbolos y
+ * poderes (`crest()` y `powerIcon()` en `data.js`). En una sala, esas líneas las escribe
+ * el navegador del anfitrión: pegadas tal cual, un anfitrión con malas intenciones le
+ * corría JavaScript a la otra pantalla. Acá pasa solo lo que el registro usa de verdad
+ * —un `<img>` de ícono, con su clase y un dibujo de `Icons/` o incrustado— y todo lo
+ * demás sale como texto.
+ */
+const escLog = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const LOG_KINDS = new Set(['info', 'muted', 'round', 'bad', 'p1', 'p2']);
+const LOG_ICON_TAG = /<img\b[^<>]*>/g;
+function safeLogText(text) {
+  const raw = String(text ?? '');
+  let out = '';
+  let at = 0;
+  for (const m of raw.matchAll(LOG_ICON_TAG)) {
+    out += escLog(raw.slice(at, m.index));
+    at = m.index + m[0].length;
+    const attr = (name) => m[0].match(new RegExp(`\\s${name}="([^"]*)"`))?.[1] ?? '';
+    const cls = attr('class');
+    const src = attr('src');
+    const icon = /^(crest|power)( (crest|power)--[a-z]+)?$/.test(cls)
+      && /^(Icons\/[\w.-]+\.png|data:image\/(png|webp);base64,[A-Za-z0-9+/=]+)$/.test(src);
+    out += icon
+      ? `<img class="${cls}" src="${src}" alt="${escLog(attr('alt'))}" title="${escLog(attr('title'))}">`
+      : escLog(m[0]);
+  }
+  return out + escLog(raw.slice(at));
+}
+
+export function logHtml(state) {
+  return state.log.map((e) =>
+    `<li data-kind="${LOG_KINDS.has(e.kind) ? e.kind : 'info'}">${safeLogText(e.text)}</li>`).join('');
 }
 
 /**
@@ -890,7 +1297,7 @@ function overlay(el, open) {
  * Cuánto tarda el Axie en cruzar hasta el rival, en ms: lo que va del comienzo del
  * salto al momento en que su cuerpo llega. Es el 44% de `axie-lunge` en el CSS.
  */
-const LUNGE_REACH = 270;
+const LUNGE_REACH = 320;
 
 /**
  * Las dos maneras de sacar una carta, para `pulse`: la que alarga la cadena y la que
@@ -944,6 +1351,19 @@ function shotOf(state, portraits) {
 }
 
 /**
+ * La tensión del escenario (ver `scenery.js`), de 0 a 1: la cadena del que juega,
+ * desde la segunda carta —con una sola todavía no se arriesgó nada— hasta seis, que
+ * ya es todo lo que se puede pedir. Cortada no hay tensión: hay apagón. Plantado sigue
+ * en lo que llegó mientras la cadena se recorre, y se apaga con el golpe.
+ */
+function heatOf(state) {
+  const seat = state.phase === 'turn' ? state.turn : null;
+  const chain = seat ? state.chains[seat] : null;
+  if (!chain || chain.busted || chain.cards.length < 2) return 0;
+  return Math.min(1, (chain.cards.length - 1) / 5);
+}
+
+/**
  * El golpe en la cámara y en el borde de la pantalla: el cuadro se va para el lado del
  * que lo recibe —lejos del que pegó—, tiembla si dolió, y ese borde se enciende en rojo.
  * El empujón crece con el daño y tiene un techo: pasados los 30 ya no dice nada más.
@@ -958,8 +1378,8 @@ function feelHit(camera, hurt, seat, amount, level = shakeOf(amount)) {
 }
 
 /** El número —o la palabra— que sube flotando sobre un Axie y se saca solo. */
-function floatTag(el, kind, text) {
-  el.insertAdjacentHTML('beforeend', `<span class="dmg" data-kind="${kind}">${text}</span>`);
+function floatTag(el, kind, text, style = '') {
+  el.insertAdjacentHTML('beforeend', `<span class="dmg" data-kind="${kind}"${style ? ` style="${style}"` : ''}>${text}</span>`);
   const tag = el.querySelector('.dmg:last-child');
   tag?.addEventListener('animationend', () => tag.remove());
 }
@@ -1227,7 +1647,7 @@ export const whiffed = (hit) => hit.amount === 0 && hit.blocked === 0;
  * repinta entera a cada carta y una animación puesta en el HTML se cortaría a la
  * mitad. El `<span>` del número se saca solo al terminar, así no se apilan.
  */
-function playHit(vfx, audio, camera, hurt, portraits, motions, hit, klass, powerFx) {
+function playHit(vfx, audio, camera, hurt, portraits, motions, hit, klass, powerFx, { stage = null, ko = false } = {}) {
   const el = portraits[hit.target];
   if (!el) return 0;
 
@@ -1250,11 +1670,10 @@ function playHit(vfx, audio, camera, hurt, portraits, motions, hit, klass, power
   // desinflado hasta que la ronda cierre.
   if (hit.kind === 'bust') return 0;
 
-  // La cáscara del huevo es un golpe pero no un ataque: nadie cruza la pantalla, el
-  // que pegó se corta donde está. Por eso no hay embestida ni efecto de clase —el kit
-  // no trae uno para el huevo— y todo el peso lo llevan el retroceso, el número y el
-  // sonido de rebote. El huevo ya se vio romperse en el golpe anterior; esto es la
-  // consecuencia, y llega un beat después justamente para que se lean separados.
+  // Las espinas son un golpe pero no un ataque: nadie cruza la pantalla, el que pegó se
+  // pincha donde está. Por eso no hay embestida ni efecto de clase y todo el peso lo
+  // llevan el retroceso, el número y el sonido de rebote. Llegan un beat después del
+  // ataque justamente para que se lean separados.
   // Los efectos de los poderes van sobre el dibujo del Axie y no sobre su nodo, que
   // ocupa media pantalla (ver `art` en `power-fx.js`).
   const art = el.querySelector?.('.axie') ?? el;
@@ -1271,7 +1690,7 @@ function playHit(vfx, audio, camera, hurt, portraits, motions, hit, klass, power
     // se explica solo —nadie cruzó la pantalla, no hubo efecto de clase—, así que va
     // con el huevo dibujado al lado y la palabra encima: HUEVO, −5.
     floatTag(el, 'thorns',
-      `<span class="dmg-label">${powerIcon('egg', 'sm')} ${tr('{name} roto', { name: POWERS.egg.name })}</span>−${hit.amount}`);
+      `<span class="dmg-label">${powerIcon('steelskin', 'sm')} ${tr('Espinas')}</span>−${hit.amount}`);
     return 0;
   }
 
@@ -1334,9 +1753,30 @@ function playHit(vfx, audio, camera, hurt, portraits, motions, hit, klass, power
       // El salto lo pone el CSS y el zarpazo lo pone el kit: los dos arrancan juntos.
       motions[hit.by].pulse('attack');
     }, Math.max(impact - LUNGE_REACH, 0));
+    // Y el cruce: hasta el rival de verdad, como en el tráiler (ver `lungeAxie`), con el
+    // zarpazo, las chispas y el anillo del escenario cayendo en el mismo instante.
+    const dir = sideOf(hit.by) === 'left' ? 1 : -1;
+    lungeAxie(portraits[hit.by], el, { start: impact - LUNGE_REACH, approach: Math.min(LUNGE_REACH, impact) });
+    // El aire de su clase, del kit (el mismo que suena cuando un Axie vuela), y debajo
+    // un soplido que sube hasta el impacto.
+    const dash = `dash${klass[0].toUpperCase()}${klass.slice(1)}`;
+    const leave = Math.max(impact - LUNGE_REACH, 0);
+    audio.sfx(dash, { delay: leave, gain: 0.7, rate: 1.15 });
+    audio.whoosh?.(leave, { dur: Math.min(LUNGE_REACH, impact) + 60, from: 400, to: 6000, gain: 0.6, pan: 0.4 * dir });
+    if (stage) {
+      impactFx(stage, el, SYMBOLS[klass]?.color ?? '#ffb347', hit.amount, dir, impact);
+      if (ko) {
+        knockOut(stage, el, dir, impact + 40);
+        bigWord(stage, tr('¡K.O.!'), 'ko', impact + 260);
+        // las estrellitas del mareo suenan como en el kit
+        audio.sfx('tie', { delay: impact + 850, gain: 0.7 });
+      }
+    }
   }
 
   setTimeout(() => {
+    // el empujón crece con el daño (ver `axie-hit` en el CSS)
+    el.style?.setProperty?.('--knock-amt', String(1 + Math.min(hit.amount, 40) / 20));
     pulse(el, 'react', miss ? 'whiff' : 'hit', 900);
     motions[hit.target].pulse(miss ? 'whiff' : 'hurt');
     // El sacudón es de la cámara, no del que recibe: mueve la escena entera y cae en
@@ -1346,7 +1786,8 @@ function playHit(vfx, audio, camera, hurt, portraits, motions, hit, klass, power
     // deja un `−0` colgado sobre el rival: lo que pasó ya lo cuenta la cáscara, que
     // sale justo ahí abajo diciendo cuánto aguantó y si con eso se rompió.
     if (miss) floatTag(el, 'whiff', tr('fallo'));
-    else if (hit.amount > 0) floatTag(el, 'hit', `−${hit.amount}`);
+    // El remate no saca vida: el daño ya estaba hecho (ver `finisher` en `mount`).
+    else if (hit.amount > 0 && hit.kind !== 'finisher') floatTag(el, 'hit', `−${hit.amount}`, `--amt:${Math.min(hit.amount, 40)}`);
   }, impact);
 
   return impact;
@@ -1391,10 +1832,45 @@ function stanceOf(state, player) {
  * @returns {{restart: (setup?: object) => void}} con qué arrancar una partida desde
  *   afuera. Es lo que usa la portada cuando por fin se elige un modo.
  */
+/**
+ * Los poderes de la enciclopedia, en un grupo por categoría (`MOMENTS`) y, adentro,
+ * en el orden de las clases. Se arma de `POWERS` cada vez que se abre: así nunca
+ * se queda atrás de las reglas y sale en el idioma de ese momento.
+ */
+export function symbolsGridHtml() {
+  const order = [...SYMBOL_IDS, null];
+  const cardOf = (p) => {
+    const color = p.symbol ? SYMBOLS[p.symbol].color : '#ffd15c';
+    const owner = p.symbol ? `${crest(p.symbol, 'sm')} ${SYMBOLS[p.symbol].name}` : `${powerIcon(p.id, 'sm')} ${tr('Comodín')}`;
+    return `<article class="symbol-card" data-sym-class="${p.symbol ?? 'special'}" style="--sym-color:${color}">
+      <div class="symbol-card-head">
+        <div class="symbol-avatar">${powerIcon(p.id)}</div>
+        <div class="symbol-title-box">
+          <div class="symbol-badges"><span class="symbol-class-badge">${owner}</span>${momentTag(p.moment)}</div>
+          <h3 class="symbol-name">${p.name}</h3>
+        </div>
+      </div>
+      <div class="symbol-highlight">${p.tip}</div>
+      <p class="symbol-desc">${p.note[0].toUpperCase()}${p.note.slice(1)}.</p>
+    </article>`;
+  };
+  return MOMENT_IDS.map((m) => {
+    const powers = Object.values(POWERS).filter((p) => p.moment === m)
+      .sort((a, b) => order.indexOf(a.symbol ?? null) - order.indexOf(b.symbol ?? null));
+    return `<section class="moment-group" data-moment="${m}" style="--m:${MOMENTS[m].color}">
+      <header class="moment-group-head">${momentTag(m)}<p>${MOMENTS[m].line}</p></header>
+      <div class="moment-group-cards">${powers.map(cardOf).join('')}</div>
+    </section>`;
+  }).join('');
+}
+
 /** Abre la enciclopedia de símbolos. Los filtros por clase se enganchan la primera vez. */
 export function openSymbols() {
   const modal = $('symbols-modal');
   if (!modal) return;
+  const grid = $('symbols-grid');
+  if (grid) grid.innerHTML = symbolsGridHtml();
+  modal.querySelectorAll?.('[data-sym-filter]')?.forEach?.((b) => b.classList?.toggle('active', b.dataset?.symFilter === 'all'));
   if (!modal._symInit && modal.addEventListener) {
     modal._symInit = true;
     modal.addEventListener('click', (e) => {
@@ -1404,6 +1880,10 @@ export function openSymbols() {
       modal.querySelectorAll?.('[data-sym-filter]')?.forEach?.((b) => b.classList?.toggle('active', b === btn));
       modal.querySelectorAll?.('.symbol-card')?.forEach?.((card) => {
         card.hidden = !(filter === 'all' || card.dataset?.symClass === filter);
+      });
+      // Una categoría sin ningún poder de esa clase no queda como un título suelto.
+      modal.querySelectorAll?.('.moment-group')?.forEach?.((group) => {
+        group.hidden = ![...(group.querySelectorAll?.('.symbol-card') ?? [])].some((c) => !c.hidden);
       });
     });
   }
@@ -1523,16 +2003,24 @@ export function pressSounds(audio) {
   }, { capture: true });
 }
 
-export function mount(game, { seat = null, net = false, start = true, leave = null, audio = createAudio() } = {}) {
+export function mount(game, { seat = null, net = false, start = true, leave = null, audio = createAudio(), missions = true } = {}) {
   mySeat = seat;
   netPlay = net;
   const fighters = { p1: $('fighter-p1'), p2: $('fighter-p2') };
   const plates = { p1: $('plate-p1'), p2: $('plate-p2') };
   const portraits = { p1: $('axie-p1'), p2: $('axie-p2') };
+  // El mazo de cada uno, a sus pies: de ahí salen volando las cartas (ver `flyNew`).
+  const piles = { p1: $('pile-p1'), p2: $('pile-p2') };
   // Los Axies solo cambian entre partidas: se repintan aparte del resto de la
   // pantalla, que se rehace en cada carta. Recrear sus capas a cada rato la haría
   // parpadear entera.
   const shown = { p1: null, p2: null, match: null, result: null };
+  /**
+   * Lo que cobró esta pantalla por la última partida (ver `payFor`) y de qué partida era.
+   * No se olvida con `swap` ni con `abortMatch`, a diferencia de `shown`: es lo que
+   * impide cobrar dos veces la misma.
+   */
+  const paid = { key: null, pay: null, missions: null };
   // Las animaciones que traen los propios Axies. Viven aparte del repintado: son del
   // muñeco, no de la partida, y siguen corriendo entre carta y carta.
   const motions = {
@@ -1542,6 +2030,8 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   const arena = $('arena');
   // La cámara de la escena (ver `camera.js`) y el borde rojo del golpe (`.hurtfx`).
   const camera = createCamera(arena);
+  // Lo que le pasa al lugar mientras se pelea: el aire, la luz, el apagón del corte.
+  const scenery = createScenery(arena);
   const hurt = $('hurtfx');
   // Cómo arranca la próxima partida: contra quién, con qué dificultad y con qué Axie.
   // Todo eso se elige en la portada y queda acá adentro, así "Jugar de nuevo" repite
@@ -1571,7 +2061,23 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     if (!room || !rects.length) return fieldFit;
     const need = Math.max(...rects.map((r) => r.bottom)) - Math.min(...rects.map((r) => r.top));
     if (!need) return fieldFit;
-    const next = Math.max(0.4, Math.min(1 / baseZoom(state, focus), fieldFit * room * 0.97 / need));
+    let fits = fieldFit * room * 0.97 / need;
+    // Y a lo ancho: una cadena muy larga, con las cartas ya apretadas al mínimo, se
+    // pasaba del costado y encendía la barra de scroll. Se achica el zoom hasta que
+    // entre. Parada la pantalla no hace falta: ahí la cadena sube en renglones.
+    // El 0.98 es el redondeo del zoom a centésimas, que puede redondear para arriba.
+    let narrow = false;
+    const strip = field.querySelector?.('.strip');
+    if (strip && style.getPropertyValue('--snake').trim() !== '1') {
+      const wide = field.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      const least = leastStripWidth(strip, css);
+      if (wide > 0 && least > 0) fits = Math.min(fits, fieldFit * wide * 0.98 / least);
+      narrow = least > wide;
+    }
+    const next = Math.max(0.4, Math.min(1 / baseZoom(state, focus), fits));
+    // Sin el margen de tolerancia si no entra a lo ancho: por poco que se pase, ya se
+    // desplazaría.
+    if (narrow) return next;
     return Math.abs(next - fieldFit) < 0.02 ? fieldFit : next;
   }
   /**
@@ -1643,22 +2149,89 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     // tres de `fitField` partiría de un zoom que no es el que se ve y no achicaría nunca.
     fieldFit = Math.min(fieldFit, 1 / baseZoom(state, focus));
     paint(field, fieldHtml(state, focus, fieldFit));
+    wrapStrip();
     for (let i = 0; i < 3; i++) {
       const fit = fitField(state, focus);
       if (fit === fieldFit) break;
       fieldFit = fit;
       paint(field, fieldHtml(state, focus, fieldFit));
+      wrapStrip();
     }
     markScroll();
     if (before) glideCards(before);
   }
+  /**
+   * La cadena en renglones, cuando el CSS lo pide (`--snake` en `.field`: la pantalla
+   * parada, ver `.strip[data-snake]`). Van hasta `ROW_CARDS` por renglón y se achican
+   * para entrar en el ancho a medida que el renglón se llena; la que sigue abre un
+   * renglón nuevo **arriba**, hacia el suelo vacío, y ese renglón vuelve en sentido
+   * contrario: la carta que sigue queda siempre encima de la de antes y las vigas de
+   * cada racha suben de un renglón al otro. Se ubica cada carta a mano porque ni flex ni
+   * grid saben llenar de abajo hacia arriba y en zigzag.
+   *
+   * Corre después de cada repintado y antes de que `fitField` mida: con los renglones
+   * armados la mesa mide lo que de verdad va a medir.
+   */
+  function wrapStrip() {
+    const strip = field.querySelector?.('.strip');
+    const css = globalThis.getComputedStyle;
+    if (!strip || !css || css(field).getPropertyValue('--snake').trim() !== '1') return;
+    // El guion entre la cadena y la carta que cortó no ocupa lugar: en renglones la
+    // carta que corta cae en el lugar que le toca, marcada con su cruz.
+    const items = [...(strip.children ?? [])].filter((el) => !el.classList?.contains('card-gap'));
+    strip.dataset.snake = 'true';
+    const cols = Math.max(1, Math.min(items.length, ROW_CARDS));
+    const rows = Math.ceil(items.length / cols);
+    const box = css(strip);
+    const gap = parseFloat(box.columnGap) || 0;
+    const room = field.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight);
+    // Las cartas son nodos nuevos y ya se midieron sin `--fit-w`, a tamaño entero: la
+    // transición de `width` de `.card` las achicaba en un cuarto de segundo, y en ese
+    // rato el renglón se pasaba del ancho y `markScroll` encendía la barra de scroll.
+    // Toman su ancho de una, sin transición.
+    items.forEach((el) => { el.style.transition = 'none'; });
+    if (room > 0) strip.style.setProperty('--fit-w', `${Math.floor((room - gap * (cols - 1)) / cols)}px`);
+    items.forEach((el, i) => {
+      const row = Math.floor(i / cols);
+      const col = row % 2 ? cols - (i % cols) : (i % cols) + 1;
+      el.style.gridArea = `${rows - row} / ${col}`;
+    });
+    void strip.offsetWidth;
+    items.forEach((el) => { el.style.transition = ''; });
+  }
   // La fila se desplaza solo si la cadena no entra (ver `.strip[data-scroll]` en el
-  // CSS). Los 4px de margen son la carta que entra girada: se sale un poco del borde
-  // mientras llega y no por eso la cadena deja de entrar.
+  // CSS), y eso ya casi no pasa: `fitField` achica el zoom para que entre a lo ancho.
+  // Se mide la caja de cada carta sin sus transformaciones (`offset*`), no el
+  // `scrollWidth`: la carta que entra girada, la que llega volando del mazo y la que
+  // cortó (agrandada con `scale`) se salen del borde y no por eso la cadena no entra.
   function markScroll() {
     const strip = field.querySelector?.('.strip');
     if (!strip || !strip.clientWidth) return;
-    strip.dataset.scroll = String(strip.scrollWidth > strip.clientWidth + 4);
+    const kids = [...(strip.children ?? [])].filter((el) => el.offsetWidth);
+    if (!kids.length) {
+      strip.dataset.scroll = 'false';
+      return;
+    }
+    const box = globalThis.getComputedStyle?.(strip);
+    const left = Math.min(...kids.map((el) => el.offsetLeft));
+    const right = Math.max(...kids.map((el) => el.offsetLeft + el.offsetWidth));
+    const need = right - left + (parseFloat(box?.paddingLeft) || 0) + (parseFloat(box?.paddingRight) || 0);
+    strip.dataset.scroll = String(need > strip.clientWidth + 4);
+  }
+  // Lo menos que puede medir la cadena a lo ancho con este zoom: cada carta apretada
+  // hasta su `min-width` (ver `.card`), más los huecos y el relleno de la fila. Todo eso
+  // va multiplicado por `--zoom`, así que con una regla de tres `fitField` sabe cuánto
+  // achicar para que entre sin desplazarse.
+  function leastStripWidth(strip, css) {
+    const box = css(strip);
+    const kids = [...(strip.children ?? [])];
+    let width = (parseFloat(box.paddingLeft) || 0) + (parseFloat(box.paddingRight) || 0)
+      + (parseFloat(box.columnGap) || 0) * Math.max(0, kids.length - 1);
+    for (const el of kids) {
+      const k = css(el);
+      width += parseFloat(k.flexShrink) > 0 ? parseFloat(k.minWidth) || 0 : el.offsetWidth || 0;
+    }
+    return width;
   }
   // La mesa se reescribe entera a cada carta, así que cada carta es un nodo nuevo y la
   // transición de `width` del CSS nunca tiene de dónde arrancar: cuando la cadena se
@@ -1705,6 +2278,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       pickable: myDraft ? game.pickable() : [],
       canRenew: myDraft && game.canRenew(drafter),
       chosen,
+      targets: state.draft?.step === 'trick' ? (game.trickTargets?.() ?? []) : [],
     });
   }
   const paintMarket = (state) => paint(market, marketNow(state));
@@ -1731,10 +2305,14 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     }
     const row = market.querySelector('.market-row');
     if (row) row.dataset.choosing = String(chosen != null);
-    const card = chosen == null ? null : state.market.find((c) => c.uid === chosen);
+    const trick = state.draft?.step === 'trick';
+    const cards = trick ? (game.trickTargets?.() ?? []) : state.market;
+    const card = chosen == null ? null : cards.find((c) => c.uid === chosen);
     confirm.outerHTML = confirmHtml(card);
     const tip = market.querySelector('.market-tip');
     if (tip) tip.outerHTML = marketTipHtml(card);
+    const fit = market.querySelector('.market-fit');
+    if (fit) paintFit(fit, fitOf(state, game.drafting(), card));
     painted.set(market, html);
   }
   const clockEl = $('clock');
@@ -1749,6 +2327,10 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     }
   }
   const vfx = createVfx($('vfx'));
+  // El escenario de efectos traído del tráiler: la luz con su halo, el polvo, las vigas
+  // de la cadena y las letras grandes (ver `stage.js`).
+  const stage = createStage(arena, $('stage'), $('stage-glow'));
+  if (stage.on) fxLoadFonts();
   // La capa donde se dibuja el recorrido de la cadena. Va aparte de la mesa porque la
   // mesa se repinta a cada estado (ver `traceChain`).
   const chainfx = $('chainfx');
@@ -1761,6 +2343,8 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   const cues = createCues(audio);
   // La pantalla del final, encima de todo lo de la mesa (ver `result.js`).
   const result = createResult($('result'), { audio });
+  // La entrada a los niveles de la Aventura, sobre todo lo demás (ver `enter`).
+  const loading = createLoading($('loading'), { audio });
   // Vida que ya cambió en el estado pero que la chapa todavía no muestra: la de un poder
   // que actúa cuando llega y no cuando se juega, como la pluma que viene cayendo o la
   // maceta que todavía no brotó. Positivo es daño retenido; negativo, cura.
@@ -1856,6 +2440,12 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     }
     if (decider !== oddsTurn) pulse(odds, 'wake', 'turn', 700);
     oddsTurn = decider;
+    // Cuando la chance cae, el aro lo acusa: un sacudón y un destello de su color. Más
+    // fuerte cuanto más cae, y en rojo late como un corazón (ver `.odds-dial` en el CSS).
+    if (decider === oddsTurn && now.pct < dialAim && dialAim >= 0) {
+      odds.style.setProperty('--drop', String(Math.min(1, (dialAim - now.pct) / 30)));
+      pulse(odds, 'drop', 'true', 520);
+    }
     dial.dataset.risk = now.risk;
     dial.style.setProperty('--p', String(now.pct));
     if (dialSr) dialSr.textContent = oddsLabel(now.pct);
@@ -1911,8 +2501,19 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     const held = hpHeld[player];
     const foe = PLAYERS.find((p) => p !== player);
     const view = held ? { ...state, totals: { ...state.totals, [foe]: state.totals[foe] - held } } : state;
-    if (paint(plates[player], plateHtml(view, player))) void plates[player].offsetWidth;
-    plates[player].style.setProperty('--hp', `${(100 * hpOf(view, player)) / TARGET}%`);
+    const plate = plates[player];
+    if (paint(plate, plateHtml(view, player))) void plate.offsetWidth;
+    const hp = hpOf(view, player);
+    const max = maxHpOf(state, player);
+    plate.style.setProperty('--hp', `${(100 * hp) / max}%`);
+    plate.style.setProperty('--hpf', String(hp / max));
+    // Lo que se llevaría el ataque que el otro está armando, en rojo sobre esta vida:
+    // es la cuenta que el que roba tiene que hacer para decidir si sigue.
+    const attacking = state.phase === 'turn' && state.turn === foe && !state.chains[foe].busted;
+    const ghost = attacking ? Math.min(projectedHit(state, foe), hp) : 0;
+    plate.style.setProperty('--g0', String((hp - ghost) / max));
+    plate.style.setProperty('--gw', String(ghost / max));
+    plate.dataset.ghost = ghost > 0 ? (ghost >= hp ? 'lethal' : 'true') : 'false';
   }
   const powerFx = createPowerFx({
     vfx, audio, field, market, swing, plates, portraits, motions, pulse, floatTag, sideOf,
@@ -1937,6 +2538,27 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     },
   });
   let animated = 0; // id del último golpe ya animado
+  let koShown = false; // si el último golpe fue un K.O. (la pantalla del final espera)
+  let betShown = null; // el último "¿una más?" ya mostrado, por id y etapa
+  // La carta de "¿una más?" que cortó sale de espaldas y tarda en darse vuelta (ver
+  // `flyEpic`): hasta entonces la mesa no puede contar que cortó —el daño en rojo, las
+  // vigas a media luz—, o el final se sabría antes de verlo.
+  let veilUntil = 0;
+  let veilId = 0;
+  const veiled = (chain) =>
+    chain?.busted && Date.now() < veilUntil ? { ...chain, busted: false, bustCard: null } : chain;
+  const veiledState = (state, player) =>
+    Date.now() < veilUntil ? { ...state, chains: { ...state.chains, [player]: veiled(state.chains[player]) } } : state;
+  // El corte que el Secret Egg va a perdonar se lee como un corte de verdad desde que la
+  // carta cae hasta que se rompe el huevo: el daño en cero y en rojo, la chapa en rojo.
+  // `eggCut` es de quién se está mostrando (ver `eggSaveFx`).
+  let eggCut = null;
+  const cutting = (state, player) =>
+    eggCut === player && state.eggSave?.player === player && state.eggSave.stage === 'bust';
+  const cutState = (state, player) =>
+    cutting(state, player)
+      ? { ...state, chains: { ...state.chains, [player]: { ...state.chains[player], busted: true } } }
+      : state;
   let powered = 0; // id de los últimos poderes ya animados (ver `state.powerFx`)
   let aimed = 0; // id del último recorrido de cadena ya dibujado
   // Qué mazo está abierto, o `null` si no hay ninguno. Lo mira el repintado para saber
@@ -1945,6 +2567,134 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // Cartas que ya se le vieron a cada uno en la cadena en curso, para que el tirón
   // de robar salga una sola vez por carta y no en cada repintado.
   const seen = { p1: 0, p2: 0 };
+  // Y las que ya salieron volando del mazo a la mesa (ver `flyNew`), con el momento en
+  // que cayó cada una: de ahí se engancha su viga (ver `chainKeeper`).
+  const flown = { p1: 0, p2: 0 };
+  const born = { p1: [], p2: [] };
+  // La cadena que se dibuja en el escenario: la del que tiene la mesa.
+  let beamSeat = null;
+  let surge = () => 0;
+  // Cuándo cayó la carta que cortó la cadena, en segundos del escenario (ver `bustFx`).
+  let bustT0 = -99;
+  const chainDraw = (chainKeeper(stage, field,
+    () => (beamSeat && game.state ? veiled(game.state.chains[beamSeat]) : null),
+    (col) => born[beamSeat]?.[col] ?? 0,
+    (t, u) => surge(t, u),
+    () => bustT0));
+  // Con el escenario prendido, las vigas ya están dibujadas: el recorrido del ataque
+  // las recorre como un brillo y la línea del SVG sobra (sigue encendiendo los
+  // eslabones y sonando, ver `traceChain`).
+  if (stage.on && chainfx) chainfx.style.visibility = 'hidden';
+  /**
+   * Las cartas nuevas de la mesa salen del mazo de quien las robó: vuelan, se dan vuelta
+   * y caen (ver `flyCard`). Solo las del que tiene la mesa, que son las que se ven.
+   */
+  function flyNew(state, player) {
+    const chain = state.chains[player];
+    const count = chain.cards.length + (chain.bustCard ? 1 : 0);
+    const before = flown[player];
+    flown[player] = count;
+    if (count < before || (count === 0)) born[player] = [];
+    if (count <= before || !piles[player]) return;
+    // La de "¿una más?" vuela en cámara lenta y cae más tarde (ver `flyEpic`).
+    const epic = epicDraw(state, player) && count === before + 1;
+    const late = epic ? ONE_MORE_LAND - FLY_MS * 0.86 : 0;
+    const lands = stage.now() + (FLY_MS * 0.86 + late) / 1000;
+    for (let i = before; i < count; i++) born[player][i] = lands;
+    const cards = field.querySelectorAll?.('.strip > .card') ?? [];
+    const color = SYMBOLS[axie(state.axies[player]).class].color;
+    const side = sideOf(player) === 'left' ? 1 : -1;
+    pulse(piles[player], 'draw', 'true', 320);
+    for (let i = before; i < count; i++) {
+      if (!cards[i]) continue;
+      let landed;
+      if (epic) {
+        landed = flyEpic(stage, cards[i], piles[player], color, side, {
+          flip: ONE_MORE_FLIP, land: ONE_MORE_LAND, good: !chain.busted,
+        });
+        // sube despacio, se da vuelta de un latigazo y cae con peso
+        audio.whoosh?.(0, { dur: ONE_MORE_FLIP * 0.4, from: 300, to: 2400, gain: 0.7, pan: -0.3 * side });
+        audio.whoosh?.(ONE_MORE_FLIP - 70, { dur: 240, from: 1400, to: 8000, gain: 0.9 });
+        audio.thud?.(ONE_MORE_LAND, 0.8);
+      } else {
+        landed = flyCard(stage, cards[i], piles[player], color, side);
+        audio.whoosh?.(0, { dur: FLY_MS, from: 900, to: 5200, gain: 0.55, pan: -0.3 * side });
+      }
+      // la viga que se engancha, un poco más aguda con cada carta
+      const extends_ = i > 0 && !(chain.busted && i === count - 1);
+      if (extends_) audio.zap?.(landed + 170, chainRate(i + 1));
+    }
+    // La carta que no encaja: busca, no encuentra y todo se rompe. La de "¿una más?"
+    // lo hace recién al caer.
+    if (chain.busted) {
+      bustT0 = stage.now() + late / 1000;
+      const scan = () => bustFx(stage, field, chain, () => {
+        // si la mesa ya es otra (partida nueva, otro turno), no hay nada que romper
+        if (!game.state?.chains[player]?.busted || field.dataset.owner !== player) return;
+        shatterCards(stage, field, arena);
+        pulse(arena, 'glitch', 'true', 460);
+        audio.shatter?.();
+        bigWord(stage, tr('¡SE CORTÓ!'), 'bust', 60, 1.1);
+      });
+      if (late) setTimeout(scan, late)?.unref?.();
+      else scan();
+    }
+  }
+  /**
+   * El Secret Egg perdonando un corte (ver `saveWithEgg` en `game.js`), una etapa por
+   * estado y cada una una sola vez, como "¿una más?". En `bust` la carta vuela del mazo
+   * y corta como cualquier otra: el Axie se desinfla, la mesa se apaga y el daño cae a
+   * cero. En `crack` se rompe el huevo (lo anima `power-fx.js` sobre su carta) y el daño
+   * vuelve. En `back` la carta que cortaba vuela de espaldas al mazo.
+   */
+  let eggShown = null;
+  function eggSaveFx(state, player) {
+    const save = state.eggSave;
+    if (!save || save.player !== player) return;
+    const key = `${save.id}:${save.stage}`;
+    if (eggShown === key) return;
+    eggShown = key;
+    const el = field.querySelector?.('.strip > .card--saved');
+    const pile = piles[player];
+    const side = sideOf(player) === 'left' ? 1 : -1;
+    const still = () => game.state?.eggSave?.id === save.id;
+    const repaintCut = () => {
+      const now = game.state;
+      if (!now || swingSeat !== player) return;
+      paint(swing, swingHtml(cutState(now, player), player, swingHeld[player]));
+      fighters[player].dataset.busted = String(cutting(now, player) || now.chains[player].busted);
+      field.dataset.busted = String(cutting(now, player) || now.chains[player].busted);
+    };
+    if (save.stage === 'bust') {
+      const color = SYMBOLS[axie(state.axies[player]).class].color;
+      pulse(pile, 'draw', 'true', 320);
+      const landed = el && pile ? flyCard(stage, el, pile, color, side) : 0;
+      audio.whoosh?.(0, { dur: FLY_MS, from: 900, to: 5200, gain: 0.55, pan: -0.3 * side });
+      audio.sfx?.('bust', { delay: landed });
+      const cut = () => {
+        if (!still()) return;
+        eggCut = player;
+        repaintCut();
+        pulse(portraits[player], ...SLUMP);
+        motions[player].pulse('sad');
+        camera.dip(9);
+        scenery.bust();
+        bigWord(stage, tr('¡SE CORTÓ!'), 'bust', 60, Math.max(EGG_SAVE.bust - landed - 500, 300) / 1000);
+      };
+      if (landed) setTimeout(cut, landed)?.unref?.();
+      else cut();
+    } else if (save.stage === 'crack') {
+      eggCut = null;
+      repaintCut();
+    } else if (save.stage === 'back') {
+      eggCut = null;
+      const back = el && pile ? flyBack(el, pile, side) : 0;
+      if (el && !back) el.style.visibility = 'hidden';
+      audio.whoosh?.(0, { dur: back || FLY_MS, from: 4200, to: 700, gain: 0.5, pan: -0.3 * side });
+      setTimeout(() => still() && pulse(pile, 'draw', 'true', 320), back)?.unref?.();
+    }
+  }
+
   // Si a cada uno ya se le vio entrar en furia. La última chance dura todo un turno y
   // la pantalla se repinta a cada carta: sin esto el bicho rugiría de nuevo con cada
   // una, y un rugido repetido deja de ser el momento en que pasó algo.
@@ -1956,8 +2706,6 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   let held = null;
   let acted = false;
   let animatedStack = 0;
-  let autoDrawing = false;
-  let autoDrawTimer = null;
   let isDroppingStack = false;
   // La columna que esta pantalla acaba de hacer caer. En red la fusión vuelve por el
   // cable cuando la caída ya terminó (`isDroppingStack` ya está apagado), y sin esto
@@ -1965,18 +2713,61 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   let droppedStack = null;
   let hadPendingStack = false;
 
+  /**
+   * El remate. La partida terminó por K.O. (ver `wonByKo`) pero nadie le pegó al
+   * derrotado el golpe que lo da vuelta: lo terminó el veneno, la cáscara o la pluma,
+   * pasado el overkill. El ganador le pega una vez más —solo la animación, el daño ya
+   * estaba— y el derrotado cae panza arriba con su "¡K.O.!", como cualquier K.O.
+   *
+   * Si en cambio lo tumbaron y su última chance no alcanzó, eso no es K.O.: no hay
+   * remate ni cartel, se desploma solo (su postura `ko`, ver `stanceOf`) y se canta la
+   * victoria. Devuelve cuánto tarda, en ms (0 si no hay remate: empate, abandono, última
+   * chance, o ya se dio vuelta).
+   */
+  function finisher(state, after = 0) {
+    const won = matchResult(state);
+    if (koShown || !wonByKo(state)) return 0;
+    const loser = PLAYERS.find((p) => p !== won);
+    koShown = true;
+    const at = Math.max(after, 0) + 450;
+    const match = state.match;
+    setTimeout(() => {
+      if (game.state?.match !== match) return;
+      const hit = { id: 0, by: won, target: loser, amount: 30, blocked: 0, broke: false, kind: 'finisher' };
+      playHit(vfx, audio, camera, hurt, portraits, motions, hit, state.symbols[won], powerFx, { stage, ko: true });
+    }, at)?.unref?.();
+    return at + 2600;
+  }
+
   let unsubscribe = game.subscribe(onState);
   function onState(state) {
     // Una partida nueva se olvida de la anterior: las cartas ya animadas y el último
     // número del golpe son de otra mesa. Sale del estado y no del botón que la arrancó
     // porque en red la puede haber arrancado el otro aparato.
-    if (shown.match !== state.match) {
+    const fresh = shown.match !== state.match;
+    if (fresh) {
       shown.match = state.match;
       forget();
     }
 
+    if (state.oneMore?.stage === 'bust' && state.oneMore.id !== veilId) {
+      veilId = state.oneMore.id;
+      veilUntil = Date.now() + ONE_MORE_FLIP;
+      // Al darse vuelta se destapa solo lo tapado: el número y la chapa. Repintar la mesa
+      // entera mediría la carta todavía agrandada en el aire y la rearmaría a mitad de vuelo.
+      setTimeout(() => {
+        const now = game.state;
+        if (!now || swingSeat == null) return;
+        paint(swing, swingHtml(now, swingSeat, swingHeld[swingSeat]));
+        for (const p of PLAYERS) fighters[p].dataset.busted = String(now.chains[p].busted);
+        paintOdds(now, now.phase === 'turn' ? now.turn : null);
+      }, ONE_MORE_FLIP + 30)?.unref?.();
+    }
+
     // El terreno es el de tu clase: cambia al elegir otro Axie, no a cada carta.
     arena.dataset.arena = axie(state.axies[mySeat ?? 'p1']).class;
+    // Y el escenario es el de la partida (ver `stages.js`): pisa al de la clase.
+    scenery.set(state.stage);
     paint($('scoreboard'), scoreboardHtml(state));
 
     const picking = game.drafting();
@@ -2001,7 +2792,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       // del golpe y hacia dónde mira el bicho.
       fighters[player].dataset.side = sideOf(player);
       fighters[player].dataset.active = String(state.turn === player && state.phase === 'turn');
-      fighters[player].dataset.busted = String(state.chains[player].busted);
+      fighters[player].dataset.busted = String(Boolean(veiled(state.chains[player]).busted) || cutting(state, player));
       // El halo de la última chance. Se prende con el golpe que lo deja sin vida y se
       // apaga cuando contesta, así que dura exactamente lo que dura el turno regalado.
       fighters[player].dataset.lastChance = String(lastChance(state) === player);
@@ -2021,11 +2812,15 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       // enterara, y después llegaba un efecto que se leía como un golpe más.
       const chain = state.chains[player];
       const cards = chain.cards.length + (chain.bustCard ? 1 : 0);
-      if (cards > seen[player]) {
+      // La de "¿una más?" se siente cuando se da vuelta, que es cuando se ve qué salió.
+      const react = () => {
         pulse(portraits[player], ...(chain.busted ? SLUMP : DRAW));
         // Y en la cámara: la carta que engancha es un golpecito —más fuerte cuanto más
         // larga la cadena—; la que corta hunde el cuadro, como un suspiro.
-        if (chain.busted) camera.dip(9);
+        if (chain.busted) {
+          camera.dip(9);
+          scenery.bust();
+        }
         else camera.thump(0.22 + 0.03 * Math.min(chain.cards.length, 6));
         if (chain.busted) motions[player].pulse('sad');
         // En el tutorial el Axie propio dice con el cuerpo lo que antes decía un cartel:
@@ -2033,18 +2828,52 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
         else if (state.tutorial && player === 'p1') {
           const { p } = survivalOdds(chain, game.unseenPool(player));
           motions[player].pulse(p < 0.4 ? 'peek' : 'cheer');
+        } else {
+          // Y en cualquier partida: con la cadena larga festeja, con la rueda en rojo mira
+          // de reojo el mazo. El otro también lo siente: si el golpe que se está armando
+          // le saca media vida o más, se pone en guardia.
+          const { p } = survivalOdds(chain, game.unseenPool(player));
+          if (p < 0.4) motions[player].pulse('peek');
+          else if (chain.cards.length >= 3) motions[player].pulse('cheer');
+          const foe = PLAYERS.find((q) => q !== player);
+          const foeHp = hpOf(state, foe);
+          if (foeHp > 0 && projectedHit(state, player) >= foeHp * 0.5) motions[foe].pulse('snarl');
         }
+      };
+      if (cards > seen[player]) {
+        if (epicDraw(state, player)) setTimeout(react, ONE_MORE_FLIP)?.unref?.();
+        else react();
       }
       seen[player] = cards;
+
+      const left = piles[player]?.querySelector?.('.pile-n');
+      if (left) left.textContent = String(state.decks[player].length);
 
       if (shown[player] !== state.axies[player]) {
         shown[player] = state.axies[player];
         portraits[player].innerHTML = axieArt(state.axies[player]);
         // Las capas son otras: el reproductor tiene que volver a tomarlas.
         motions[player].mount(state.axies[player]);
+
         // El atlas del golpe pesa: se pide al arrancar la partida, no al primer ataque.
         preloadVfx(state.symbols[player]);
-        preloadPowers(state.activePowers);
+        // No solo los del centro: las cartas de la mochila y los amuletos de un jefe
+        // traen poderes que no se sortearon, y el primero se pedía recién al llegar.
+        const decked = PLAYERS.flatMap((p) => state.decks[p] ?? []).flatMap(powersOf);
+        preloadPowers([...new Set([...state.activePowers, ...decked])]);
+      }
+    }
+
+    // Una partida nueva: los dos entran a la arena cayendo del cielo, uno después del
+    // otro, como en el cara a cara del tráiler.
+    if (fresh && state.phase !== 'matchEnd') {
+      for (const player of PLAYERS) {
+        const left = sideOf(player) === 'left';
+        const lands = dropIn(stage, portraits[player], left ? 150 : 520);
+        if (!lands) continue;
+        audio.whoosh?.(lands - 360, { dur: 380, from: 300, to: 2400, gain: 0.5, pan: left ? -0.5 : 0.5 });
+        audio.thud?.(lands, 0.9);
+        setTimeout(() => camera.thump(0.35), lands)?.unref?.();
       }
     }
 
@@ -2058,9 +2887,21 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     }
     held = focus;
     paintField(state, focus);
+    flyNew(state, focus);
+    eggSaveFx(state, focus);
+    beamSeat = focus;
+    // El escenario corre solo mientras haya cadena que dibujar.
+    const onTable = state.chains[focus];
+    const breaking = onTable.busted && stage.now() < bustT0 + BUST_BREAK;
+    if (onTable.cards.length > 0 && (!onTable.busted || breaking)) stage.keep('chain', chainDraw);
+    else stage.drop('chain');
+    // La fila rota se queda escondida mientras la mesa siga siendo la de la cadena cortada.
+    if (!onTable.busted && field.dataset) delete field.dataset.shattered;
     // La cámara, después de que la escena quedó escrita: el plano mide dónde está el
     // Axie al que se acerca.
     camera.frame(shotOf(state, portraits));
+    const heatSeat = state.phase === 'turn' ? state.turn : null;
+    scenery.heat(heatOf(state), heatSeat ? SYMBOLS[axie(state.axies[heatSeat]).class].color : null);
     // El cartel de una carta de la mesa sigue a su carta mientras siga ahí. Con el
     // centro abierto se va: lo que se lee ahí es el cartel del centro.
     if (tipAnchor && !$('deck-modal')?.open) {
@@ -2068,14 +2909,14 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       else placeCardTip();
     }
     field.dataset.owner = focus;
-    field.dataset.busted = String(state.chains[focus].busted);
+    field.dataset.busted = String(state.chains[focus].busted || cutting(state, focus));
 
     // Los puntos cargados son de la misma cadena que la mesa, así que son del mismo:
     // uno solo en pantalla, con el color del que la tiene puesta. El color va en el
     // nodo y no en el HTML porque adentro se repinta a cada carta y el resplandor
     // cuelga de acá.
     swingSeat = focus;
-    paint(swing, swingHtml(state, focus, swingHeld[focus]));
+    paint(swing, swingHtml(cutState(veiledState(state, focus), focus), focus, swingHeld[focus]));
     swing.style.setProperty('--c', SYMBOLS[axie(state.axies[focus]).class].color);
 
     // El centro solo existe mientras haya que elegir; el resto del tiempo no está.
@@ -2113,7 +2954,8 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
 
     // El medidor es de quien tiene la mesa: es información pública —la cadena viva ya
     // se ve entera— y se muestra en el turno de cualquiera de los dos, no solo el propio.
-    paintOdds(state, state.phase === 'turn' ? state.turn : null);
+    const decider = state.phase === 'turn' ? state.turn : null;
+    paintOdds(decider ? veiledState(state, decider) : state, decider);
     // El panel del mazo es del Axie que se tocó. Sin ninguno tocado sigue al que juega
     // —salvo en red, donde es siempre el tuyo—: es lo que va a mostrar cuando se abra,
     // y dejarlo puesto es lo que hace que abrirlo no parpadee.
@@ -2134,16 +2976,56 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       // Las cartas que están puestas son las del que tiene la mesa, y el recorrido se
       // dibuja encima de ellas: si la mesa fuera de otro no habría dónde dibujarlo.
       if (state.aiming.player === focus) {
+        surge = surgeFrom(stage.now(), state.aiming.ms);
+        // el que va a pegar junta la energía mientras la cadena se recorre
+        chargeFx(stage, portraits[focus], SYMBOLS[axie(state.axies[focus]).class].color, state.aiming.ms / 1000 + 0.9);
         traceChain(chainfx, field, audio, state.chains[focus], state.aiming.ms);
+      }
+    }
+
+    // "¿Una más?" (ver `oneMoreOf`): antes de la carta, la placa del tráiler con la mesa
+    // apagada, la música abajo y el tono que sube; si la carta corta, el trombón cuando
+    // la cadena se rompe, y el otro que se ríe. Cada etapa sale una vez, como el golpe.
+    const bet = state.oneMore;
+    const betKey = bet ? `${bet.id}:${bet.stage}` : betShown;
+    if (betKey !== betShown) {
+      betShown = betKey;
+      const foe = PLAYERS.find((q) => q !== bet.player);
+      if (bet.stage === 'ask') {
+        // A oscuras y con la música abajo hasta que la carta se da vuelta; el tono sube
+        // hasta ese mismo instante.
+        const until = ONE_MORE_MS + ONE_MORE_FLIP;
+        scenery.hush(until);
+        bigWord(stage, tr('¿UNA MÁS?'), 'ask', 120, ONE_MORE_MS / 1000 - 0.5);
+        audio.duck?.(until);
+        audio.riser?.(0, until);
+        motions[bet.player].pulse('peek');
+      } else if (bet.stage === 'bust') {
+        // La cadena se rompe `BUST_BREAK` después de que cae la carta (ver `flyNew`).
+        const at = ONE_MORE_LAND + BUST_BREAK * 1000;
+        audio.duck?.(at + 3000, 0.1);
+        audio.sadTrombone?.(at);
+        setTimeout(() => motions[foe].pulse('cheer'), at + 300)?.unref?.();
       }
     }
 
     const struck = state.lastHit && state.lastHit.id !== animated ? state.lastHit : null;
     let landed = 0;
+    // El golpe que termina la partida: lo deja sin vida y sin última chance (ver
+    // `lastChance`). El motor recién cierra la partida después, así que se mira acá.
+    let ko = false;
     if (struck) {
       animated = struck.id;
-      landed = playHit(vfx, audio, camera, hurt, portraits, motions, struck, state.symbols[struck.by], powerFx);
+      // Solo un ataque que cruza da vuelta al otro: el corte, la cáscara y la pluma no
+      // (el corte además se anota contra el mismo que se cortó). Si la partida termina
+      // por uno de esos, el que da vuelta al derrotado es el remate (ver `finisher`).
+      const lands = !whiffed(struck) && !['bust', 'thorns', 'feather'].includes(struck.kind);
+      ko = lands && hpOf(state, struck.target) <= 0 && lastChance(state) !== struck.target;
+      landed = playHit(vfx, audio, camera, hurt, portraits, motions, struck, state.symbols[struck.by], powerFx, { stage, ko });
+      // La tribuna salta cuando el golpe cae, no cuando sale.
+      if (landed && !whiffed(struck)) setTimeout(() => scenery.cheer(struck.amount), landed)?.unref?.();
     }
+    warmPowers(PLAYERS.flatMap((p) => state.chains[p]?.cards ?? []).flatMap(powersOf));
     // Los poderes que actuaron con el golpe salen después de que caiga, de a uno; los
     // que actúan solos —el veneno que muerde al cerrar el turno— salen ya.
     if (state.powerFx && state.powerFx.id !== powered) {
@@ -2159,17 +3041,23 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     //
     // Espera a que el último golpe caiga y el que perdió se desplome: taparlo antes es
     // quedarse sin ver cómo terminó.
+    if (ko) koShown = true;
     const ended = state.phase === 'matchEnd' ? `${state.match}|${matchResult(state)}` : null;
     if (shown.result !== ended) {
       shown.result = ended;
       if (!ended) result.hide();
       else {
+        const finish = finisher(state, landed);
+        // Se cobra antes de anotar el nivel: si es la primera victoria sale de ahí.
+        const pay = payFor(state);
         result.show(state, {
-          seat: mySeat, net: netPlay, actions: endActionsHtml(state),
-          wait: Math.max(RESULT_WAIT, landed + 1300),
+          seat: mySeat, net: netPlay, actions: endActionsHtml(state), pay,
+          // con K.O. se deja ver el vuelo y el cartel antes de tapar la mesa
+          wait: Math.max(RESULT_WAIT, landed + (ko || koShown ? 2400 : 1300), finish),
         });
         if (state.mode === 'adventure' && wonMatch(state) && state.adventure?.level) {
-          markLevelCompleted(state.adventure.level);
+          // Pasa el nivel igual; la estrella es solo por K.O. (ver `wonByKo`).
+          markLevelCompleted(state.adventure.level, { star: wonByKo(state) });
         }
       }
     }
@@ -2217,20 +3105,36 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       audio?.sfx?.('open', { rate: 1.4, gain: 0.65 });
     }
     hadPendingStack = Boolean(state.pendingStack);
+  }
 
-    // Auto-draw de Free Game: si está activo y todavía no se sacó la carta para montar,
-    // se roba automáticamente sin obligar al jugador a apretar un botón.
-    const canAutoDraw = mine && Boolean(state.freeGame?.[acting]) && !state.pendingStack && !state.busy;
-    if (canAutoDraw && !autoDrawing) {
-      autoDrawing = true;
-      clearTimeout(autoDrawTimer);
-      autoDrawTimer = setTimeout(() => {
-        autoDrawing = false;
-        if (game.state && game.state.freeGame?.[acting] && !game.state.pendingStack && !game.state.busy) {
-          game.hit();
-        }
-      }, 420);
+  /**
+   * Cobra lo que paga la partida que terminó (ver `claimPayout` en `payout.js`): los
+   * Moonshards y la AXP de tu Axie, en este aparato. En una sala cobra cada pantalla lo
+   * suyo, por su asiento; el que mira no cobra.
+   *
+   * Una sola vez por partida. La pantalla del final se puede volver a pintar con la misma
+   * partida —la mesa se vuelve a sentar en la sala (`swap`) y el estado llega otra vez
+   * por el cable— y eso no puede volver a pagar: la llave es lo que hace única a una
+   * partida terminada, y si es la misma se muestra lo que ya se cobró.
+   */
+  function payFor(state) {
+    const key = [state.match, state.mode, state.adventure?.level, state.axies.p1, state.axies.p2,
+      state.round, state.totals.p1, state.totals.p2, state.healed.p1, state.healed.p2].join('|');
+    if (paid.key !== key) {
+      paid.key = key;
+      const seat = netPlay ? mySeat : 'p1';
+      paid.pay = claimPayout(state, {
+        seat,
+        adventure: state.mode === 'adventure' ? getAdventureProgress() : null,
+      });
+      // Las misiones la cuentan acá y con la misma llave: una vez por partida, con los
+      // niveles que acaba de subir tu Axie (ver `recordMatch` en `missions.js`). La zona
+      // de testeo no cuenta (`missions`).
+      paid.missions = missions
+        ? recordMatch(state, { seat, levels: paid.pay?.levels?.length ?? 0 })
+        : null;
     }
+    return paid.pay;
   }
 
   /**
@@ -2325,28 +3229,41 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   /** Hay una carta de Free Game esperando columna, y la columna la elige esta pantalla. */
   const placing = () => Boolean(game.state?.pendingStack) && isMine(game.state.pendingStack.player);
 
+  /**
+   * Robar con el Rocket esperando no roba: lo pone en la columna que más suma (la misma
+   * que elige el motor si el jugador ataca sin elegir), entre las que se pueden tocar.
+   */
+  function dropBest() {
+    const targets = [...field.querySelectorAll('[data-stack-col]')];
+    if (targets.length === 0 || isDroppingStack) return false;
+    const { player, card } = game.state.pendingStack;
+    const best = bestStack(game.state.chains[player], card);
+    const target = targets.find((t) => Number(t.dataset.stackCol) === best) ?? targets[0];
+    dropTetrisCard(Number(target.dataset.stackCol), target);
+    return true;
+  }
+
   // Los botones del pie y los de la pantalla del final hablan el mismo idioma.
   function onAction(e) {
     const action = e.target.closest('[data-action]')?.dataset.action;
     if (action === 'hit') {
       if (gated(game.state, 'hit')) return;
-      if (placing() && !isDroppingStack) {
-        const targets = field.querySelectorAll('[data-stack-col]');
-        if (targets.length > 0) {
-          dropTetrisCard(0, targets[0]);
-          return;
-        }
-      }
+      if (placing() && dropBest()) return;
       game.hit();
     }
     else if (action === 'stand') {
       if (!gated(game.state, 'stand')) game.stand();
     }
-    else if (action === 'restart') restart();
+    else if (action === 'restart') {
+      // Reintentar un nivel de la Aventura es volver a entrar: con su transición.
+      const level = game.state?.mode === 'adventure' ? game.state.adventure?.level : null;
+      if (level) enter({ adventureLevel: level }, { from: centerOf(e.target.closest('[data-action]')) });
+      else restart();
+    }
     else if (action === 'adv-next') {
       const nextLvl = nextLevelId(game.state?.adventure?.level);
       if (nextLvl !== null) {
-        restart({ mode: 'adventure', adventureLevel: nextLvl });
+        enter({ adventureLevel: nextLvl }, { from: centerOf(e.target.closest('[data-action]')) });
       }
     }
     else if (action === 'leave') leave?.();
@@ -2361,8 +3278,6 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     raging.p2 = false;
     lastPoints.p1 = null;
     lastPoints.p2 = null;
-    autoDrawing = false;
-    clearTimeout(autoDrawTimer);
     isDroppingStack = false;
     droppedStack = null;
     hadPendingStack = false;
@@ -2376,6 +3291,15 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
       swingHeld[seat] = 0;
     }
     if (chainfx) chainfx.innerHTML = '';
+    flown.p1 = 0;
+    flown.p2 = 0;
+    born.p1 = [];
+    born.p2 = [];
+    for (const seat of PLAYERS) resetAxie(portraits[seat]);
+    koShown = false;
+    betShown = null;
+    surge = () => 0;
+    scenery.reset();
   }
 
   /**
@@ -2389,6 +3313,26 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     game.newMatch({ ...config });
   }
 
+  /**
+   * Entra a un nivel de la Aventura con su transición: el muro de cartas, la previa que
+   * espera a que esté todo bajado y las cartas que se dan vuelta sobre la arena (ver
+   * `loading.js`). La partida arranca recién ahí, con `restart`. `from` es de dónde salen
+   * las cartas (el nivel o el botón que se tocó) y `onCovered` lo que pasa cuando el muro
+   * ya tapa todo. Devuelve una promesa que se cumple al terminar la entrada: `false` si
+   * ya había una andando (un doble toque no entra dos veces).
+   */
+  function enter(setup = {}, { from = null, onCovered = null } = {}) {
+    const full = { ...config, ...setup, mode: 'adventure' };
+    const view = loadingView(full, full.axie ?? game.state?.axies?.p1);
+    return loading.run({ view, from, onCovered, start: () => restart({ ...setup, mode: 'adventure' }) });
+  }
+
+  /** El centro de lo que se tocó: de ahí salen las cartas de la entrada. */
+  const centerOf = (target) => {
+    const r = target?.getBoundingClientRect?.();
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  };
+
   // Las restricciones del tutorial las aplica la partida misma (ver `game.js`).
   market.addEventListener('click', (e) => {
     if (e.target.closest('[data-action="renew"]')) return game.renewMarket();
@@ -2399,7 +3343,8 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     if (e.target.closest('[data-action="confirm"]:not([disabled])')) {
       const uid = chosen;
       chosen = null;
-      return uid == null ? undefined : game.takeCard(uid);
+      if (uid == null) return undefined;
+      return game.state?.draft?.step === 'trick' ? game.stealCard(uid) : game.takeCard(uid);
     }
     // Tocar una carta la marca; tocar la marcada la suelta.
     const uid = e.target.closest('.market-card:not([disabled])')?.dataset.uid;
@@ -2623,6 +3568,11 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   }
 
   field.addEventListener('click', (e) => {
+    const spell = e.target.closest('[data-spell]');
+    if (spell) {
+      game.chooseSpell(spell.dataset.spell);
+      return;
+    }
     const target = e.target.closest('[data-stack-col]');
     if (target && !isDroppingStack) {
       const col = Number(target.dataset.stackCol);
@@ -2695,7 +3645,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
   // abierto: sin este empujón el primero se abriría vacío.
   const deckModal = $('deck-modal');
   for (const player of PLAYERS) {
-    $(`peek-${player}`).addEventListener('click', () => {
+    const open = () => {
       peeking = player;
       if (game.state) {
         $('deck-label').textContent = deckTitle(game.state, player);
@@ -2703,7 +3653,10 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
         paint($('deck-sheet'), deckSheetHtml(game.state, player));
       }
       deckModal.showModal();
-    });
+    };
+    $(`peek-${player}`).addEventListener('click', open);
+    // El mazo de la mesa abre lo mismo: tocar el mazo es mirar qué hay adentro.
+    piles[player]?.addEventListener('click', open);
   }
   // Cerrado vuelve a no ser de nadie, y se vacía en el acto: si no, el panel seguiría
   // repintando cartas que no se están mirando en cada carta que sale, y guardaría el
@@ -2739,14 +3692,9 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
     if (document.querySelector?.('dialog[open]')) return;
     const state = game.state;
     if (e.key === 'r' || e.key === 'R') {
-      if (placing()) {
-        const targets = field.querySelectorAll('[data-stack-col]');
-        if (targets.length === 1 && !isDroppingStack) {
-          dropTetrisCard(0, targets[0]);
-          return;
-        }
-      }
-      if (!gated(state, 'hit')) game.hit();
+      if (gated(state, 'hit')) return;
+      if (placing() && dropBest()) return;
+      game.hit();
     }
     if ((e.key === 'p' || e.key === 'P') && !gated(state, 'stand')) game.stand();
     if (e.key === 'Enter') {
@@ -2757,11 +3705,9 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
         const nextLvl = state.mode === 'adventure' && wonMatch(state)
           ? nextLevelId(state.adventure?.level)
           : null;
-        if (nextLvl !== null) {
-          restart({ mode: 'adventure', adventureLevel: nextLvl });
-        } else {
-          restart();
-        }
+        if (nextLvl !== null) enter({ adventureLevel: nextLvl });
+        else if (state.mode === 'adventure' && state.adventure?.level) enter({ adventureLevel: state.adventure.level });
+        else restart();
       }
     }
   });
@@ -2810,7 +3756,6 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
    */
   function swap(next, { seat = null, net = false, leave: exit = null } = {}) {
     unsubscribe?.();
-    clearTimeout(autoDrawTimer);
     game = next;
     mySeat = seat;
     netPlay = net;
@@ -2828,7 +3773,7 @@ export function mount(game, { seat = null, net = false, start = true, leave = nu
 
   // `audio` es el mezclador de la mesa: la portada lo usa para su propia música.
   return {
-    restart, abortMatch, swap, audio,
+    restart, enter, abortMatch, swap, audio,
     get _game() { return game; },
   };
 }

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axie Chance — Tráiler</title>
+<link rel="icon" href="../Icons/beast-crest.png">
+<!-- El reel de 58 segundos. Todo lo que se ve se dibuja en `src/scenes.js`, cuadro a
+     cuadro; esta página solo pone el lienzo, las fuentes (locales, para que el render
+     sin red dé lo mismo) y los controles. `tools/render.mjs` lo exporta a MP4. -->
+<style>
+  @font-face {
+    font-family: "Lilita One"; font-style: normal; font-weight: 400; font-display: block;
+    src: url(assets/fonts/lilita-one.woff2) format("woff2");
+  }
+  @font-face {
+    font-family: "Archivo"; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%;
+    font-display: block; src: url(assets/fonts/archivo.woff2) format("woff2");
+  }
+  :root { color-scheme: dark; --ink: #fff7e8; --accent: #ff9a3c; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { display: grid; place-items: center; font: 600 15px/1.3 "Archivo", system-ui, sans-serif; color: var(--ink); }
+  #screen { display: block; background: #000; }
+  .start {
+    position: fixed; inset: 0; display: grid; place-items: center; align-content: center; gap: 18px;
+    background: radial-gradient(ellipse at center, #1b1840 0%, #05040d 70%);
+  }
+  .start img { width: min(52vw, 520px); height: auto; filter: drop-shadow(0 12px 30px rgba(0,0,0,.6)); }
+  .start button {
+    font: 400 26px/1 "Lilita One", sans-serif; letter-spacing: .03em; color: #fff;
+    padding: 16px 38px; border-radius: 999px; border: 3px solid #ffe0a0; cursor: pointer;
+    background: linear-gradient(#ff9a3c, #e8541e); box-shadow: 0 8px 0 #8c2a0a, 0 18px 40px rgba(0,0,0,.5);
+  }
+  .start button:active { transform: translateY(4px); box-shadow: 0 4px 0 #8c2a0a; }
+  .start p { margin: 0; opacity: .7; }
+  .start .load { width: 220px; height: 4px; background: rgba(255,255,255,.12); border-radius: 4px; overflow: hidden; }
+  .start .load i { display: block; height: 100%; width: 0; background: var(--accent); }
+  body[data-ready="true"] .start .load { visibility: hidden; }
+  body:not([data-ready="true"]) .start button { opacity: .4; pointer-events: none; }
+  .start[data-state="loading"] button { opacity: .6; pointer-events: none; }
+  .hud {
+    position: fixed; left: 16px; right: 16px; bottom: 14px; display: flex; gap: 10px; align-items: center;
+    opacity: 0; transition: opacity .3s;
+  }
+  body:hover .hud { opacity: 1; }
+  .hud button {
+    font: 700 13px/1 "Archivo", sans-serif; color: #fff; background: rgba(12,10,26,.75);
+    border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 9px 14px; cursor: pointer;
+  }
+  .hud .bar { flex: 1; height: 8px; border-radius: 8px; background: rgba(255,255,255,.18); cursor: pointer; overflow: hidden; }
+  .hud .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="screen" width="1920" height="1080"></canvas>
+<div class="start" id="start">
+  <img src="../logo/Axie%20Chance.png" alt="Axie Chance" width="1089" height="813">
+  <button id="play" type="button">▶ Ver el reel</button>
+  <p>58 segundos · con sonido</p>
+  <div class="load"><i id="load"></i></div>
+</div>
+<div class="hud" id="hud" hidden>
+  <button id="toggle" type="button">Pausa / Seguir</button>
+  <button id="replay" type="button">Desde el principio</button>
+  <button id="mute" type="button" aria-pressed="true">Sonido</button>
+  <div class="bar" id="bar"><i id="fill"></i></div>
+</div>
+<script>
+  // En los modos de exportación no hay tapa ni controles.
+  if (new URLSearchParams(location.search).has('render') || new URLSearchParams(location.search).has('t')) {
+    document.getElementById('start').hidden = true;
+  }
+</script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

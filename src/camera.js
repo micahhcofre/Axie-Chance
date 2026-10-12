@@ -6,8 +6,10 @@
  * la escena, y se quedan quietos. Así el golpe se siente en todo el cuadro sin que se
  * mueva lo que hay que leer ni lo que hay que apretar.
  *
- * El CSS lee tres variables del arena (`--cam-s`, `--cam-x`, `--cam-y`) y las aplica a
- * cada capa alrededor del mismo punto de la pantalla (ver `--cam-k` en `styles.css`).
+ * El CSS lee tres variables (`--cam-s`, `--cam-x`, `--cam-y`) y las aplica a cada capa
+ * alrededor del mismo punto de la pantalla (ver `--cam-k` en `styles.css`). Se escriben
+ * en el arena y en cada capa del mundo (`LAYERS`): Safari no le pasa a los hijos una
+ * variable no heredable que cambió en el padre, y el escenario se quedaba quieto.
  * Acá solo se decide cuánto valen, y se decide con resortes: nada salta de un cuadro al
  * otro, todo llega y se va. Ese es todo el motivo de que sea un módulo con su propio
  * reloj y no un atributo con una animación de CSS: el sacudón viejo agrandaba la escena
@@ -30,6 +32,9 @@ const PUNCH_ZOOM = 0.085;
 const SHAKE_PX = 9;
 /** Cuánto tarda en apagarse un sacudón entero, en segundos. */
 const SHAKE_FADE = 0.7;
+
+/** Las capas que mueve la cámara: las que leen sus variables en `styles.css`. */
+const LAYERS = '.arena-art, .arena-front, .arena-floor, .fighter, .plate';
 
 const motionless = () => Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
 
@@ -76,10 +81,18 @@ export function createCamera(arena) {
   /** El corrimiento que deja a `el` quieto en la pantalla mientras la cámara se acerca a `s`. */
   const toward = (el, s, lean = 1) => (el ? -(s - 1) * offsetOf(el) * lean : 0);
 
+  // Se buscan una vez: son del marcado de la página y no cambian con la partida.
+  let layers = null;
   function write(s, x, y) {
-    arena.style.setProperty('--cam-s', s.toFixed(4));
-    arena.style.setProperty('--cam-x', `${x.toFixed(2)}px`);
-    arena.style.setProperty('--cam-y', `${y.toFixed(2)}px`);
+    layers ??= [arena, ...(arena.querySelectorAll?.(LAYERS) ?? [])];
+    const vs = s.toFixed(4);
+    const vx = `${x.toFixed(2)}px`;
+    const vy = `${y.toFixed(2)}px`;
+    for (const el of layers) {
+      el.style.setProperty('--cam-s', vs);
+      el.style.setProperty('--cam-x', vx);
+      el.style.setProperty('--cam-y', vy);
+    }
   }
 
   function spring(key, vel, target, k, z, dt) {
@@ -171,7 +184,7 @@ export function createCamera(arena) {
     },
     /**
      * La cámara se hunde: la cadena que se corta se lleva el aire con ella. La escena
-     * sube, y para arriba sí sobra piso (ver `.arena::after`): no hace falta agrandar.
+     * sube, y para arriba sí sobra piso (ver `.arena-floor`): no hace falta agrandar.
      */
     dip(px = 8) {
       if (!alive()) return;

@@ -53,6 +53,31 @@ const HOLDS = { celebrate: { loop: 'idle', emotes: ['cheer'], every: [900, 2200]
  */
 const trackOf = (id) => (id === undefined ? null : TRACKS[id]);
 
+/**
+ * Los clips de un Axie. Los del roster evolucionado (`<id>@evo`, ver `lookOf` en
+ * `axies.js`) se guardan como diferencia con los de siempre —el cuerpo medido en su
+ * marco y lo de las partes evolucionadas, con `@2`—: acá se juntan, una vez por Axie.
+ */
+const merged = new Map();
+function clipsOf(key) {
+  if (!key?.endsWith?.('@evo')) return POSES[key] ?? null;
+  if (merged.has(key)) return merged.get(key);
+  const base = POSES[key.slice(0, -4)] ?? {};
+  const evo = POSES[key] ?? {};
+  const out = {};
+  for (const [name, clip] of Object.entries(evo)) {
+    const from = base[name] ?? { parts: {}, swaps: {} };
+    out[name] = {
+      dur: clip.dur,
+      root: clip.root,
+      parts: { ...from.parts, ...clip.parts },
+      swaps: { ...from.swaps, ...clip.swaps },
+    };
+  }
+  merged.set(key, out);
+  return out;
+}
+
 /** Los cuadros de un `transform` a partir de una pista `[dx, dy, giro]`. */
 function moveFrames(track, unit) {
   return track.map(([x, y, r]) => ({
@@ -144,12 +169,26 @@ export function createMotion(node, phase = 0, { fidget = FIDGET } = {}) {
     const root = trackOf(clip.root);
     if (root) running.push(pose.animate(moveFrames(root, '%'), opts));
 
+    // Qué dibujos salen en algún momento del clip. Los alternativos que no salen nunca
+    // —la boca mordiendo mientras respira— no se animan: están en transparente de
+    // punta a punta, y el navegador no manda al compositor una animación que no cambia
+    // nada visible, la corre en el hilo principal. Con el bucle de estar quieto eran
+    // una docena por Axie y tenían la página recalculando estilos 60 veces por segundo
+    // con la mesa quieta.
+    const shown = new Set();
+    for (const [slot, swaps] of Object.entries(clip.swaps)) {
+      shown.add(slot);
+      for (const [, att] of swaps) shown.add(att);
+    }
+    const appears = (img) => !img.classList.contains('axie-alt') || shown.has(img.dataset.att);
+
     // Las pistas van por dibujo, no por slot: cada una está medida contra el reposo
     // de ese dibujo y en porcentaje de su tamaño, que es como la aplica el CSS. El que
-    // no se ve se mueve igual, para estar en su lugar cuando le toque aparecer.
+    // no se ve se mueve igual —si en este clip le toca aparecer—, para estar en su
+    // lugar cuando aparezca.
     for (const imgs of layers.values()) {
       for (const img of imgs) {
-        const track = trackOf(clip.parts[img.dataset.att]);
+        const track = appears(img) && trackOf(clip.parts[img.dataset.att]);
         if (track) running.push(img.animate(moveFrames(track, '%'), opts));
       }
     }
@@ -159,7 +198,7 @@ export function createMotion(node, phase = 0, { fidget = FIDGET } = {}) {
       if (!imgs || !swaps.length) continue;
       const points = [[0, slot], ...swaps];
       for (const img of imgs) {
-        running.push(img.animate(swapFrames(points, img.dataset.att), opts));
+        if (appears(img)) running.push(img.animate(swapFrames(points, img.dataset.att), opts));
       }
     }
     start();
@@ -219,12 +258,15 @@ export function createMotion(node, phase = 0, { fidget = FIDGET } = {}) {
   }
 
   return {
-    /** Toma las capas del Axie recién dibujado y arranca. */
+    /**
+     * Toma las capas del Axie recién dibujado y arranca. Las poses son las que dice el
+     * dibujo (`data-pose`, ver `axieArt`): un Axie evolucionado se anima con las suyas.
+     */
     mount(axieId) {
       cancelAll();
       clearTimeout(timer);
       entered = false;
-      clips = POSES[axieId] ?? null;
+      clips = clipsOf(node.querySelector('.axie')?.dataset?.pose ?? axieId);
       pose = node.querySelector('.axie-pose');
       layers = new Map();
       for (const img of node.querySelectorAll('.axie img[data-part]')) {

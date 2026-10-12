@@ -99,6 +99,54 @@ const PICKS = {
   leaf: `${WEB}leaf.wav`,
   leafHeal: `${WEB}cure.wav`,
   leech: `${WEB}drain.wav`,
+  // Los poderes que llegaron después, cada uno con el suyo. Los que son un estado suenan
+  // con el sonido que el kit le hizo a ese estado; los que se tiran, con el lanzamiento
+  // de su clase (el vuelo mientras viaja y el impacto al llegar).
+  bleed: `${UNITY}bleed.wav`,
+  shurikenFly: `${WEB}bird_throw_fly.wav`,
+  shurikenHit: `${WEB}bird_throw_hit.wav`,
+  daggerFly: `${WEB}beast_throw_fly.wav`,
+  daggerHit: `${WEB}beast_throw_hit.wav`,
+  fan: `${WEB}bird_cast_attack.wav`,
+  fanHeal: `${WEB}bird_cast_hit.wav`,
+  hammer: `${WEB}bird_smash_attack.wav`,
+  maker: `${WEB}aquatic_cast_attack.wav`,
+  stun: `${WEB}stunned.wav`,
+  silence: `${UNITY}silent.wav`,
+  rage: `${UNITY}taunt.wav`,
+  fury: `${WEB}beast_smash_attack.wav`,
+  cleanser: `${UNITY}cleanser.wav`,
+  cleanse: `${UNITY}cleanse.wav`,
+  sleep: `${UNITY}sleep.wav`,
+  cocoon: `${WEB}bug_cast_attack.wav`,
+  cocoonShield: `${WEB}bug_cast_hit.wav`,
+  scanner: `${WEB}mech_cast_attack.wav`,
+  hex: `${UNITY}hex.wav`,
+  disarm: `${UNITY}disarm.wav`,
+  healBlock: `${WEB}heal_block.wav`,
+  debuff: `${UNITY}debuff.wav`,
+  gloves: `${WEB}reptile_bite_attack.wav`,
+  edge: `${WEB}reptile_smash_attack.wav`,
+  // Los que estrenaron su golpe de clase en `vfx-clips.js`, con el sonido del mismo golpe.
+  steelskin: `${WEB}reptile_gore_attack.wav`,
+  razor: `${WEB}beast_gore_attack.wav`,
+  jellyFly: `${WEB}aquatic_projectile_fly.wav`,
+  jellyfish: `${WEB}aquatic_smash_attack.wav`,
+  featherHit: `${WEB}bird_projectile_hit.wav`,
+  // Los amuletos neutrales de la Aventura, con los golpes de Dawn, Dusk y Mech que no
+  // suenan en ningún otro lado.
+  focus: `${WEB}mech_gore_attack.wav`,
+  lens: `${WEB}dawn_projectile_hit.wav`,
+  spell: `${WEB}dusk_cast_hit.wav`,
+  mirror: `${WEB}mech_slash_attack.wav`,
+  energy: `${WEB}mech_smash_attack.wav`,
+  papa: `${WEB}dawn_smash_attack.wav`,
+  mama: `${WEB}dawn_bite_attack.wav`,
+  blood: `${WEB}dusk_gore_attack.wav`,
+  dispel: `${WEB}dusk_slash_attack.wav`,
+  stamp: `${WEB}mech_throw_hit.wav`,
+  tape: `${WEB}dusk_bite_attack.wav`,
+  gift: `${WEB}dusk_projectile_hit.wav`,
   // El centro: cuando se abre, cuando agarrás una carta y cuando lo renovás.
   open: `${UNITY}summon_on.wav`,
   // La carta que entra al mazo. El primero que se probó acá fue `feather` —una pluma,
@@ -115,6 +163,19 @@ const PICKS = {
   lose: `${UNITY}death_mark.wav`,
   // El doble KO: los dos quedan mareados.
   tie: `${WEB}stunned.wav`,
+  // Evolucionar una carta en el Taller (ver `evolve-scene.js`): el hechizo de Dawn, la
+  // clase escondida de la luz, que ningún otro momento del juego usa. Se carga mientras
+  // el Axie se prepara y estalla cuando cambia.
+  evolveCharge: `${UNITY}dawn_cast_attack.wav`,
+  evolve: `${UNITY}dawn_cast_hit.wav`,
+  // El Axie que cruza la arena para pegar (ver `lungeAxie` en `table-fx.js`): el aire
+  // de su clase, el mismo que el kit usa para un Axie que vuela.
+  dashAquatic: `${UNITY}aquatic_fly.wav`,
+  dashBeast: `${UNITY}beast_fly.wav`,
+  dashBird: `${UNITY}bird_fly.wav`,
+  dashBug: `${UNITY}bug_fly.wav`,
+  dashPlant: `${UNITY}plant_fly.wav`,
+  dashReptile: `${UNITY}reptile_fly.wav`,
 };
 
 /**
@@ -202,8 +263,16 @@ const db = (x) => 20 * Math.log10(Math.max(x, 1e-9));
 const gainFor = (rmsDb, target) =>
   Number(Math.min(Math.max(10 ** ((target - rmsDb) / 20), 0.3), 3).toFixed(2));
 
+/**
+ * El mismo repo sin pasar por jsDelivr. Solo para medir: el juego los pide al CDN.
+ * jsDelivr a veces devuelve 404 o 503 con un archivo que está (pasó con `summer23` y
+ * `home` el 2026-10-01), y sin esto una caída suya dejaba sin regenerar todo el archivo.
+ */
+const RAW = `https://raw.githubusercontent.com/${REPO}/${REF}/`;
+
 async function download(path) {
-  const res = await fetch(CDN + path);
+  let res = await fetch(CDN + path);
+  if (!res.ok) res = await fetch(RAW + path);
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
   return readWav(Buffer.from(await res.arrayBuffer()));
 }

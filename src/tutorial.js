@@ -4,7 +4,7 @@
 // el jugador se queda quieto. Lineamientos completos en docs/tutorial.md.
 //
 // Cinco rondas, una idea por ronda: el objetivo, la cadena, el corte (y el centro), el
-// Rocket Stamp que sale del centro, y el Rocket salvando la cadena para el remate. De
+// Rocket Stamp que sale del centro, y el Rocket reviviendo una racha para el remate. De
 // paso, el mazo, que no se cuenta sino que se abre: dos veces el guión frena la mesa
 // hasta que el jugador toca su Axie y mira las cartas que juntó.
 
@@ -14,7 +14,7 @@ import { tr } from './i18n.js';
 
 // ---- El guión de cada ronda ---------------------------------------------------
 //
-// El mazo de la mesa es el mazo de verdad: las diez cartas de fábrica del Axie (ver
+// El mazo de la mesa es el mazo de verdad: las ocho cartas de fábrica del Axie (ver
 // `baseDeck` en data.js) más lo que se fue llevando del centro. El guión no inventa
 // cartas —una carta que no está en el mazo se robaba en la mesa y no aparecía al abrirlo
 // (`#peek-p1`), y eso no es el juego—: solo dice cuáles salen primero y en qué orden,
@@ -36,16 +36,19 @@ const SCRIPT = {
   },
 
   // Ronda 2 — cadena larga con lo que se llevó del centro (35) y corte del rival: sus
-  // dos primeras van de Planta y la tercera no la lleva.
+  // cuatro primeras van de Planta y la quinta no la lleva. Son cuatro y no dos para que
+  // se corte con la rueda en amarillo (50%): con dos se cortaba en verde (67%), justo
+  // antes de la ronda que enseña a leerla.
   2: {
     p1: [CENTER, CENTER, ['aquatic', 'bird'], ['aquatic', 'bug'], ['aquatic', 'reptile']],
-    p2: [['plant', 'beast'], ['plant', 'reptile'], ['bird', 'reptile']],
+    p2: [['plant', 'beast'], ['plant', 'reptile'], ['plant', 'bug'], ['plant', 'aquatic'],
+      ['aquatic', 'bird']],
   },
 
-  // Ronda 3 — corte propio, y honesto: la racha va por Bestia, que en el mazo son tres
-  // cartas y nada más. Con las tres afuera la rueda marca 0% y la cuarta corta de verdad.
+  // Ronda 3 — corte propio, y honesto: la racha va por Bestia, que en el mazo son dos
+  // cartas y nada más. Con las dos afuera la rueda marca 0% y la tercera corta de verdad.
   3: {
-    p1: [['aquatic', 'beast'], ['beast', 'bird'], ['beast', 'bug'], ['aquatic', 'plant']],
+    p1: [['aquatic', 'beast'], ['beast', 'bug'], ['aquatic', 'plant']],
     p2: [['aquatic', 'plant'], ['plant', 'bird']],
   },
 
@@ -56,9 +59,11 @@ const SCRIPT = {
     p2: [['plant', 'bug'], ['plant', 'reptile']],
   },
 
-  // Ronda 5 — el Rocket sale tercero y la cuarta, montada en la 2ª carta, revive la
-  // racha de Planta que murió ahí: 13 de daño, los que le quedan al rival (Last
-  // Chance). El rival se corta en su último golpe.
+  // Ronda 5 — el Rocket revive una racha. La de Planta muere en la 2ª carta; el Rocket
+  // (Planta + Bestia) sale tercero, gratis, y puesto sobre esa 2ª carta la revive. La
+  // cuarta trae Planta y no Pez: sin el Rocket cortaba, y con él alarga Planta a 3.
+  // Pez 2 (4) + Planta 3 (9) = 13, más de lo que le queda al rival (Last Chance). El
+  // rival se corta en su último golpe.
   5: {
     p1: [['aquatic', 'plant'], ['aquatic', 'bug'], ROCKET, ['plant', 'reptile']],
     p2: [['plant', 'beast'], ['plant', 'reptile'], ['aquatic', 'bird']],
@@ -102,6 +107,7 @@ function arrange(own, wants, added) {
  * Pájaro), así que cualquier par que agarres alarga las mismas dos rachas y la ronda 2
  * pega lo mismo; las otras dos no llevan tu color, que es lo que la ronda enseña a
  * mirar, y la reposición tampoco: el centro no vuelve a ofrecer color hasta el Rocket.
+ * El Rocket trae Planta, que es lo que revive en la ronda 5.
  */
 function buildTutorialPool() {
   const plain = (list) => list.map((syms) => makeCard(syms));
@@ -113,7 +119,7 @@ function buildTutorialPool() {
     makeCard(['plant', 'bug']),
     makeCard(['aquatic', 'bird', 'bug']),
     makeCard(['beast', 'reptile']),
-    makeCard(['aquatic', 'bird'], 'freegame'),
+    makeCard(['plant', 'beast'], 'freegame'),
     makeCard(['plant', 'aquatic', 'bird']),
     makeCard(['aquatic', 'bird', 'reptile']),
   ];
@@ -155,7 +161,6 @@ const busted = (s) => Boolean(s.chains?.p1?.busted);
 const myTurn = (s, round) => s.round === round && s.turn === 'p1' && s.phase === 'turn';
 const picking = (s) => s.phase === 'draft' && s.draft?.order?.[s.draft.index] === 'p1';
 const isRocket = (c) => (c.powers ?? [c.power]).includes('freegame');
-const rocketCol = (s) => s.chains?.p1?.cards.findIndex(isRocket) ?? -1;
 const lethal = (s) => swingOf(s, 'p1') >= hpOf(s, 'p2');
 
 function createSteps() {
@@ -166,7 +171,6 @@ function createSteps() {
       round: 1,
       allowed: 'hit',
       target: () => '#field .card[data-col="0"]',
-      side: 'left',
       glow: () => '#field .card[data-col="0"]',
       bubble: tr('Cadenas vivas'),
       delay: 0,
@@ -178,7 +182,6 @@ function createSteps() {
       round: 1,
       allowed: 'stand',
       target: () => '#swing',
-      side: 'left',
       glow: () => '#swing',
       bubble: tr('Cadenas largas hacen más daño'),
       delay: 300,
@@ -238,13 +241,13 @@ function createSteps() {
       done: (s) => myTurn(s, 3),
     },
 
-    // ── Ronda 3: corte propio (3 cartas y la 4ª no coincide) ───────────
+    // ── Ronda 3: corte propio (2 cartas y la 3ª no coincide) ───────────
     {
       id: 'r3-draw',
       round: 3,
       allowed: 'hit',
       target: () => HIT,
-      done: (s) => cardsOf(s) >= 3,
+      done: (s) => cardsOf(s) >= 2,
     },
     {
       id: 'r3-odds',
@@ -310,7 +313,7 @@ function createSteps() {
       done: (s, seen) => seen.deck >= 1,
     },
 
-    // ── Ronda 5: Rocket Stamp en 3ª carta, revivir Planta y Last Chance ─
+    // ── Ronda 5: el Rocket revive Planta y remate en Last Chance ──────
     {
       id: 'r5-draw-2',
       round: 5,
@@ -323,29 +326,30 @@ function createSteps() {
       round: 5,
       allowed: 'hit',
       target: () => HIT,
-      done: (s) => rocketCol(s) >= 0,
-    },
-    {
-      id: 'r5-rocket-auto',
-      round: 5,
-      allowed: 'hit',
-      target: (s) => (rocketCol(s) >= 0 ? `#field .card[data-col="${rocketCol(s)}"]` : null),
-      glow: (s) => (rocketCol(s) >= 0 ? `#field .card[data-col="${rocketCol(s)}"]` : null),
-      delay: 0,
       done: (s) => s.pendingStack?.player === 'p1',
     },
     {
       id: 'r5-stack',
       round: 5,
       allowed: 'none',
-      col: 1, // solo sobre la 2ª carta (colIndex 1) para revivir la planta
+      col: 1, // solo sobre la 2ª carta (colIndex 1), donde murió Planta
       target: () => '#field [data-stack-col="1"]',
       side: 'bottom',
       glow: () => '#field [data-stack-col="1"]',
-      bubble: tr('Montala en la 2ª carta'),
+      bubble: tr('Reviví la cadena: 2ª carta'),
       delay: 400,
       now: true,
       done: (s) => !s.pendingStack,
+    },
+    // Planta viva otra vez: la cuarta, que sin el Rocket cortaba, ahora la alarga.
+    {
+      id: 'r5-draw-revived',
+      round: 5,
+      allowed: 'hit',
+      target: () => HIT,
+      glow: () => '#field .card[data-col="1"]',
+      delay: 300,
+      done: (s) => cardsOf(s) >= 3,
     },
     {
       id: 'r5-finish',
@@ -377,91 +381,125 @@ function createSteps() {
   ];
 }
 
-// ---- La flecha, la burbuja y el brillo ----------------------------------------
+// ---- La mira, el toque y el cartel ------------------------------------------------
+//
+// Antes era una flecha naranja del kit que solo sabía apuntar en cuatro direcciones y
+// una burbuja suelta: la flecha caía en el hueco que le quedara —entre dos carteles,
+// pegada al aro— y la burbuja flotaba sin decir de qué hablaba. Ahora son tres piezas:
+//
+//   la mira    cuatro esquinas doradas que abrazan cada objetivo con su propia forma
+//              (radio incluido) y respiran. Varias miras se leen como un grupo; ninguna
+//              apunta desde un costado, así que no hay lado que elegir mal.
+//   el toque   dos anillos que se abren desde el centro de un botón o de la columna del
+//              Rocket: "apretá acá". Son anillos y no un punto, así no tapan el rótulo.
+//   el cartel  la madera de los paneles del juego, con una cola que señala el objetivo.
+//              Va arriba o abajo de él —o a un costado si no entra—, donde menos tape.
+//
+// La mesa sigue sin apagarse (ver `docs/tutorial.md` §3c): lo que hay que mirar brilla.
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 /**
  * La barra con la configuración y la salida, el menú si está abierto, las dos vidas, los
- * dos instrumentos (daño y rueda) y los carteles. Son lecturas, no cosas que se agarren:
- * la flecha y la burbuja no las tapan. En una pantalla angosta
- * siempre se pisa algo; que sea una carta del centro, no un cartel.
+ * instrumentos (daño, rueda, compatibilidad) y los carteles. Son lecturas: el cartel del
+ * tutorial no las tapa. En una pantalla angosta siempre se pisa algo; que sea una carta
+ * del centro, no un cartel.
  */
 const ALWAYS_CLEAR = '.topbar, #hud-menu:not([hidden]), #plate-p1, #plate-p2, .gauge, '
-  + '.overlay-head, .o-banner';
+  + '.overlay-head, .o-banner, .market-fit, .turn-tag';
 
 /**
- * Y lo que prefieren no tapar: la mesa que el jugador está leyendo. De las cartas cuentan
- * los símbolos y el poder, no la madera de alrededor: una flecha sobre el borde vacío de
- * una carta no esconde nada, sobre un símbolo sí.
+ * Y lo que prefiere no tapar: la mesa que el jugador está leyendo. De las cartas cuentan
+ * los símbolos y el poder, no la madera de alrededor.
  */
 const KEEP_CLEAR = '#axie-p1, #axie-p2, #controls .btn, .overlay-actions .btn, '
   + '#field .card .sym, #field .card .card-power, #market .sym, #market .card-power, '
-  + '.overlay-title, .overlay-note';
+  + '.overlay-title, .overlay-note, #field .runs';
 
 /** La madera de las cartas: se puede pisar, pero antes se prefiere el fondo. */
 const CARD_BODIES = '#field .card, #market .market-card';
 
-/** Cuántas cosas señala un paso a la vez (una flecha por cada una). */
+/** Cada cuánto la mira y el cartel vuelven a mirar dónde quedó su objetivo. */
+const FOLLOW_MS = 100;
+
+/** Lo que tarda el cartel en irse (ver `.tuto-callout.is-out` en styles.css). */
+const CALLOUT_OUT_MS = 160;
+
+/** Cuántas cosas señala un paso a la vez (una mira por cada una). */
 const MAX_ARROWS = 6;
 
 /**
- * La capa del tutorial: flecha del kit de Origins y burbuja que nunca se superpone al
- * objetivo. La mesa no se apaga: lo que hay que mirar brilla (`glow`) y lo que se puede
- * tocar late (`.tuto-allowed`).
+ * Sobre qué van las ondas además de la mira: los botones y la columna del Rocket. Las
+ * cartas del centro y tu Axie ya brillan y laten, y un punto en el medio les tapaba un
+ * símbolo o la cara.
+ */
+const TAPPABLE = '.btn, [data-stack-col]';
+
+/**
+ * La capa del tutorial. No atrapa toques: la mesa se juega por debajo. Lo que hay que
+ * mirar brilla (`glow`) y lo que se puede tocar late (`.tuto-allowed`).
  */
 export function createOverlay({ onQuit = null } = {}) {
   const root = document.createElement('div');
   root.id = 'tutorial-overlay';
   root.className = 'tuto-overlay';
   root.innerHTML = `
-    <div class="tuto-bubble o-panel" role="status" hidden></div>`;
+    <div class="tuto-callout" role="status" hidden><span class="tuto-callout-text"></span></div>`;
   document.body.appendChild(root);
 
   document.querySelector?.('.topbar')?.classList.add('tuto-topbar');
 
-  const bubble = root.querySelector?.('.tuto-bubble');
+  const callout = root.querySelector?.('.tuto-callout');
+  const calloutText = root.querySelector?.('.tuto-callout-text');
 
+  // Los lados del cartel respecto del objetivo, en el orden en que se prueban.
   const SIDES = { bottom: 0, top: 1, right: 2, left: 3 };
-  const arrows = []; // una por cosa señalada; se crean a medida que hacen falta
+  const marks = []; // una mira por objetivo; se crean a medida que hacen falta
+  const taps = [];  // una onda por objetivo que se toca
   let target = null;
   let label = '';
   let fixedSide = null;
-  let showing = false; // ya pasó la espera y las flechas están afuera
+  let showing = false; // ya pasó la espera y la mira está afuera
   let shine = null;
   let timers = [];
   let frame = 0;
   let placedFor = ''; // lo que midió la última ubicación (ver `place`)
+  let leaving = 0; // el cartel que se está yendo (ver `dismissCallout`)
+  let landing = false; // el cartel espera a que su carta termine de volar (ver `place`)
 
   const stopTimers = () => { timers.forEach(clearTimeout); timers = []; };
 
-  const arrowAt = (i) => {
-    while (arrows.length <= i) {
+  const pieceAt = (list, i, cls, inner) => {
+    while (list.length <= i) {
       const el = document.createElement('div');
-      el.className = 'tuto-arrow';
+      el.className = cls;
       el.hidden = true;
-      el.innerHTML = '<i></i>';
-      root.insertBefore?.(el, bubble) ?? root.appendChild(el);
-      arrows.push(el);
+      el.innerHTML = inner;
+      root.insertBefore?.(el, callout) ?? root.appendChild(el);
+      list.push(el);
     }
-    return arrows[i];
+    return list[i];
   };
-  const hideArrows = () => { for (const el of arrows) el.hidden = true; };
+  const markAt = (i) => pieceAt(marks, i, 'tuto-mark', '<i></i><i></i><i></i><i></i>');
+  const tapAt = (i) => pieceAt(taps, i, 'tuto-tap', '<i></i><i></i>');
+  const hidePieces = () => { for (const el of [...marks, ...taps]) el.hidden = true; };
 
   /** Cuánto pisa la caja `a` al rectángulo `b` (área). */
   const overlap = (a, b) => Math.max(0, Math.min(a.x + a.w, b.right) - Math.max(a.x, b.left))
     * Math.max(0, Math.min(a.y + a.h, b.bottom) - Math.max(a.y, b.top));
 
   /**
-   * Dónde van las flechas (una por objetivo) y la burbuja. Cada lugar posible tiene un
-   * costo: tapar un objetivo lo descalifica, tapar un cartel pesa ocho veces lo que tapar
-   * un símbolo, y la madera de una carta casi no cuenta. Gana el más barato.
+   * Dónde va el cartel. Se prueban los cuatro lados del objetivo principal y, si son
+   * varios, los del grupo entero (el cartel del centro va arriba o abajo de las tres
+   * cartas y no metido entre ellas), en uno y en dos renglones. Cada lugar tiene un
+   * costo —tapar un objetivo lo descalifica, tapar un cartel o una vida pesa ocho veces
+   * lo que tapar un símbolo, la madera de una carta casi no cuenta— y gana el más
+   * barato. Arriba y abajo se prefieren a los costados: la cola vertical se lee mejor y
+   * el cartel no angosta la mesa. Y un renglón a dos: se lee de una mirada.
    */
-  function layout(rects, size, bw, bh, vw, vh, preferredSide) {
-    const g = 6;
+  function layout(rects, sizes, vw, vh, preferredSide) {
     const same = (a, b) => Math.abs(a.left - b.left) < 4 && Math.abs(a.top - b.top) < 4
       && Math.abs(a.width - b.width) < 4 && Math.abs(a.height - b.height) < 4;
-
     const obstacles = [];
     const collect = (selector, weight) => {
       for (const ob of document.querySelectorAll?.(selector) ?? []) {
@@ -475,125 +513,188 @@ export function createOverlay({ onQuit = null } = {}) {
     collect(KEEP_CLEAR, 1);
     collect(ALWAYS_CLEAR, 8);
 
-    const boxCost = (box) => {
-      let cost = 0;
-      for (const r of rects) {
-        // Rozar el borde por medio píxel de redondeo no es taparlo.
-        const o = overlap(box, r);
-        if (o > 60) cost += 1_000_000 + o * 100;
-      }
-      for (const ob of obstacles) {
-        const o = overlap(box, ob);
-        if (o > 0) cost += (1000 + o * 10) * ob.weight;
-      }
-      return cost;
-    };
-
-    // Las flechas: pegadas al objetivo, del lado que menos tape. Se salen de la pantalla
-    // solo corriéndose a lo largo del borde, nunca alejándose del objetivo.
-    const arrowFor = (r, side) => {
-      const cx = r.left + r.width / 2 - size / 2;
-      const cy = r.top + r.height / 2 - size / 2;
-      const [x, y, rot] = [
-        [cx, r.bottom + g, 90],
-        [cx, r.top - g - size, -90],
-        [r.right + g, cy, 0],
-        [r.left - g - size, cy, 180],
-      ][side];
-      const box = { x: clamp(x, 8, vw - size - 8), y: clamp(y, 8, vh - size - 8), w: size, h: size };
-      // Unos pocos píxeles de más contra el borde no la despegan del objetivo.
-      const off = Math.abs(side < 2 ? box.y - y : box.x - x) > 12;
-      return { ...box, rot, cost: boxCost(box) + (off ? 500_000 : 0) };
-    };
-    const options = rects.map((r) => [0, 1, 2, 3].map((side) => arrowFor(r, side)));
-    const total = (side) => options.reduce((sum, o) => sum + o[side].cost, 0);
-
-    // Todas del mismo lado, que se leen como un grupo; el lado lo fija el guión si ahí
-    // no tapa nada. La que ahí tape algo que las otras no, busca el suyo.
-    let side = [0, 1, 2, 3].reduce((a, b) => (total(b) < total(a) ? b : a));
-    if (preferredSide != null && total(preferredSide) < 5000 * rects.length) side = preferredSide;
-    const placed = options.map((o) => {
-      const best = o.reduce((a, b) => (b.cost < a.cost ? b : a));
-      return o[side].cost <= best.cost + 5000 ? o[side] : best;
-    });
-
-    if (!bw || !bh) return { arrows: placed };
-
-    // La burbuja: al lado de alguna flecha o de algún objetivo, lo más cerca posible.
-    const around = (b, gap) => [
-      { x: b.x + b.w / 2 - bw / 2, y: b.y - gap - bh },
-      { x: b.x + b.w / 2 - bw / 2, y: b.y + b.h + gap },
-      { x: b.x - gap - bw, y: b.y + b.h / 2 - bh / 2 },
-      { x: b.x + b.w + gap, y: b.y + b.h / 2 - bh / 2 },
-    ];
-    const spots = [
-      ...placed.flatMap((a) => around(a, 4)),
-      ...rects.flatMap((r) => around({ x: r.left, y: r.top, w: r.width, h: r.height }, 8)),
-    ];
-    let bubbleAt = null;
-    let cheapest = Infinity;
-    for (const spot of spots) {
-      const box = { x: clamp(spot.x, 8, vw - bw - 8), y: clamp(spot.y, 8, vh - bh - 8), w: bw, h: bh };
-      let cost = boxCost(box);
-      for (const a of placed) {
-        if (overlap(box, { left: a.x, top: a.y, right: a.x + a.w, bottom: a.y + a.h }) > 0) cost += 1_000_000;
-      }
-      const near = Math.min(...placed.map((a) => Math.hypot(
-        box.x + bw / 2 - (a.x + size / 2), box.y + bh / 2 - (a.y + size / 2))));
-      cost += near * 20;
-      if (cost < cheapest) {
-        cheapest = cost;
-        bubbleAt = box;
+    const box = (l, t, r, b) => ({ left: l, top: t, right: r, bottom: b, width: r - l, height: b - t });
+    const anchors = [{ r: rects[0], group: false }];
+    if (rects.length > 1) {
+      anchors.push({
+        r: box(Math.min(...rects.map((r) => r.left)), Math.min(...rects.map((r) => r.top)),
+          Math.max(...rects.map((r) => r.right)), Math.max(...rects.map((r) => r.bottom))),
+        group: true,
+      });
+    }
+    const gap = 16; // lo que mide la cola, más un respiro
+    let best = null;
+    for (const size of sizes) {
+      const { w: bw, h: bh } = size;
+      for (const { r, group } of anchors) {
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const candidates = [
+          { side: 0, x: cx - bw / 2, y: r.bottom + gap },
+          { side: 1, x: cx - bw / 2, y: r.top - gap - bh },
+          { side: 2, x: r.right + gap, y: cy - bh / 2 },
+          { side: 3, x: r.left - gap - bw, y: cy - bh / 2 },
+        ];
+        for (const c of candidates) {
+          const b = { x: clamp(c.x, 8, vw - bw - 8), y: clamp(c.y, 8, vh - bh - 8), w: bw, h: bh };
+          // Si pegarlo a la pantalla lo despega del objetivo, la cola ya no llega.
+          const drift = c.side < 2 ? Math.abs(b.y - c.y) : Math.abs(b.x - c.x);
+          let cost = drift > 6 ? 500_000 + drift * 100 : 0;
+          for (const t of rects) {
+            const o = overlap(b, t);
+            if (o > 30) cost += 1_000_000 + o * 100;
+          }
+          for (const ob of obstacles) {
+            const o = overlap(b, ob);
+            if (o > 0) cost += (1000 + o * 10) * ob.weight;
+          }
+          if (c.side >= 2) cost += 2500;
+          if (preferredSide != null && c.side !== preferredSide) cost += 1500;
+          if (size.narrow) cost += 600;
+          if (group) cost += 300;
+          if (!best || cost < best.cost) best = { ...b, side: c.side, cost, narrow: size.narrow, anchor: r, group };
+        }
       }
     }
-    return { arrows: placed, bx: bubbleAt.x, by: bubbleAt.y };
+    // La cola señala el centro del objetivo; si el cartel va al lado del grupo, el del
+    // objetivo que le queda más cerca. Sin salirse de las puntas redondeadas.
+    const mid = { x: best.x + best.w / 2, y: best.y + best.h / 2 };
+    const aim = best.group
+      ? rects.reduce((a, r) => {
+        const d = Math.hypot(r.left + r.width / 2 - mid.x, r.top + r.height / 2 - mid.y);
+        return d < a.d ? { r, d } : a;
+      }, { r: rects[0], d: Infinity }).r
+      : best.anchor;
+    const tail = best.side < 2
+      ? clamp(aim.left + aim.width / 2 - best.x, 22, best.w - 22)
+      : clamp(aim.top + aim.height / 2 - best.y, 18, best.h - 18);
+    return { ...best, tail };
   }
+
+  /** El radio de la esquina del objetivo, para que la mira abrace su forma. */
+  const radiusOf = (node) => {
+    const cs = globalThis.getComputedStyle?.(node);
+    const px = parseFloat(cs?.borderTopLeftRadius ?? '');
+    if (!Number.isFinite(px)) return 12;
+    // Un círculo (`50%`) se resuelve en px en el estilo calculado; se topea a medio lado.
+    const r = node.getBoundingClientRect?.();
+    return Math.min(px, r ? Math.min(r.width, r.height) / 2 : px);
+  };
 
   function place() {
     if (!showing || !target) return;
-    const rects = [];
+    const found = [];
     for (const node of document.querySelectorAll?.(target) ?? []) {
       const r = node.getBoundingClientRect?.();
-      if (r && (r.width || r.height)) rects.push(r);
-      if (rects.length === MAX_ARROWS) break;
+      if (r && (r.width || r.height)) found.push({ node, r });
+      if (found.length === MAX_ARROWS) break;
     }
-    if (!rects.length) {
-      for (const el of arrows) el.style.visibility = 'hidden';
-      if (bubble) bubble.style.visibility = 'hidden';
+    // Una carta que todavía vuela desde el mazo (ver `flyCard` en table-fx.js) no se
+    // señala: la mira la perseguía por la mesa y el cartel aparecía junto al mazo para
+    // después cruzar la pantalla. Se espera a que aterrice y recién ahí entra el cartel.
+    const flying = found.some(({ node }) => node.classList?.contains('is-flying'));
+    if (!found.length || flying) {
+      for (const el of [...marks, ...taps]) el.style.visibility = 'hidden';
+      if (callout && !callout.hidden && flying) {
+        callout.hidden = true;
+        landing = true;
+      }
+      if (callout) callout.style.visibility = 'hidden';
       placedFor = '';
       return;
     }
-
+    if (landing) {
+      landing = false;
+      showCallout();
+      return;
+    }
+    const rects = found.map((f) => f.r);
     const vw = globalThis.innerWidth || 0;
     const vh = globalThis.innerHeight || 0;
-    const first = arrowAt(0);
-    first.hidden = false;
-    const size = first.offsetWidth || 34;
-    const talking = bubble && !bubble.hidden;
-    const bw = talking ? (bubble.offsetWidth || 150) : 0;
-    const bh = talking ? (bubble.offsetHeight || 42) : 0;
+    const talking = callout && !callout.hidden && !callout.classList?.contains('is-out');
 
-    // Esto corre en cada cuadro. Medir los objetivos es barato; elegir el lugar mide cada
-    // símbolo, botón y cartel de la mesa, así que solo se rehace si algo cambió: un
-    // objetivo se movió, cambió la pantalla o la burbuja, o entraron o salieron cosas.
+    // Esto corre cada `FOLLOW_MS`. Medir los objetivos es barato; elegir el lugar del
+    // cartel mide cada símbolo, botón y cartel de la mesa, así que solo se rehace si algo
+    // cambió: un objetivo se movió, cambió la pantalla o el cartel, o entraron cosas.
     const count = document.querySelectorAll?.(`${KEEP_CLEAR}, ${ALWAYS_CLEAR}`)?.length ?? 0;
     const key = rects.flatMap((r) => [r.left, r.top, r.width, r.height])
-      .concat(vw, vh, size, bw, bh).map(Math.round).concat(count, target, fixedSide).join();
+      .concat(vw, vh).map(Math.round).concat(count, target, fixedSide, talking ? label : '').join();
     if (key === placedFor) return;
     placedFor = key;
 
-    const pos = layout(rects, size, bw, bh, vw, vh, fixedSide);
-    pos.arrows.forEach((a, i) => {
-      const el = arrowAt(i);
-      el.hidden = false;
-      el.style.visibility = '';
-      el.style.transform = `translate(${Math.round(a.x)}px, ${Math.round(a.y)}px) rotate(${a.rot}deg)`;
+    // Lo que ya estaba afuera se desliza hasta el lugar nuevo; lo que recién aparece, no:
+    // si no, entraría volando desde la esquina de la pantalla.
+    const glide = (el) => { el.dataset.glide = String(!el.hidden); };
+
+    let tapN = 0;
+    found.forEach(({ node, r }, i) => {
+      const mark = markAt(i);
+      const pad = 7;
+      // La mira abraza el objetivo sin salirse de la pantalla: un botón pegado al borde
+      // la dejaba con dos esquinas afuera.
+      const left = Math.max(2, r.left - pad);
+      const top = Math.max(2, r.top - pad);
+      const right = vw ? Math.min(vw - 2, r.right + pad) : r.right + pad;
+      const bottom = vh ? Math.min(vh - 2, r.bottom + pad) : r.bottom + pad;
+      glide(mark);
+      mark.hidden = false;
+      mark.style.visibility = '';
+      mark.style.translate = `${Math.round(left)}px ${Math.round(top)}px`;
+      mark.style.width = `${Math.round(right - left)}px`;
+      mark.style.height = `${Math.round(bottom - top)}px`;
+      mark.style.setProperty('--r', `${Math.round(radiusOf(node) + pad)}px`);
+      if (node.matches?.(TAPPABLE)) {
+        const tap = tapAt(tapN++);
+        glide(tap);
+        tap.hidden = false;
+        tap.style.visibility = '';
+        tap.style.translate = `${Math.round(r.left + r.width / 2)}px ${Math.round(r.top + r.height / 2)}px`;
+      }
     });
-    for (let i = pos.arrows.length; i < arrows.length; i++) arrows[i].hidden = true;
+    for (let i = found.length; i < marks.length; i++) marks[i].hidden = true;
+    for (let i = tapN; i < taps.length; i++) taps[i].hidden = true;
+
     if (talking) {
-      bubble.style.visibility = '';
-      bubble.style.transform = `translate(${Math.round(pos.bx)}px, ${Math.round(pos.by)}px)`;
+      // El cartel se mide en un renglón y, si es largo, también en dos: `layout` elige.
+      const sizes = [];
+      hug(false);
+      sizes.push({ narrow: false, w: callout.offsetWidth || 150, h: callout.offsetHeight || 44 });
+      if (label.length > 14) {
+        hug(true);
+        sizes.push({ narrow: true, w: callout.offsetWidth || 120, h: callout.offsetHeight || 64 });
+      }
+      const pos = layout(rects, sizes, vw, vh, fixedSide);
+      hug(pos.narrow);
+      callout.dataset.glide = String(callout.dataset.placed === 'true');
+      callout.dataset.placed = 'true';
+      callout.style.visibility = '';
+      callout.style.translate = `${Math.round(pos.x)}px ${Math.round(pos.y)}px`;
+      callout.dataset.side = ['bottom', 'top', 'right', 'left'][pos.side];
+      callout.style.setProperty('--tail', `${Math.round(pos.tail)}px`);
     }
+  }
+
+  /**
+   * El cartel en uno o dos renglones, con la tabla del ancho del texto. Un texto que se
+   * parte deja la caja en su `max-width` aunque los renglones (parejos por `text-wrap:
+   * balance`) ocupen mucho menos: "¡Cadena rota! No comparte símbolos" quedaba en una
+   * tabla ancha con aire a los costados. Se mide el renglón más largo y la caja se
+   * ajusta a él. Las medidas salen con la escala de la entrada puesta (`scale(.85)`):
+   * `k` la deshace.
+   */
+  function hug(narrow) {
+    callout.classList?.toggle('is-narrow', narrow);
+    callout.style.width = '';
+    const range = document.createRange?.();
+    if (!range || !calloutText) return;
+    range.selectNodeContents(calloutText);
+    const lines = [...(range.getClientRects?.() ?? [])];
+    if (lines.length < 2) return;
+    const box = callout.getBoundingClientRect?.();
+    const k = box?.width ? callout.offsetWidth / box.width : 1;
+    const text = Math.max(...lines.map((r) => r.width)) * k;
+    const chrome = callout.offsetWidth - calloutText.offsetWidth;
+    if (text + chrome < callout.offsetWidth) callout.style.width = `${Math.ceil(text + chrome) + 1}px`;
   }
 
   function applyGlow() {
@@ -604,16 +705,20 @@ export function createOverlay({ onQuit = null } = {}) {
     for (const n of document.querySelectorAll?.(shine) ?? []) n.classList.add('tuto-hl');
   }
 
+  // Sigue a los objetivos con un timer y no con `requestAnimationFrame`: medir la mesa
+  // en cada cuadro despierta la página entera mientras el jugador lee el cartel, y lo que
+  // se mueve ya se desliza solo (`data-glide`).
   function follow() {
     frame = 0;
     if (!target && !shine) return;
     place();
     applyGlow();
-    frame = globalThis.requestAnimationFrame?.(follow) ?? 0;
+    frame = setTimeout(follow, FOLLOW_MS);
+    frame.unref?.();
   }
   const wake = () => { if (!frame) follow(); };
 
-  function showArrow() {
+  function showMarks() {
     if (!target) return;
     const node = document.querySelector?.(target);
     const r = node?.getBoundingClientRect?.();
@@ -622,25 +727,49 @@ export function createOverlay({ onQuit = null } = {}) {
       node.scrollIntoView?.({ block: 'nearest', behavior: quiet ? 'auto' : 'smooth' });
     }
     showing = true;
+    placedFor = '';
     wake();
   }
 
-  function showBubble() {
-    if (!bubble || !label || !target) return;
-    bubble.textContent = label;
-    bubble.hidden = false;
+  function showCallout() {
+    if (!callout || !label || !target) return;
+    clearTimeout(leaving);
+    // Si el anterior todavía se estaba yendo, se corta ahí y el nuevo entra de cero.
+    if (!callout.hidden) {
+      callout.hidden = true;
+      void callout.offsetWidth;
+    }
+    callout.classList?.remove('is-out');
+    callout.dataset.placed = 'false';
+    if (calloutText) calloutText.textContent = label;
+    else callout.textContent = label;
+    callout.hidden = false;
+    placedFor = '';
     place();
+  }
+
+  /** El cartel no se apaga de golpe: se achica hacia lo que señalaba y se va. */
+  function dismissCallout() {
+    if (!callout || callout.hidden || callout.classList?.contains('is-out')) return;
+    const quiet = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if (quiet || !callout.classList) { callout.hidden = true; return; }
+    callout.classList.add('is-out');
+    leaving = setTimeout(() => {
+      callout.hidden = true;
+      callout.classList.remove('is-out');
+    }, CALLOUT_OUT_MS);
   }
 
   function clear() {
     stopTimers();
+    landing = false;
     target = null;
     label = '';
     fixedSide = null;
     placedFor = '';
     showing = false;
-    hideArrows();
-    if (bubble) bubble.hidden = true;
+    hidePieces();
+    dismissCallout();
   }
 
   return {
@@ -650,8 +779,8 @@ export function createOverlay({ onQuit = null } = {}) {
       target = selector;
       label = text;
       fixedSide = typeof preferredSide === 'number' ? preferredSide : (SIDES[preferredSide] ?? null);
-      timers.push(setTimeout(showArrow, delay));
-      if (label) timers.push(setTimeout(showBubble, delay + bubbleAfter));
+      timers.push(setTimeout(showMarks, delay));
+      if (label) timers.push(setTimeout(showCallout, delay + bubbleAfter));
     },
     glow(selector) {
       if (selector === shine) return;
@@ -662,16 +791,18 @@ export function createOverlay({ onQuit = null } = {}) {
     hurry() {
       if (!target) return;
       stopTimers();
-      showArrow();
-      showBubble();
+      showMarks();
+      showCallout();
     },
     clear,
     destroy() {
       clear();
       shine = null;
       applyGlow();
-      if (frame) globalThis.cancelAnimationFrame?.(frame);
+      clearTimeout(frame);
+      clearTimeout(leaving);
       frame = 0;
+      if (callout) callout.hidden = true;
       document.querySelector?.('.topbar')?.classList.remove('tuto-topbar');
       root.remove?.();
     },
@@ -679,6 +810,9 @@ export function createOverlay({ onQuit = null } = {}) {
 }
 
 // ---- Motor del tutorial ------------------------------------------------------
+
+/** Los dos del tutorial: vos con el Pez y la CPU con la Planta (el guión cuenta con ellos). */
+export const TUTORIAL_AXIES = ['aquatic', 'plant'];
 
 export function createTutorial(game, onDone = () => {}) {
   const steps = createSteps();
@@ -760,7 +894,7 @@ export function createTutorial(game, onDone = () => {}) {
 
   /**
    * Pone el mazo de cada ronda antes de que se reparta. No es un mazo aparte: es el de
-   * cada jugador —las diez de fábrica más lo que se llevó del centro— ordenado para que
+   * cada jugador —las ocho de fábrica más lo que se llevó del centro— ordenado para que
    * salgan primero las cartas del guión (ver `SCRIPT`).
    */
   function setRound(st, round) {
@@ -827,8 +961,16 @@ export function createTutorial(game, onDone = () => {}) {
   game.newMatch({
     mode: 'tutorial',
     difficulty: 'facil',
-    axie: 'aquatic',
-    axie2: 'plant',
+    axie: TUTORIAL_AXIES[0],
+    axie2: TUTORIAL_AXIES[1],
+    // El mazo de fábrica, sin las mejoras (+) de la partida anterior: una carta mejorada
+    // lleva un símbolo más, el guión no la encuentra (ver `findCard`) y el mazo sale sin
+    // ordenar, así que la ronda 1 se podía cortar sola.
+    boosts: {},
+    boosts2: {},
+    // Ni las cartas de la mochila: el guión cuenta con las 8 de fábrica.
+    extras: [],
+    extras2: [],
     activePowers: ['strength', 'pot', 'egg', 'snail', 'octopus', 'poison'],
     scriptedPool: buildTutorialPool(),
     onRoundStart: (round) => setRound(game.state, round),

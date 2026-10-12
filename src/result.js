@@ -20,23 +20,39 @@
 // números como variables (`--t-*`) y el efecto, el sonido y los contadores se agendan
 // con ellos.
 //
-// **El botín.** Las partidas van a dejar objetos al terminar. La pantalla ya los sabe
-// mostrar: la partida los anota en `state.rewards[asiento]` y acá salen, uno detrás del
-// otro, después de las marcas. Ver `rewardsOf` para la forma de cada uno.
+// **El botín.** Abajo de las marcas, lo que te llevás: los Moonshards que cuentan hasta
+// su número y la AXP de tu Axie, con su barra que se llena y la medalla del nivel que
+// salta si subió (ver `payHtml`). Lo cobra la mesa al terminar (`claimPayout` en
+// `payout.js`) y llega acá como `pay`; si la partida no paga, una línea dice por qué.
+// Los objetos sueltos que pueda dejar una partida van en `state.rewards[asiento]` y salen
+// después, uno detrás del otro. Ver `rewardsOf` para la forma de cada uno.
 import { tr } from './i18n.js';
 import { SYMBOLS, iconUrl } from './data.js';
 import { axie, axieArt } from './axies.js';
 import { createMotion } from './axie-motion.js';
 import { createVfx, preloadVfx } from './vfx.js';
-import { matchResult, seatVoice } from './game.js';
+import { matchResult, seatVoice, wonByKo } from './game.js';
 import { DIFFICULTY_LABELS, isFinalLevel } from './adventure.js';
+import { levelInfo, moonIcon, shardAmount, EVOLVE_STEP, MAX_LEVEL, LEVEL_UP_SHARDS } from './evolution.js';
+import { MATCH_PAY, FORFEIT_PAY_ROUND } from './payout.js';
 
 /**
  * Cuándo entra cada cosa, en ms, contados desde que la pantalla aparece. La pantalla
  * aparece `wait` después del final (ver `show`): el último golpe tiene que caer y el
  * que perdió, desplomarse, antes de taparlos.
  */
-export const RESULT_BEAT = { sky: 80, banner: 250, title: 480, axie: 650, fx: 900, stats: 1250, loot: 1750, acts: 1900 };
+export const RESULT_BEAT = { sky: 80, banner: 250, title: 480, axie: 650, fx: 900, stats: 1250, loot: 1750, up: 2900, acts: 1900 };
+
+/**
+ * El botín, contado desde `loot`: cada casillero cae `PAY_STEP` después del anterior, su
+ * número cuenta `PAY_COUNT` después de caer y la barra de AXP arranca en `PAY_FILL`. Si
+ * el Axie sube de nivel, la barra llega al tope y en `RESULT_BEAT.up` salta la medalla.
+ */
+const PAY_STEP = 350;
+const PAY_COUNT = 150;
+const PAY_FILL = 600;
+/** Los casilleros del botín que ocupan los Moonshards y la AXP: los objetos caen después. */
+const PAY_SLOTS = 2;
 
 /**
  * Cuándo vuelve la música de la portada, desde que la pantalla entra: apenas se apaga
@@ -45,6 +61,9 @@ export const RESULT_BEAT = { sky: 80, banner: 250, title: 480, axie: 650, fx: 90
  * los menús entra acá para seguir sin cortes cuando se vuelve a la portada.
  */
 export const RESULT_MUSIC = RESULT_BEAT.fx + 1700;
+
+/** La estrella del kit, la misma de los niveles ganados en el mapa de la Aventura. */
+const RESULT_STAR = 'https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/PvE/UI/Frames/star.png';
 
 /** Lo que espera la pantalla después del final si no hay un golpe en el aire. */
 export const RESULT_WAIT = 1600;
@@ -94,7 +113,7 @@ export function rewardsOf(state, seat) {
  * uno solo —contra la CPU, la Aventura, el tutorial—. El que entró a mirar una sala
  * llena no ganó ni perdió nada: para él la escena es la del que ganó, con su nombre.
  */
-export function resultView(state, { seat = null, net = false } = {}) {
+export function resultView(state, { seat = null, net = false, pay = null } = {}) {
   const result = matchResult(state);
   if (!result) return null;
   const me = seat ?? 'p1';
@@ -147,8 +166,44 @@ export function resultView(state, { seat = null, net = false } = {}) {
     tie: [{ seat: hero, stance: 'ko', role: 'hero' }, { seat: foe, stance: 'ko', role: 'rival' }],
   }[outcome].map((c) => ({ ...c, axie: state.axies[c.seat], color: SYMBOLS[state.symbols[c.seat]]?.color }));
 
-  return { outcome, hero, foe, title, kicker, line, stats, cast, rewards: rewardsOf(state, me) };
+  // En la Aventura, un nivel ganado dice si se lleva la estrella: solo por K.O. (ver
+  // `wonByKo`). Si el rival cayó en su última chance, se pasa igual, sin estrella.
+  const star = state.mode === 'adventure' && outcome === 'win' ? wonByKo(state) : null;
+
+  return {
+    outcome, hero, foe, title, kicker, line, stats, cast, star,
+    pay: watching ? null : cleanPay(pay),
+    rewards: rewardsOf(state, me),
+  };
 }
+
+/** Lo que cobró la pantalla (ver `claimPayout`), con números de verdad o nada. */
+function cleanPay(pay) {
+  if (!pay || typeof pay.why !== 'string') return null;
+  const n = (v) => Math.max(0, Math.floor(Number(v) || 0));
+  const levels = Array.isArray(pay.levels) ? pay.levels.map(n).filter(Boolean) : [];
+  return {
+    why: pay.why, axie: pay.axie ?? null,
+    amount: n(pay.amount), shards: n(pay.shards), axp: n(pay.axp),
+    from: n(pay.from), to: n(pay.to), levels, purse: n(pay.purse),
+  };
+}
+
+/** De dónde salió lo que se cobró, o por qué la partida no pagó nada. */
+const PAY_WHY = {
+  win: () => tr('Por la victoria'),
+  ko: () => tr('Por la victoria por K.O.: el doble'),
+  first: () => tr('Primera victoria del nivel'),
+  firstKo: () => tr('Primera victoria del nivel, por K.O.: el doble'),
+  star: () => tr('Por la estrella del K.O.'),
+  practice: () => tr('Contra la CPU se practica: no se ganan Moonshards ni AXP.'),
+  lose: () => tr('Ganá para llevarte Moonshards y AXP.'),
+  tie: () => tr('En el empate nadie se lleva Moonshards ni AXP.'),
+  early: () => tr('Un abandono antes de la ronda {round} no paga.', { round: FORFEIT_PAY_ROUND }),
+  replay: () => tr('Este nivel ya lo ganaste: paga solo la primera vez.'),
+  noStar: () => tr('Ganalo por K.O. y te llevás la estrella y {n} Moonshards.', { n: MATCH_PAY.ko - MATCH_PAY.win }),
+};
+
 
 /**
  * La palabra, letra por letra y palabra por palabra: cada letra lleva su número para
@@ -230,6 +285,15 @@ function resultBannerHtml(view) {
   </div>`;
 }
 
+/** La estrella del nivel de la Aventura: ganada por K.O., o apagada con cómo ganarla. */
+function resultStarHtml(view) {
+  if (view.star === null || view.star === undefined) return '';
+  const text = view.star ? tr('¡Estrella! Lo ganaste por K.O.')
+    : tr('Sin estrella: ganale por K.O., sin dejarle última chance.');
+  return `<p class="result-star" data-earned="${view.star}">
+    <img src="${RESULT_STAR}" alt=""><span>${esc(text)}</span></p>`;
+}
+
 function resultStageHtml(view) {
   return `<div class="result-stage" aria-hidden="true">${view.cast.map((c, i) => `
     <div class="result-fighter" data-role="${c.role}" data-stance="${c.stance}" style="--c:${c.color};--i:${i}">
@@ -238,23 +302,72 @@ function resultStageHtml(view) {
     </div>`).join('')}</div>`;
 }
 
+/** El resumen de la pelea: las marcas en una tabla de madera, un número por columna. */
 function resultStatsHtml(view) {
   if (!view.stats.length) return '';
-  return `<dl class="result-stats o-panel">${view.stats.map((s, i) => `
+  return `<section class="result-sum" aria-labelledby="result-sum-title">
+    <h3 class="result-sum-title" id="result-sum-title">${tr('Resumen')}</h3>
+    <dl class="result-stats o-panel">${view.stats.map((s, i) => `
     <div class="result-stat" data-stat="${s.key}" style="--i:${i}">
       <dt>${s.label}</dt><dd data-count="${Number(s.value) || 0}">${Number(s.value) || 0}</dd>
-    </div>`).join('')}</dl>`;
+    </div>`).join('')}</dl>
+  </section>`;
+}
+
+/**
+ * Lo que cobraste: los Moonshards y la AXP de tu Axie en una tabla como la del resumen,
+ * de dónde salen al pie, y la cinta del nivel nuevo si subió. Se pinta como queda al final
+ * —la barra llena hasta donde llegó, el nivel nuevo—: así lo ve quien no quiere
+ * movimiento, y el reproductor la lleva para atrás antes de mostrarla (ver `climb`).
+ */
+function payHtml(pay) {
+  const who = pay.axie ? axie(pay.axie) : null;
+  const after = levelInfo(pay.to);
+  const xpText = after.max ? tr('Nivel máximo')
+    : tr('{into} de {need} de experiencia', { into: after.into, need: after.need });
+  const gain = (key, i, top, foot) =>
+    `<div class="result-gain" data-gain="${key}" style="--i:${i}">${top}${foot}</div>`;
+  const shards = gain('shards', 0,
+    `<span class="result-gain-top">${moonIcon('moon-ico result-gain-ico')}
+      <b class="result-gain-num">+<span data-count="${pay.shards}">${pay.shards}</span></b></span>`,
+    `<span class="result-gain-label">${tr('Moonshards')}</span>
+    ${Number.isFinite(pay.purse) ? `<span class="result-purse">${tr('En la bolsa')} <span class="moon-amt">${moonIcon()}<b>${shardAmount(pay.purse)}</b></span></span>` : ''}`);
+  const axp = who ? gain('axp', 1,
+    `<span class="result-gain-top"><span class="choose-lvl result-lvl">${tr('LVL')} <b>${after.level}</b></span>
+      <b class="result-gain-num">+<span data-count="${pay.axp}">${pay.axp}</span></b></span>
+    <span class="result-xp" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+      aria-valuenow="${Math.round(after.frac * 100)}" aria-valuetext="${esc(xpText)}">
+      <i class="result-xp-fill" style="--fill:${after.frac.toFixed(3)}"></i></span>`,
+    `<span class="result-gain-label">${esc(tr('AXP de {name}', { name: who.name }))}</span>`) : '';
+  let up = '';
+  if (who && pay.levels.length) {
+    const level = pay.levels[pay.levels.length - 1];
+    const opened = pay.levels.some((l) => l % EVOLVE_STEP === 0 && l <= MAX_LEVEL);
+    up = `<p class="result-up">
+      <span>${esc(tr('¡{name} subió al nivel {level}!', { name: who.name, level }))}</span>
+      <span class="moon-amt">+${moonIcon()}<b>${shardAmount(pay.levels.length * LEVEL_UP_SHARDS)}</b></span>
+      ${opened ? `<span class="result-up-evo">${esc(tr('Se abrió una evolución'))}</span>` : ''}
+    </p>`;
+  }
+  return `<div class="result-pay o-panel"${who ? '' : ' data-solo'}>${shards}${axp}
+    <p class="result-pay-why">${esc(PAY_WHY[pay.why]?.() ?? '')}</p></div>${up}`;
 }
 
 function resultLootHtml(view) {
-  if (!view.rewards.length) return '';
+  const paid = view.pay?.amount > 0;
+  // Sin nada que cobrar, una sola línea que dice por qué; el tutorial no dice nada.
+  const note = view.pay && !paid && view.pay.why !== 'tutorial' ? PAY_WHY[view.pay.why]?.() : '';
+  if (!paid && !view.rewards.length) {
+    return note ? `<p class="result-pay-note">${esc(note)}</p>` : '';
+  }
   return `<section class="result-loot" aria-labelledby="result-loot-title">
     <h3 class="result-loot-title" id="result-loot-title">${tr('Botín')}</h3>
-    <ul class="result-items">${view.rewards.map((item, i) => `
-      <li class="result-item" data-rarity="${item.rarity}" style="--i:${i}" title="${esc(tr(item.name))}">
+    ${paid ? payHtml(view.pay) : ''}
+    ${view.rewards.length ? `<ul class="result-items">${view.rewards.map((item, i) => `
+      <li class="result-item" data-rarity="${item.rarity}" style="--i:${i + (paid ? PAY_SLOTS : 0)}" title="${esc(tr(item.name))}">
         <span class="result-item-slot"><img src="${esc(item.icon)}" alt="">${item.qty > 1 ? `<b class="result-item-qty">×${item.qty}</b>` : ''}</span>
         <span class="result-item-name">${esc(tr(item.name))}</span>
-      </li>`).join('')}</ul>
+      </li>`).join('')}</ul>` : ''}
   </section>`;
 }
 
@@ -272,6 +385,7 @@ export function resultHtml(view, actions = '') {
         ${view.kicker ? `<p class="result-kicker">${esc(view.kicker)}</p>` : ''}
         ${resultBannerHtml(view)}
         <p class="result-line">${esc(view.line)}</p>
+        ${resultStarHtml(view)}
       </header>
       ${resultStageHtml(view)}
       ${resultStatsHtml(view)}
@@ -334,21 +448,65 @@ export function createResult(node, { audio = null } = {}) {
     later(COUNT_MS + 200, () => { el.textContent = String(to); });
   }
 
+  /**
+   * La barra de AXP, de donde estaba a donde llegó. El HTML la trae llena hasta el final
+   * (ver `payHtml`): acá se la lleva para atrás —sin transición, la pantalla todavía no
+   * se ve— y se la suelta. Si el Axie subió, llega al tope, en `up` vuelve a cero con el
+   * nivel nuevo en la medalla, que salta, y sigue hasta donde quedó. Una partida paga
+   * menos de lo que pide un nivel (`axpNeed`): se sube uno a lo sumo.
+   */
+  function climb(pay, wait) {
+    const fill = node.querySelector('.result-xp-fill');
+    const medal = node.querySelector('.result-lvl');
+    const number = medal?.querySelector('b');
+    if (!fill || !number) return;
+    const before = levelInfo(pay.from);
+    const after = levelInfo(pay.to);
+    const set = (frac, snap = false) => {
+      if (snap) fill.style.transition = 'none';
+      fill.style.setProperty('--fill', frac.toFixed(3));
+      if (!snap) return;
+      void fill.offsetWidth; // que tome el salto antes de volver a la transición
+      fill.style.transition = '';
+    };
+    set(before.frac, true);
+    number.textContent = String(before.level);
+    const start = wait + RESULT_BEAT.loot + PAY_FILL;
+    if (!pay.levels.length) {
+      later(start, () => set(after.frac));
+      return;
+    }
+    later(start, () => set(1));
+    later(wait + RESULT_BEAT.up, () => {
+      set(0, true);
+      number.textContent = String(after.level);
+      medal.dataset.up = 'true';
+      later(40, () => set(after.frac));
+    });
+  }
+
   return {
     get peeking() { return peeking; },
     /**
      * Pinta la pantalla del final de `state`. `wait` es cuánto espera para aparecer.
      * Devuelve lo que pintó (`resultView`), o `null` si la partida no terminó.
      */
-    show(state, { seat = null, net = false, actions = '', wait = RESULT_WAIT } = {}) {
+    show(state, { seat = null, net = false, actions = '', wait = RESULT_WAIT, pay = null } = {}) {
       stop();
-      const view = resultView(state, { seat, net });
+      const view = resultView(state, { seat, net, pay });
       if (!view) return this.hide();
       peek(false);
       node.dataset.outcome = view.outcome;
       node.style.setProperty('--wait', `${wait}ms`);
-      // Con botín, los botones esperan a que caiga el último objeto.
-      const beats = { ...RESULT_BEAT, acts: Math.max(RESULT_BEAT.acts, RESULT_BEAT.loot + view.rewards.length * 350 + 250) };
+      // Con botín, los botones esperan a que caiga el último objeto, a que la barra de
+      // AXP se llene y, si subió de nivel, a que salte la medalla.
+      const paid = view.pay?.amount > 0;
+      const slots = (paid ? PAY_SLOTS : 0) + view.rewards.length;
+      const beats = {
+        ...RESULT_BEAT,
+        acts: Math.max(RESULT_BEAT.acts, RESULT_BEAT.loot + slots * PAY_STEP + 250,
+          paid ? RESULT_BEAT.loot + PAY_FILL + 500 : 0, paid && view.pay.levels.length ? RESULT_BEAT.up + 500 : 0),
+      };
       for (const [key, ms] of Object.entries(beats)) node.style.setProperty(`--t-${key}`, `${ms}ms`);
       node.innerHTML = resultHtml(view, actions);
       node.hidden = false;
@@ -359,8 +517,10 @@ export function createResult(node, { audio = null } = {}) {
       preloadVfx(sound);
       audio?.sfx(sound, { delay: wait + RESULT_BEAT.fx });
       later(wait + RESULT_MUSIC, () => audio?.music?.('menu'));
-      // Cada objeto del botín hace su ruido al caer.
-      view.rewards.forEach((_, i) => audio?.sfx('take', { delay: wait + RESULT_BEAT.loot + 150 + i * 350 }));
+      // Cada casillero del botín hace su ruido al caer, y la medalla del nivel nuevo, el
+      // del poder que sale en el Taller.
+      for (let i = 0; i < slots; i++) audio?.sfx('take', { delay: wait + RESULT_BEAT.loot + PAY_COUNT + i * PAY_STEP });
+      if (paid && view.pay.levels.length) audio?.sfx('evolve', { delay: wait + RESULT_BEAT.up });
 
       const fighters = [...(node.querySelectorAll?.('.result-fighter') ?? [])];
       if (!fighters.length) return view;
@@ -382,10 +542,15 @@ export function createResult(node, { audio = null } = {}) {
         later(wait + RESULT_BEAT.fx + i * 260, () => vfx.play(sound, art, { width: view.outcome === 'win' ? 2.1 : 1.5 }));
       });
       if (!quiet()) {
-        for (const el of node.querySelectorAll('[data-count]')) {
+        for (const el of node.querySelectorAll('.result-stat [data-count]')) {
           const i = Number(el.closest('.result-stat')?.style.getPropertyValue('--i')) || 0;
           later(wait + RESULT_BEAT.stats + i * 90, () => count(el));
         }
+        for (const el of node.querySelectorAll('.result-gain [data-count]')) {
+          const i = Number(el.closest('.result-gain')?.style.getPropertyValue('--i')) || 0;
+          later(wait + RESULT_BEAT.loot + PAY_COUNT + i * PAY_STEP, () => count(el));
+        }
+        if (paid) climb(view.pay, wait);
       }
       return view;
     },

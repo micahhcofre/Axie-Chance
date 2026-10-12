@@ -10,15 +10,50 @@
 // roster arriba de la mesa, con la partida ya andando — la pantalla que se había
 // sacado justamente para que, sentado a la mesa, lo único que se haga sea jugar.
 //
-// Lo que se guarda es el Axie **y sus mejoras**: son las dos mitades de la misma
-// respuesta, porque lo que elegís es el mazo con el que vas a jugar.
-import { AXIE_IDS } from './axies.js';
+// Lo que se guarda es el Axie, **sus mejoras, las cartas de la mochila que lleva
+// puestas** (ver `backpack.js`) **y sus partes evolucionadas** (ver `evolution.js`): es
+// todo la misma respuesta, porque lo que elegís es el mazo con el que vas a jugar.
+import { AXIE_IDS, cleanEvolved } from './axies.js';
+import { cleanExtras } from './data.js';
 
 const LOADOUT_KEY = 'axie-chance:axie';
 
-/** El almacenamiento, o nada si el navegador lo tiene apagado. */
+/**
+ * El **modo libre** (`?libre`): el juego entero, como lo ve un jugador, con el mapa
+ * abierto, los Axies en nivel 60 y Moonshards y llaves sin fin (ver `readWallet` en
+ * `evolution.js`, `getAdventureProgress` en `adventure.js` y `free-play.js`). Guarda en
+ * su propio cajón (`axie-chance:libre:…`): lo que se pruebe acá no toca lo de verdad.
+ */
+export const FREE_PLAY = (() => {
+  try { return new URLSearchParams(globalThis.location?.search ?? '').has('libre'); } catch { return false; }
+})();
+
+const STORE_NS = 'axie-chance:';
+const FREE_NS = 'axie-chance:libre:';
+const freeKey = (key) => (String(key).startsWith(STORE_NS) ? FREE_NS + String(key).slice(STORE_NS.length) : key);
+
+/** Una dirección de la página que no se sale del modo libre: `withFree('?red')`. */
+export const withFree = (search = '') => (FREE_PLAY ? `${search}${search ? '&' : '?'}libre` : search);
+
+/** El almacenamiento, o nada si el navegador lo tiene apagado. En el modo libre, su cajón. */
 export function store() {
-  try { return globalThis.localStorage ?? null; } catch { return null; }
+  let ls;
+  try { ls = globalThis.localStorage ?? null; } catch { return null; }
+  if (!ls || !FREE_PLAY) return ls;
+  return {
+    getItem: (key) => ls.getItem(freeKey(key)),
+    setItem: (key, value) => ls.setItem(freeKey(key), value),
+    removeItem: (key) => ls.removeItem(freeKey(key)),
+  };
+}
+
+/** Borra todo lo guardado del modo libre (sus Axies, su mochila, su Aventura…). */
+export function clearFreePlay() {
+  try {
+    const ls = globalThis.localStorage;
+    const keys = Array.from({ length: ls.length }, (_, i) => ls.key(i)).filter((k) => k?.startsWith(FREE_NS));
+    for (const k of keys) ls.removeItem(k);
+  } catch { /* sin almacenamiento no hay nada que borrar */ }
 }
 
 /**
@@ -31,7 +66,11 @@ export function store() {
  * correspondan las descarta después el mazo (ver `buildPersonalDeck`); lo de acá es
  * que sean un objeto de textos y no una bomba.
  *
- * @returns {{axie: string, boosts: Record<string, string>}|null}
+ * Las cartas de la mochila pasan por `cleanExtras`: símbolos que existan, un poder que
+ * exista y no más de `EXTRA_SLOTS`. Las partes evolucionadas, por `cleanEvolved`: de
+ * las seis y sin repetir.
+ *
+ * @returns {{axie: string, boosts: Record<string, string>, extras: object[], evolved: string[]}|null}
  */
 export function cleanLoadout(raw) {
   if (!raw || typeof raw !== 'object' || !AXIE_IDS.includes(raw.axie)) return null;
@@ -41,7 +80,7 @@ export function cleanLoadout(raw) {
       if (typeof sym === 'string') boosts[key] = sym;
     }
   }
-  return { axie: raw.axie, boosts };
+  return { axie: raw.axie, boosts, extras: cleanExtras(raw.extras), evolved: cleanEvolved(raw.evolved) };
 }
 
 /** Con qué estás jugando, o `null` si todavía no elegiste en esta máquina. */
@@ -54,8 +93,8 @@ export function readLoadout() {
 }
 
 /** Deja anotado con qué jugás. Lo que no se entienda no se guarda. */
-export function writeLoadout(axie, boosts = {}) {
-  const clean = cleanLoadout({ axie, boosts });
+export function writeLoadout(axie, boosts = {}, extras = [], evolved = []) {
+  const clean = cleanLoadout({ axie, boosts, extras, evolved });
   if (!clean) return;
   try { store()?.setItem(LOADOUT_KEY, JSON.stringify(clean)); } catch { /* ídem */ }
 }

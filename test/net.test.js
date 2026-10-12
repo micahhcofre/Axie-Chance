@@ -114,6 +114,11 @@ async function playing(room) {
   await settle();
   assert.equal(a.last('room').room.axies.p1, 'plant', 'un pedido que no se entiende se tira');
   assert.equal(room.state.axies.p1, 'plant', 'y no le cuesta el bicho al que lo mandó');
+  assert.notEqual(room.state.phase, 'matchEnd');
+  const running = room.state.match;
+  room.act('celu', 'newMatch');
+  await settle();
+  assert.equal(room.state.match, running, 'con la partida en curso nadie la reinicia');
   console.log('  ✓ cada asiento entra con el Axie que eligió, y pueden ser el mismo');
 }
 

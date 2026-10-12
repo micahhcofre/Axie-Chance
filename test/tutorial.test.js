@@ -4,7 +4,7 @@ import { fakeDom } from './dom.mjs';
 const dom = fakeDom();
 
 const { createSteps, createTutorial, arrange, SCRIPT } = await import('../src/tutorial.js');
-const { createGame, hpOf } = await import('../src/game.js');
+const { createGame, hpOf, TUTORIAL_TARGET } = await import('../src/game.js');
 const { buildPersonalDeck, makeCard, TUNING } = await import('../src/data.js');
 const { emptyChain, playCard, scoreChain, stackOnCard, survivalOdds } = await import('../src/rules.js');
 
@@ -36,12 +36,13 @@ assert.deepEqual([...new Set(steps.map((s) => s.round))], [1, 2, 3, 4, 5], 'cinc
 
 const r1Draw = steps.find((s) => s.id === 'r1-draw');
 assert.equal(r1Draw.target(), '#field .card[data-col="0"]');
-assert.equal(r1Draw.side, 'left');
+// Sin lado fijo: el cartel elige arriba o abajo de la carta según lo que quede libre.
+assert.equal(r1Draw.side, undefined);
 assert.equal(r1Draw.bubble, 'Cadenas vivas');
 
 const r1Chain = steps.find((s) => s.id === 'r1-chain');
 assert.equal(r1Chain.target(), '#swing');
-assert.equal(r1Chain.side, 'left');
+assert.equal(r1Chain.side, undefined);
 assert.equal(r1Chain.bubble, 'Cadenas largas hacen más daño');
 
 const r1Color = steps.find((s) => s.id === 'r1-color');
@@ -88,11 +89,11 @@ assert.ok(steps.indexOf(r4Deck) === steps.indexOf(r4Rocket) + 1, 'el cohete se m
 
 const r5Stack = steps.find((s) => s.id === 'r5-stack');
 assert.equal(r5Stack.side, 'bottom');
-assert.equal(r5Stack.bubble, 'Montala en la 2ª carta');
+assert.equal(r5Stack.bubble, 'Reviví la cadena: 2ª carta');
 
 // 2. El guión no inventa cartas: reparte el mazo de verdad y hace lo que promete
 //
-// El mazo de cada uno son sus diez de fábrica más lo que se llevó del centro. Acá se
+// El mazo de cada uno son sus ocho de fábrica más lo que se llevó del centro. Acá se
 // arma el mismo mazo que tiene la partida y se comprueba que todo lo que sale en la
 // mesa esté adentro —que es lo que el jugador ve al abrirlo— y que las cadenas den los
 // números con los que está pensada la partida.
@@ -101,7 +102,7 @@ const theirs = buildPersonalDeck('plant');
 // Las dos del centro de la ronda 1: dos de las tres de color que ofrece (las tres
 // llevan Pez y Pájaro, así que cualquier par alarga la misma cadena).
 const fromCenter = [makeCard(['aquatic', 'bird', 'bug']), makeCard(['aquatic', 'bird', 'reptile'])];
-const rocketCard = makeCard(['aquatic', 'bird'], 'freegame');
+const rocketCard = makeCard(['plant', 'beast'], 'freegame');
 
 /** Lo que pasa en una ronda: el mazo puesto por el guión y las `n` cartas que salen. */
 function roundOf(seat, round, n, { own, added = [] }) {
@@ -128,44 +129,59 @@ assert.equal(r1.chain.busted, false, 'la cadena de la ronda 1 no corta');
 assert.equal(r1.damage, 10, 'la ronda 1 pega 10');
 assert.equal(roundOf('p2', 1, 2, rival).damage, 5, 'el rival pega 5 en la ronda 1');
 
-// Ronda 2: cadena larga con las dos del centro adelante; el rival se corta con la tercera
+// Ronda 2: cadena larga con las dos del centro adelante; el rival se corta con la quinta,
+// con la rueda en amarillo y no en verde
 const r2 = roundOf('p1', 2, 5, meDrafted);
 assert.equal(r2.chain.busted, false, 'las cinco cartas de la ronda 2 no cortan');
 assert.equal(r2.damage, 35, 'la ronda 2 pega 35');
-assert.equal(roundOf('p2', 2, 3, rival).chain.busted, true, 'la CPU se corta con su tercera de la ronda 2');
+const r2rival = roundOf('p2', 2, 4, rival);
+assert.equal(r2rival.chain.busted, false, 'la CPU encadena cuatro en la ronda 2');
+const r2odds = survivalOdds(r2rival.chain, r2rival.deck).p;
+assert.ok(r2odds >= 0.4 && r2odds < 0.65, `la CPU se tienta con la rueda en amarillo (${r2odds})`);
+assert.equal(roundOf('p2', 2, 5, rival).chain.busted, true, 'la CPU se corta con su quinta de la ronda 2');
 
-// Ronda 3: la racha va por Bestia, que son tres cartas en todo el mazo: con las tres
-// afuera la rueda marca 0% y la cuarta corta de verdad.
-const r3 = roundOf('p1', 3, 3, meDrafted);
-assert.equal(r3.chain.busted, false, 'con tres cartas en la ronda 3 no corta');
+// Ronda 3: la racha va por Bestia, que son dos cartas en todo el mazo: con las dos
+// afuera la rueda marca 0% y la tercera corta de verdad.
+const r3 = roundOf('p1', 3, 2, meDrafted);
+assert.equal(r3.chain.busted, false, 'con dos cartas en la ronda 3 no corta');
 assert.equal(survivalOdds(r3.chain, r3.deck).p, 0, 'la rueda de la ronda 3 llega a 0%');
-assert.equal(roundOf('p1', 3, 4, meDrafted).chain.busted, true, 'la cuarta carta de la ronda 3 corta');
+assert.equal(roundOf('p1', 3, 3, meDrafted).chain.busted, true, 'la tercera carta de la ronda 3 corta');
 
 // Ronda 4: la cadena más larga de todas
 const r4 = roundOf('p1', 4, 6, meDrafted);
 assert.equal(r4.chain.busted, false, 'las seis cartas de la ronda 4 no cortan');
 assert.equal(r4.damage, 46, 'la ronda 4 pega 46');
 
-// Ronda 5: el Rocket sale tercero y la cuarta se monta en la 2ª carta, reviviendo Planta
-const r5 = roundOf('p1', 5, 3, meRocket);
-assert.equal(r5.chain.cards[2].power, 'freegame', 'el Rocket es la tercera carta');
+// Ronda 5: la racha de Planta muere en la 2ª carta y el Rocket, tercero, la revive
+const r5 = roundOf('p1', 5, 2, meRocket);
+const plantRun = (chain) => chain.runs.find((r) => r.symbol === 'plant');
+assert.equal(plantRun(r5.chain).alive, false, 'Planta murió en la 2ª carta');
 const loose = r5.deck.pop();
-assert.ok(loose.symbols.includes('plant'), 'la cuarta carta de la ronda 5 trae Planta');
-const saved = stackOnCard(r5.chain, 1, loose);
-assert.equal(saved.busted, false, 'montada en la 2ª carta, la cadena sigue viva');
-assert.equal(scoreChain(saved).total, 13, 'montada en la 2ª carta revive Planta y suma 13');
+assert.equal(loose.power, 'freegame', 'la tercera carta de la ronda 5 es el Rocket');
+const fourth = r5.deck.pop();
+assert.equal(playCard(r5.chain, fourth).busted, true, 'sin el Rocket, la cuarta corta la cadena');
+assert.equal(plantRun(stackOnCard(r5.chain, 0, loose)).alive, false, 'en la 1ª carta no la revive');
+const revived = stackOnCard(r5.chain, 1, loose);
+assert.equal(plantRun(revived).alive, true, 'puesto en la 2ª carta, Planta revive');
+const saved = playCard(revived, fourth);
+assert.equal(saved.busted, false, 'con Planta viva, la cuarta la alarga');
+assert.equal(plantRun(saved).length, 3, 'Planta llega a 3');
+assert.equal(scoreChain(saved).total, 13, 'Pez 2 (4) + Planta 3 (9) = 13');
 assert.equal(roundOf('p2', 5, 3, rival).chain.busted, true, 'el rival se corta en su última chance');
 
 // Y la cuenta de la partida: el remate de la ronda 5 lo deja en 0 sin pasarse de
 // `overkill`, que es lo que le da su última chance.
 const hits = [r1.damage, r2.damage, 0, r4.damage, scoreChain(saved).total];
-const before = 100 - hits.slice(0, 4).reduce((a, b) => a + b, 0);
+const before = TUTORIAL_TARGET - hits.slice(0, 4).reduce((a, b) => a + b, 0);
 assert.ok(before > 0, 'el rival llega vivo a la ronda 5');
 assert.ok(hits[4] >= before, 'el remate de la ronda 5 lo deja en 0');
 assert.ok(hits[4] - before <= TUNING.overkill, 'sin pasarse: el rival tiene su última chance');
 
 // 3. Una partida guiada de punta a punta
 const game = createGame({ pace: 0 });
+// Viene de una partida con mejoras (+): el tutorial no las hereda. Con ellas, las
+// cartas del guión llevan un símbolo más, no se encuentran y la ronda 1 se cortaba.
+game.newMatch({ mode: 'cpu', axie: 'aquatic', boosts: { 'aquatic+bird': 'aquatic', 'aquatic+bug': 'aquatic' } });
 let done = false;
 const tuto = createTutorial(game, () => { done = true; });
 const st = () => game.state;
@@ -231,9 +247,9 @@ await wait(50);
 assert.ok(rivalBusts.includes(2), 'la CPU se corta en la ronda 2');
 assert.equal(st().round, 3, 'el centro se saltea en ronda 2');
 
-// Ronda 3: cadena de 3 cartas y la cuarta corta (you busted)
+// Ronda 3: cadena de 2 cartas y la tercera corta (you busted)
 for (let i = 0; i < 3; i++) await game.hit('p1');
-assert.equal(st().chains.p1.busted, true, 'la cuarta carta de la ronda 3 corta');
+assert.equal(st().chains.p1.busted, true, 'la tercera carta de la ronda 3 corta');
 await wait(50);
 assert.equal(st().round, 4, 'el centro se saltea tras el corte en ronda 3');
 
@@ -256,21 +272,23 @@ assert.equal(st().chains.p1.cards.length, 1, 'antes de ver el cohete en el mazo 
 peekDeck();
 await wait();
 
-// Ronda 5: Rocket en 3ª carta, colocar en 2ª carta para revivir planta y remate en Last Chance
+// Ronda 5: el Rocket sale tercero, revive Planta en la 2ª carta y la cuarta remata
 assert.equal(st().round, 5);
-await game.hit('p1'); // 2ª carta
-await game.hit('p1'); // 3ª carta (Rocket)
+await game.hit('p1'); // 2ª carta: Planta muere
+await game.hit('p1'); // 3ª: el Rocket, que espera columna
 await wait(20);
-assert.ok(st().freeGame.p1, 'el Rocket quedó activo');
-await game.hit('p1'); // 4ª carta (se monta con Free Game)
-assert.equal(st().pendingStack?.player, 'p1', 'la 4ª carta espera columna');
+assert.equal(st().pendingStack?.player, 'p1', 'el Rocket espera columna');
+assert.equal(st().pendingStack.card.power, 'freegame');
+assert.equal(st().chains.p1.cards.length, 2, 'el Rocket no entra en la cadena');
 
 // No permitir columna que no sea la 1 (2ª carta)
 await game.chooseStackTarget(0);
 assert.ok(st().pendingStack, 'no se puede colocar en la columna 1');
 await game.chooseStackTarget(1);
-assert.equal(st().chains.p1.busted, false, 'montada en columna 2, la cadena sigue viva');
-assert.equal(scoreChain(st().chains.p1).total, 13, 'cadena de planta revivida');
+assert.equal(plantRun(st().chains.p1).alive, true, 'Planta revivió');
+await game.hit('p1'); // 4ª carta: la que cortaba, ahora alarga Planta
+assert.equal(st().chains.p1.busted, false, 'la cuarta no corta');
+assert.equal(scoreChain(st().chains.p1).total, 13, 'cadena de Planta revivida');
 
 await game.stand('p1');
 await wait(100);

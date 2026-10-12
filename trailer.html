@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axie Chance — Tráiler</title>
+<link rel="icon" href="Icons/bird-crest.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caesar+Dressing&family=Lilita+One&family=Work+Sans:wght@400..600&display=swap">
+<!-- El tráiler se dibuja con las piezas del juego, no con dibujos nuevos: la hoja del
+     juego trae las cartas de nogal, los símbolos, los Axies y todas sus reacciones
+     (`.board-axie[data-act]`, `[data-react]`, `.fighter[data-last-chance]`).
+     `trailer.css` solo agrega lo que es del cine. -->
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="trailer.css">
+</head>
+<body class="trailer">
+
+<!-- Todo pasa adentro del cuadro: 16:9, centrado, y las medidas de adentro salen de él
+     y no de la ventana. -->
+<div class="tr-frame" id="tr-frame">
+
+  <!-- ---------- el mundo: lo que la cámara mira ---------- -->
+  <div class="tr-world" id="tr-world">
+    <!-- El temblor va en su propia capa: si compartiera elemento con el acercamiento,
+         cada sacudón le pisaría el `transform` a la cámara. -->
+    <div class="tr-quake" id="tr-quake">
+    <div class="tr-sky" id="tr-sky"></div>
+    <div class="tr-dust" id="tr-dust" aria-hidden="true"></div>
+
+    <div class="tr-ring" id="tr-ring">
+      <div class="fighter tr-seat" data-side="left" id="tr-seat-hero">
+        <div class="board-axie" id="tr-hero"></div>
+      </div>
+      <div class="fighter tr-seat" data-side="right" id="tr-seat-foe">
+        <div class="board-axie" id="tr-foe"></div>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- ---------- lo apoyado sobre la pantalla: la cámara no lo mueve ----------
+       Es lo mismo que hace la mesa del juego con las chapas: acercarse a los Axies no
+       puede empujar las cartas fuera del cuadro (ver `camera.js`). -->
+
+  <!-- La vida: dos barras y nada más. Tenían nombre y número —cuatro cosas escritas
+       para decir algo que una barra vaciándose dice sola—. -->
+  <div class="tr-plates" id="tr-plates">
+    <div class="tr-plate" id="tr-plate-hero" data-side="left"><i></i></div>
+    <div class="tr-plate" id="tr-plate-foe" data-side="right"><i></i></div>
+  </div>
+
+  <!-- Lo que está pensando cada uno. Es la mitad del chiste del juego, así que tiene el
+       mismo peso en pantalla que el bicho — y por eso va acá y no adentro del mundo: la
+       cámara se acerca a los Axies, y una nube pegada a ellos se iría fuera del cuadro
+       justo en el momento en que hay que leerla. -->
+  <div class="tr-thinks" id="tr-thinks">
+    <div class="tr-think" id="tr-think-hero" data-side="left" hidden></div>
+    <div class="tr-think" id="tr-think-foe" data-side="right" hidden></div>
+  </div>
+
+  <!-- El número del golpe. Es el único número del tráiler, y está porque el chiste
+       entero es que el 49 se convierte en 0. -->
+  <div class="tr-swing" id="tr-swing" hidden><b id="tr-swing-num">0</b></div>
+
+  <!-- La mesa. `tr-links` va debajo de las cartas y lleva las vigas que unen los
+       símbolos de una misma racha: es donde se ve la combinación. -->
+  <div class="tr-table" id="tr-table">
+    <div class="tr-gauge" id="tr-gauge"></div>
+    <div class="tr-board" id="tr-board">
+      <div class="tr-links" id="tr-links" aria-hidden="true"></div>
+      <div class="tr-chain" id="tr-chain"></div>
+    </div>
+  </div>
+
+  <!-- El caracol, que entra cuando le toca y se va cuando quiere. -->
+  <div class="tr-snail" id="tr-snail" hidden>
+    <i class="tr-slime"></i>
+    <img src="Icons/power-snail.png" alt="Lazy Snail">
+  </div>
+
+  <!-- Dos capas de efectos: los del kit (atlas de sprites) y los propios (chispas,
+       polvo, papelitos), que son los que el kit no trae. -->
+  <canvas class="tr-vfx" id="tr-vfx" aria-hidden="true"></canvas>
+  <canvas class="tr-bits" id="tr-bits" aria-hidden="true"></canvas>
+
+  <!-- Las líneas de velocidad del golpe grande y el cuadro de impacto. -->
+  <div class="tr-speed" id="tr-speed" aria-hidden="true"></div>
+
+  <!-- El montaje del arsenal y el título del final. -->
+  <div class="tr-reel" id="tr-reel" hidden></div>
+  <div class="tr-end" id="tr-end" hidden></div>
+
+  <!-- Lo que dice el narrador, escrito. Es un subtítulo, no un cartel: la historia la
+       cuenta la voz, y esto está para el que la tiene apagada o no la puede oír. Las dos
+       únicas veces que el texto se hace grande son las dos placas del tráiler. -->
+  <div class="tr-says" id="tr-says" aria-live="polite"></div>
+
+  <!-- Capas de cine: fogonazo, aberración, grano, viñeta y las barras. -->
+  <div class="tr-flash" id="tr-flash" aria-hidden="true"></div>
+  <div class="tr-danger" id="tr-danger" aria-hidden="true"></div>
+  <div class="tr-grain" aria-hidden="true"></div>
+  <div class="tr-vignette" aria-hidden="true"></div>
+  <div class="tr-bars" id="tr-bars" aria-hidden="true"><i></i><i></i></div>
+
+  <!-- La tapa: un navegador no larga sonido ni pide el CDN hasta que alguien toca. -->
+  <div class="tr-start" id="tr-start">
+    <img class="tr-start-logo" src="Icons/logo.png" alt="Axie Chance" width="320" height="238">
+    <button class="btn tr-play" id="tr-play" type="button">Ver el tráiler</button>
+    <p class="tr-start-note">70 segundos. Con sonido queda mejor.</p>
+  </div>
+
+  <!-- Los controles, que se esconden solos mientras corre. -->
+  <div class="tr-hud" id="tr-hud" hidden>
+    <button class="btn btn-ghost tr-hud-btn" id="tr-replay" type="button">Repetir</button>
+    <button class="btn btn-ghost tr-hud-btn" id="tr-sound" type="button" aria-pressed="true">Sonido</button>
+    <a class="btn btn-ghost tr-hud-btn" id="tr-goto" href="index.html">Jugar</a>
+    <div class="tr-track" id="tr-track"><i id="tr-track-fill"></i></div>
+  </div>
+</div>
+
+<script type="module" src="src/trailer.js"></script>
+</body>
+</html>

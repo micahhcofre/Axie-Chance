@@ -5,6 +5,11 @@
 //   npm run balance -- --arms base,venenoMax
 //   npm run balance -- --cpu duro              # los poderes contra otra CPU
 //   npm run balance -- --difficulties          # cuánto gana cada dificultad
+//   npm run balance -- --worth freegame=1.2,2,3  # el peso de un poder para la CPU
+//   npm run balance -- --adventure             # cuánto gana el rival de cada nivel de la Aventura
+//   npm run balance -- --adventure --levels 6,12  # solo esos niveles
+//   npm run balance -- --adventure --bare      # con un Axie pelado, sin el jugador esperado
+//   npm run balance -- --adventure --rival-hp 180 --rival-cpu duro  # para probar palancas
 //
 // Qué mide y por qué así:
 //
@@ -19,11 +24,53 @@
 // sobre repartos idénticos, así el ruido del sorteo se cancela en vez de sumarse. Sin
 // esto hacen falta miles de partidas por celda para distinguir un efecto real de la
 // suerte — y es exactamente el error que se cometió antes de que este script existiera.
-import { createGame, TUNING, hpOf, lastChance, overkillOf } from '../src/game.js';
-import { decideDraw, pickBest, pickBonus, planDraft } from '../src/ai.js';
-import { POWER_IDS } from '../src/data.js';
+import { createGame, TUNING, hpOf, lastChance, overkillOf, eggsLeft, trickTargetsFor } from '../src/game.js';
+import { decideDraw, pickBest, pickBonus, planDraft, POWER_WORTH } from '../src/ai.js';
+import { POWER_IDS, POWERS as POWER_DEFS, chooseActivePowers, makeRng, CLASS_POWER_IDS } from '../src/data.js';
+import { ADVENTURE_LEVELS, rivalExtras } from '../src/adventure.js';
+import { STARTER_PACK } from '../src/backpack.js';
 
 const AXIES = ['aquatic', 'beast', 'bird', 'plant', 'bug', 'reptile'];
+
+/**
+ * El jugador esperado de la Aventura: lo que tiene alguien que llegó a esa altura del
+ * mapa (supuestos en docs/aventura.md §5), con un Axie principal. El rival de cada nivel
+ * se mide contra él, y la regla de la escalera (`RIVAL_LADDER`) es que el rival nunca
+ * traiga más. Cada escalón dice desde qué nivel rige y lo que cambia:
+ *
+ *   1–10   el Axie pelado: el que recién empieza no sabe todavía de la mochila.
+ *   11     el paquete de bienvenida en la mochila: las que llevan su color.
+ *   31     su primera evolución (su nivel 10 de Axie); 66, la segunda; 116, la tercera;
+ *          166, la cuarta.
+ *   61     cartas del Taller y de fusionar, de su color: raras y poco comunes; desde el 81
+ *          la épica que asegura el Taller cada 50, y de a poco más; una legendaria al 181.
+ */
+const EXPECTED = [
+  { from: 1, pack: false, tiers: null, evolved: [] },
+  { from: 11, pack: true },
+  { from: 31, evolved: ['horn'] },
+  { from: 61, pack: false, tiers: ['rare', 'rare', 'uncommon', 'uncommon'] },
+  { from: 66, evolved: ['horn', 'back'] },
+  { from: 81, tiers: ['epic', 'rare', 'rare', 'uncommon'] },
+  { from: 101, tiers: ['epic', 'rare', 'rare', 'rare'] },
+  { from: 116, evolved: ['horn', 'back', 'tail'] },
+  { from: 131, tiers: ['epic', 'epic', 'rare', 'rare'] },
+  { from: 161, tiers: ['epic', 'epic', 'epic', 'rare'] },
+  { from: 166, evolved: ['horn', 'back', 'tail', 'mouth'] },
+  { from: 181, tiers: ['legendary', 'epic', 'epic', 'rare'] },
+].reduce((out, step) => [...out, { ...out.at(-1), ...step }], []);
+function expectedPlayer(level, axieId) {
+  const { pack, tiers, evolved } = EXPECTED.findLast((e) => e.from <= level);
+  const cls = axieId;
+  // Del paquete, las que llevan su color (dos o tres, según la clase): una carta sin su
+  // color en el mazo es una carta que corta, y el que entiende la mochila no se la pone.
+  // Medido: con las cuatro "mejores" aunque una no tuviera su color, el jugador perdía más
+  // que pelado.
+  const extras = pack ? STARTER_PACK.filter((c) => c.symbols.includes(cls))
+    : tiers ? rivalExtras(tiers, { id: level * 7 + AXIES.indexOf(axieId), cls, unlocked: CLASS_POWER_IDS }) : [];
+  return { extras, evolved };
+}
+
 const idle = () => new Promise((r) => setTimeout(r, 0));
 
 /**
@@ -32,34 +79,14 @@ const idle = () => new Promise((r) => setTimeout(r, 0));
  */
 const ARMS = {
   base: {},
-  // El valor viejo de la fuerza, antes de medirla. Queda como variante para que el
-  // cambio se pueda volver a comprobar en vez de tener que creerle a este comentario.
-  fuerza2: { strengthStep: 2 },
-  // Medida y descartada: el tope hace lo que dice —muerde una de cada cinco veces que
-  // se aplica veneno— pero no mueve las partidas (-1.1 ±1.2 sobre 400). Queda acá
-  // porque una variante que se midió y no sirvió también es un resultado.
-  venenoMax: { poisonStacks: false },
+  // El pulpo con y sin poderes en su carta extra, y cobrando una sola por reparto.
+  pulpoPlano: { octopusPowers: false },
+  pulpoUno: { octopusStacks: false },
+  pulpoSiempre: { octopusOnStand: false },
   // La escala de POWER_WORTH: cuán seguido la CPU cambia dos cartas sin poder por
   // una con poder. Acá el que se mide es el rival, no el juego — con el jugador
   // atado a una estrategia fija, la escala que le gana más partidas es la mejor, o
   // sea la que **baja** la columna "gana".
-  // El pulpo con y sin poderes en su carta extra.
-  pulpoPlano: { octopusPowers: false },
-  pulpoUno: { octopusStacks: false },
-  // El pulpo cobrando salga como salga el ataque, que es como estaba antes de pedirle
-  // plantarse. Queda como variante para poder volver a comprobar el cambio.
-  // El huevo sin cáscara, que es como estaba antes, y con la cáscara más chica. La
-  // cáscara pasó a ser un número fijo —5— en vez de una fracción del golpe que la
-  // rompía: se entiende, pero conviene volver a medir cuánto pesa.
-  huevoSinPuas: { eggBreak: 0 },
-  huevoPuas3: { eggBreak: 3 },
-  huevoPuas8: { eggBreak: 8 },
-  // El veneno partiéndose en tres en vez de al medio, y el que se arrastra hasta el
-  // último punto en vez de irse en 2.
-  venenoTercio: { poisonHalve: 3 },
-  venenoLargo: { poisonFloor: 0 },
-  pulpoSiempre: { octopusOnStand: false },
-  pulpoUnoYPlantado: { octopusStacks: false },
   sesgo07: { powerBias: 0.7 },
   sesgo15: { powerBias: 1.5 },
   sesgo20: { powerBias: 2 },
@@ -69,16 +96,25 @@ const ARMS = {
   overkill0: { overkill: 0 },
   overkill15: { overkill: 15 },
   overkill50: { overkill: 50 },
-  // Los flojos de la base: la bebida, el caracol y la máscara, con más.
-  bebida3: { brutalStep: 3 },
-  bebida4: { brutalStep: 4 },
-  caracol2: { snailAttacks: 2 },
-  caracolTercio: { snailShare: 3 },
-  mascara10: { steelskinBaseCap: 10 },
-  mascara8: { steelskinBaseCap: 8, steelskinFloor: 4 },
+  // Los topes de lo que queda puesto, que son los números que más mueven las copias.
+  escudo15: { shieldMax: 15 },
+  escudo30: { shieldMax: 30 },
+  veneno10: { poisonMax: 10 },
+  veneno20: { poisonMax: 20 },
+  // Lo que cuesta cada carta que roba el que sangra.
+  sangrado1: { bleedDamage: 1 },
+  sangrado3: { bleedDamage: 3 },
+  // Los valores de los poderes que más dudas dejan.
+  navaja5: { razorBleed: 5 },
+  bomba24: { bombDamage: 24 },
+  espinas10: { spikes: 10 },
 };
 
 const args = process.argv.slice(2);
+const BARE = args.includes('--bare');
+// Para probar palancas de la Aventura sin tocar la campaña: la vida del rival y su CPU.
+const RIVAL_HP = Number(args[args.indexOf('--rival-hp') + 1]) || null;
+const RIVAL_CPU = args.includes('--rival-cpu') ? args[args.indexOf('--rival-cpu') + 1] : null;
 const flag = (name, fallback) => {
   const at = args.indexOf(`--${name}`);
   return at >= 0 ? args[at + 1] : fallback;
@@ -99,12 +135,15 @@ const bestPlain = (game, s) => {
 
 /** El jugador que no se ata a nada y elige del centro con el criterio de la CPU. */
 const FREE = Symbol('libre');
+// Sus pesos quedan fijos en los de la CPU al arrancar: `--worth` mueve los de la CPU y
+// el jugador de enfrente tiene que ser siempre el mismo.
+const FREE_WORTH = { ...POWER_WORTH };
 
 /**
  * Una partida. `only` ata al jugador a ese poder; `null` es el control, que nunca
  * agarra ninguno; `FREE` elige como la CPU "normal". Devuelve 1 si gana, 0 si pierde, 0.5 si es doble KO.
  */
-async function playOne(seed, only, cpu = CPU) {
+async function playOne(seed, only, cpu = CPU, level = null) {
   const game = createGame({ pace: 0, seed });
   const seen = { p1: false, p2: false };
   let killer = null;
@@ -112,7 +151,19 @@ async function playOne(seed, only, cpu = CPU) {
     const lc = lastChance(st);
     if (lc) seen[lc] = true;
   });
-  game.newMatch({ difficulty: cpu, axie: AXIES[seed % 6] });
+  // El poder que se mide está siempre en la reserva: con uno sorteado entre cuatro o
+  // seis por clase, la mayoría de las partidas del brazo serían partidas del control.
+  // Los de las otras clases salen del mismo sorteo sembrado para todas las celdas.
+  const drawn = chooseActivePowers(makeRng(seed ^ 0x9e3779b9));
+  const activePowers = typeof only === 'string' && POWER_DEFS[only]?.symbol
+    ? drawn.map((id) => (POWER_DEFS[id].symbol === POWER_DEFS[only].symbol ? only : id))
+    : drawn;
+  if (level) {
+    const axie = AXIES[seed % 6];
+    game.newMatch({ mode: 'adventure', adventureLevel: level, axie, ...(BARE ? {} : expectedPlayer(level, axie)), ...(RIVAL_CPU ? { difficulty: RIVAL_CPU } : {}) });
+    if (RIVAL_HP) game.state.maxHp.p2 = RIVAL_HP;
+  }
+  else game.newMatch({ difficulty: cpu, axie: AXIES[seed % 6], activePowers });
 
   let guard = 0;
   while (game.state.phase !== 'matchEnd') {
@@ -121,6 +172,15 @@ async function playOne(seed, only, cpu = CPU) {
 
     if (s.phase === 'draft') {
       if (game.drafting() !== 'p1') { await idle(); continue; }
+
+      // El Trickster se cobra antes del centro: roba la de más peso, como la CPU.
+      if (s.draft.step === 'trick') {
+        const targets = trickTargetsFor(s, 'p1');
+        const best = targets.reduce((a, c) => ((POWER_WORTH[c.power] ?? 1) > (POWER_WORTH[a.power] ?? 1) ? c : a), targets[0]);
+        if (best) await game.stealCard(best.uid);
+        else await game.skipDraft();
+        continue;
+      }
 
       // La carta que paga el pulpo se elige a criterio, no atada al poder del brazo.
       // Atarla arruinaba justo al pulpo: su efecto **es** conseguir otras cartas, así
@@ -139,7 +199,7 @@ async function playOne(seed, only, cpu = CPU) {
       if (only === FREE) {
         const options = game.pickable();
         const kind = s.draft.mode === 'plain' || s.chains.p1.busted ? 'bust' : 'stand';
-        const [card] = planDraft(options, s.decks.p1, { kind }).cards;
+        const [card] = planDraft(options, s.decks.p1, { kind, weights: FREE_WORTH }).cards;
         if (card) await game.takeCard(card.uid);
         else await game.skipDraft();
         continue;
@@ -158,9 +218,9 @@ async function playOne(seed, only, cpu = CPU) {
       // que se mide es la de las cabezas y no la de los poderes.
       // Lo que necesita es la vida que le queda al otro, huevo incluido, menos su fuerza.
       const needs = lastChance(s) === 'p1'
-        ? hpOf(s, 'p2') + s.status.p2.egg - s.status.p1.strength
+        ? hpOf(s, 'p2') + s.status.p2.egg - s.status.p1.feathers * TUNING.fanStep
         : null;
-      if (decideDraw(s.chains.p1, game.unseenPool('p1'), { needs, difficulty: 'normal' })) {
+      if (decideDraw(s.chains.p1, game.unseenPool('p1'), { needs, difficulty: 'normal', saves: eggsLeft(s, 'p1') })) {
         await game.hit();
       } else {
         await game.stand();
@@ -227,6 +287,55 @@ const pct = (x) => `${(100 * x).toFixed(1)}%`;
 const signed = (x) => `${x >= 0 ? '+' : ''}${(100 * x).toFixed(1)}`;
 
 const seeds = Array.from({ length: GAMES }, (_, i) => i + 1);
+
+// El peso de un poder en `POWER_WORTH` (ver `ai.js`). No se mide cuánto le suma el
+// poder a un jugador atado a él —con el Rocket gratis ese control pierde casi siempre y
+// las anclas se juntan en el ruido—, sino directamente lo que el peso tiene que
+// lograr: que la CPU "normal" gane más partidas. El jugador de enfrente elige del
+// centro como la CPU con los pesos de hoy (`FREE_WORTH`), y cada valor se compara de a
+// pares contra el primero de la lista, que conviene que sea el actual.
+const worthFlag = flag('worth', null);
+if (worthFlag) {
+  const [power, list] = worthFlag.split('=');
+  if (!(power in POWER_WORTH)) throw new Error(`poder desconocido: ${power}`);
+  const values = list.split(',').map(Number);
+  const saved = POWER_WORTH[power];
+  console.log(`${GAMES} partidas sembradas por valor · peso de ${power} para la CPU normal (hoy ${saved})\n`);
+  const runs = [];
+  for (const value of values) {
+    POWER_WORTH[power] = value;
+    endings = freshEndings();
+    const got = [];
+    for (const seed of seeds) got.push(1 - await playOne(seed, FREE, 'normal'));
+    runs.push(got);
+    const vs = runs.length > 1 ? pairedDiff(got, runs[0]) : null;
+    console.log(`   ${String(value).padStart(5)}  gana la CPU ${pct(mean(got)).padStart(6)}` +
+      (vs ? `   ${signed(vs.diff).padStart(6)} ±${(200 * vs.err).toFixed(1)} vs ${values[0]}` : ''));
+  }
+  POWER_WORTH[power] = saved;
+  process.exit(0);
+}
+
+// La Aventura: el mismo jugador simulado contra el rival de cada nivel, con sus poderes,
+// su vida y sus partes evolucionadas. Lo que se lee es cuánto gana el rival: la curva
+// de la campaña. El jugador simulado juega como la CPU "normal", que no es un humano,
+// así que el número dice el orden y los saltos, no la dificultad que va a sentir alguien.
+if (args.includes('--adventure')) {
+  console.log(`${GAMES} partidas sembradas por nivel · el jugador juega como "normal"${BARE ? ', pelado' : ', con lo que se espera a esa altura'}\n`);
+  const only = flag('levels', null)?.split(',').map(Number);
+  for (const lvl of ADVENTURE_LEVELS.filter((l) => !only || only.includes(l.id))) {
+    endings = freshEndings();
+    const got = [];
+    for (const seed of seeds) got.push(await playOne(seed, FREE, lvl.difficulty, lvl.id));
+    const lost = got.map((x) => 1 - x);
+    const short = (c) => (c.power ? ['é', 'l', 'm'] : ['c', 'pc', 'r'])[c.symbols.length - 1];
+    const bag = lvl.extras.map(short).join(' ');
+    const tags = [lvl.difficulty, lvl.boss ? `jefe ${lvl.hp}` : '', lvl.evolved ? `evo ${lvl.evolved}` : '', bag ? `mochila ${bag}` : ''].filter(Boolean).join(' · ');
+    console.log(`   ${String(lvl.id).padStart(2)} ${lvl.rival.padEnd(12)} gana el rival ${pct(mean(lost)).padStart(6)} ±${(200 * stderr(lost)).toFixed(1)} · ` +
+      `${(endings.rounds / endings.games).toFixed(1)} rondas · ${tags}`);
+  }
+  process.exit(0);
+}
 
 // Las dificultades: el mismo jugador simulado —roba y elige del centro como la CPU
 // "normal"— contra la CPU en cada una. Lo que se lee es cuánto gana la CPU. No sirve

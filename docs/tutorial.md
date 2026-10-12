@@ -47,35 +47,49 @@ Todo texto pasa por `tr()` y lleva su entrada en `EN_STRINGS`, como el resto del
 
 ---
 
-## 3. La flecha
+## 3. La mira, el toque y el cartel
 
-Usar la flecha del propio kit de Origins, la misma familia visual que el remate
-naranja de la barra de vida:
+Hasta el 2026-09-27 era una flecha naranja del kit (`TargetPointer/arrow_target.png`) y
+una burbuja suelta. La flecha solo apuntaba en cuatro direcciones y caía en el hueco
+que le quedara —pegada al aro, entre dos carteles—, y la burbuja flotaba sin decir de
+qué hablaba. Se reemplazó por tres piezas (`createOverlay` en
+[src/tutorial.js](../src/tutorial.js)):
 
-```
-https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/TargetPointer/arrow_target.png
-```
+- **La mira**: cuatro esquinas doradas que abrazan cada objetivo con su forma (el
+  radio de su borde, más 7 px). Al aparecer se cierra sobre él como una mira que
+  engancha y después las esquinas respiran. Una por objetivo (hasta `MAX_ARROWS`);
+  varias se leen como un grupo. No apunta desde un costado, así que no hay lado que
+  elegir mal.
+- **El toque**: dos anillos que se abren desde el centro de lo que se aprieta —un botón
+  o la columna del Rocket (`TAPPABLE`)—. Anillos y no un punto, así no tapan el rótulo.
+  Las cartas del centro y tu Axie no los llevan: ya brillan, y un punto les tapaba un
+  símbolo o la cara.
+- **El cartel**: la tabla roja de las cintas de los títulos (`player_name_bg` del kit,
+  la de `.o-banner`) con letra crema y una cola del color del canto que señala el
+  centro del objetivo. Antes era la madera beige de los paneles y se perdía justo sobre
+  el panel del centro. Se prueba arriba, abajo y a los costados del objetivo y, si son
+  varios, del grupo entero; en un renglón y, si es largo, en dos. Gana el lugar que menos
+  tapa (ver §3c); arriba/abajo y un renglón se prefieren. Entra desde el lado del
+  objetivo, después respira hacia él (`tuto-callout-nudge`) y al cambiar de paso se va
+  achicándose en vez de apagarse de golpe (`dismissCallout`).
 
-- 259×260, **apunta a la izquierda** en su orientación original (rotar según el lado
-  desde el que llega).
-- **De un solo color:** se usa como máscara (`mask`) y se pinta entera de naranja
-  (`#ff9a1a`). El relleno gris del dibujo es para teñir en Unity y en la web se ve raro.
-- `arrow.png` (misma carpeta) es la versión gris sin contorno, por si hace falta
-  una variante apagada.
+Cómo se mueve:
 
-Cómo se comporta:
+- **Sigue al objetivo deslizándose.** Mira y cartel vuelven a medir cada `FOLLOW_MS`
+  (100 ms, con un timer: medir la mesa en cada cuadro despertaba la página entera) y lo
+  que ya estaba a la vista se desliza hasta el lugar nuevo (`data-glide`). Lo que recién
+  aparece no, para no entrar volando desde la esquina.
+- **Una carta que vuela no se señala.** La carta robada viaja del mazo a la mesa
+  (`is-flying`); el cartel espera a que aterrice y recién ahí entra. Antes aparecía
+  junto al mazo del rival y cruzaba la pantalla.
+- **La mira no se sale de la pantalla**: un botón pegado al borde la dejaba con dos
+  esquinas afuera.
+- **El corte se alcanza a leer.** En el tutorial el cierre de la ronda dura 2,6 s
+  (`TUTORIAL_ROUND_PAUSE`, 1,1 s en el juego): "¡Cadena rota!" queda unos 4 s en
+  pantalla, y antes se iba en menos de uno.
 
-- **Una por objetivo**: si el selector del paso marca varias cosas (las cartas Pez del
-  centro), cada una lleva la suya, todas del mismo lado si se puede (hasta
-  `MAX_ARROWS`). Ancladas con `getBoundingClientRect()` y reubicadas al redimensionar
-  o re-renderizar la mesa.
-- **Rebote suave** hacia el objetivo (8–10 px, ~1 s). Con
-  `prefers-reduced-motion`, quieta.
-- Llega por el lado que menos tapa lo que hay que ver (Axies, vidas, rueda, daño,
-  botones) y el lado se decide una vez por objetivo, para que no salte.
-- Se va apenas el jugador hace la acción, sin esperar a la siguiente.
-- Tamaño en pantalla ~40–56 px; en celular no más chica que el dedo.
-- Puede llevar una burbuja corta pegada (≤ 6 palabras), nunca un párrafo.
+Todo se anima con `transform` y `opacity`; con `prefers-reduced-motion` queda quieto (un
+anillo fijo en lugar de las ondas, sin deslizarse ni respirar).
 
 ---
 
@@ -97,11 +111,11 @@ después un SVG con recortes desenfocados que se rehacía en cada cuadro. Se sac
 entendía qué quedaba encendido, tapaba lecturas y repintaba la pantalla completa 60
 veces por segundo. `test/styles.test.js` vigila que no vuelva.
 
-**Lo que la flecha y la burbuja nunca tapan** (`ALWAYS_CLEAR` en `tutorial.js`): la barra
+**Lo que el cartel nunca tapa** (`ALWAYS_CLEAR` en `tutorial.js`): la barra
 de arriba con la salida y el menú de configuración, el menú si está abierto, las dos
 barras de vida, los dos instrumentos (daño y rueda) y los carteles.
 
-La flecha y la burbuja calculan su posición con un evaluador de candidatos (`layout`):
+El cartel calcula su posición con un evaluador de candidatos (`layout`):
 tapar un objetivo descalifica, tapar un cartel o una vida pesa ocho veces más que tapar un
 símbolo, y la madera vacía de una carta casi no cuenta (una flecha sobre el borde de una
 carta no esconde nada). Las flechas van todas del mismo lado salvo la que ahí tape algo, y
@@ -109,7 +123,7 @@ el lado que fija el guión se respeta solo si no tapa nada (en un teléfono el c
 casi toda la pantalla y el lado escrito ya no sirve). La burbuja va pegada a alguna
 flecha: lejos de ellas no se sabe de qué habla. Esa cuenta mide cada símbolo de la mesa,
 así que `place` solo la rehace cuando los objetivos, la pantalla, la burbuja o la
-cantidad de cosas en la mesa cambiaron; los demás cuadros solo miden los objetivos.
+cantidad de cosas en la mesa cambiaron; las demás vueltas solo miden los objetivos.
 
 El brillo de las cartas del centro no pasa de 18 px (`tuto-pulse-tight`): `.market-row`
 se desplaza, así que recorta todo lo que se salga de su colchón de 18 px.
@@ -121,13 +135,13 @@ Cada paso tiene tres niveles, y solo se sube de nivel si el jugador no avanza:
 | Tiempo sin actuar | Qué aparece |
 |---|---|
 | 0 s | Nada extra: solo el pulso suave en lo que se puede tocar. |
-| ~3 s | La flecha sobre el objetivo. |
-| ~7 s | La burbuja de ≤ 6 palabras. |
+| ~3 s | La mira (y el toque, si es un botón) sobre el objetivo. |
+| ~7 s | El cartel de ≤ 6 palabras. |
 
-- El **primer paso** del tutorial muestra la flecha de entrada (todavía no sabe
+- El **primer paso** del tutorial muestra la mira de entrada (todavía no sabe
   dónde mirar).
 - Las acciones no permitidas se ven **deshabilitadas**, no se explican. Si toca
-  algo bloqueado, se adelanta la flecha al objetivo correcto.
+  algo bloqueado, se adelantan la mira y el cartel al objetivo correcto.
 - El reloj de turno queda apagado durante el tutorial.
 
 ---
@@ -184,8 +198,10 @@ Cada paso tiene tres niveles, y solo se sube de nivel si el jugador no avanza:
       **de su color** —las otras se ven pero no se pueden llevar (`tutorialOwnColor`), y
       tampoco se puede dejar pasar el reparto—, porque son las que alargan la cadena de
       las rondas que siguen. En la ronda 4 da el Rocket Stamp.
-- [x] **Final:** el Rocket sale en la 3ª carta y se coloca en la 2ª columna para **revivir
-      la racha de Planta**, pegando un golpe de 13 que deja al rival en 0 (Last Chance).
+- [x] **Final:** la racha de Planta muere en la 2ª carta. El Rocket (Planta + Bestia) sale
+      en la 3ª y, como es gratis, no entra en la cadena: puesto sobre la 2ª columna **revive
+      Planta**, y la 4ª carta —que sin él cortaba— la alarga a 3. Golpe de 13 que deja al
+      rival en 0 (Last Chance).
       El rival se corta en su última oportunidad. La victoria muestra **"¡TUTORIAL
       COMPLETADO!"** con dos botones: **Ir a modo Aventura** y **Menú principal**.
       Sin lista de lo aprendido.
@@ -200,32 +216,32 @@ Cada paso tiene tres niveles, y solo se sube de nivel si el jugador no avanza:
 ## 9. Recorrido
 
 Una idea por ronda: **cadena y centro → corte del rival → corte propio → Rocket Stamp del centro →
-revivir la cadena con el Rocket para el remate en Last Chance**.
+el Rocket reviviendo una racha para el remate en Last Chance**.
 
-El guión **no inventa cartas**: el mazo de cada ronda es el mazo de verdad —las diez de
+El guión **no inventa cartas**: el mazo de cada ronda es el mazo de verdad —las ocho de
 fábrica del Axie más lo que se llevó del centro— ordenado para que salgan primero las que
 pide `SCRIPT`, y el resto queda abajo sin salir (`arrange()` en
 [src/tutorial.js](../src/tutorial.js)). Así todo lo que se roba en la mesa está en el mazo
 que se abre tocando el Axie, los dos números del panel cierran y la rueda de chances mide
 el mazo que de verdad queda. Los golpes salen de esas cartas: **10 · 35 · 0 · 46 · 13**,
-que es justo la vida del rival, y él pega **5 · 0 · 5 · 5 · 0**.
+cuatro más que la vida del rival, y él pega **5 · 0 · 5 · 5 · 0**.
 
 | Ronda | Idea | Qué pasa en la mesa | Brilla | Burbujas |
 |---|---|---|---|---|
 | 1 | **Cadena y centro** | Apertura con cadenas vivas; roba dos cartas más para alargar la cadena y ataca (10 de daño). Al atacar se abre el centro: draftea 2 cartas de su color (las ajenas se ven apagadas). Después el rival ataca. | cadenas vivas · el daño · cartas de su color | "Cadenas vivas" · "Cadenas largas hacen más daño" · "Buscá tu color" |
-| 2 | **Corte del rival** | Al abrir, tu Axie brilla y la mesa espera: tocándolo se abre el mazo, con las dos cartas que se llevó del centro adentro. Después arma racha de 5 cartas —las dos del centro adelante— y ataca (35 de daño). La CPU roba de más y se corta **en cámara lenta**. | tu Axie · el número de daño | "Tocá tu Axie: es tu mazo" · "¡Cadena rota! No comparte símbolos" |
-| 3 | **Corte propio** | La racha va por **Bestia**, que en el mazo son tres cartas y nada más: con las tres afuera la rueda marca **0%** y la 4ª carta corta de verdad (you busted). | la rueda de chances | "Chances de seguir la cadena" · "¡Cadena rota! No comparte símbolos" |
+| 2 | **Corte del rival** | Al abrir, tu Axie brilla y la mesa espera: tocándolo se abre el mazo, con las dos cartas que se llevó del centro adentro. Después arma racha de 5 cartas —las dos del centro adelante— y ataca (35 de daño). La CPU roba de más —cuatro de Planta, con la rueda ya en amarillo— y se corta **en cámara lenta**. | tu Axie · el número de daño | "Tocá tu Axie: es tu mazo" · "¡Cadena rota! No comparte símbolos" |
+| 3 | **Corte propio** | La racha va por **Bestia**, que en el mazo son dos cartas y nada más: con las dos afuera la rueda marca **0%** y la 3ª carta corta de verdad (you busted). | la rueda de chances | "Chances de seguir la cadena" · "¡Cadena rota! No comparte símbolos" |
 | 4 | **Práctica + Rocket** | Seis cartas que encajan todas: pega 46, dejando al rival en 9. Del centro solo se puede llevar el Rocket Stamp. Con el Rocket comprado, la mesa vuelve a esperar hasta que toca su Axie y lo ve en el mazo. | el Rocket en el centro · tu Axie | "Llevate el cohete" · "Tocá tu Axie: sumaste el cohete" |
-| 5 | **Rocket Stamp** | El Rocket sale tercero; la 4ª carta (Confinamiento, que trae Planta) se coloca en la 2ª columna para **revivir la racha de Planta**, alcanzando 13 de daño y dejando al rival en 0 (Last Chance). El rival se corta en su turno. Remate, "¡TUTORIAL COMPLETADO!". | el Rocket · la 2ª columna · el daño | "Montala en la 2ª carta" · "¡Rematalo!" |
+| 5 | **Rocket Stamp** | La racha de Planta muere en la 2ª carta. El Rocket (Planta + Bestia) sale tercero y es gratis: no entra en la cadena ni la corta, espera columna. Puesto en la 2ª, **revive Planta**; la 4ª carta (Planta + Reptil), que sin él cortaba, la alarga a 3: 13 de daño, y el rival queda en 0 (Last Chance). El rival se corta en su turno. Remate, "¡TUTORIAL COMPLETADO!". | la 2ª columna · la carta revivida · el daño | "Reviví la cadena: 2ª carta" · "¡Rematalo!" |
 
 El centro se saltea en las rondas 2, 3 y 5 (`tutorialSkipDraft`). Cuántas cartas
 roba la CPU lo dice `BOT_STAND_AT` (sin tope en las rondas 2 y 5: se corta). En la
 ronda 5 el rival se corta también en su Última Chance, así que el final es siempre
 victoria, sin tocarle la vida a nadie a mitad de partida.
 
-Detalle técnico del Rocket Stamp: con el Rocket en la mesa la pantalla roba sola; esa
-carta queda en `state.pendingStack` y se resuelve con `game.chooseStackTarget(col)`.
-En la ronda 5 solo se permite apilar en la 2ª columna (`colIndex: 1`) para revivir la planta.
+Detalle técnico del Rocket Stamp: al robarlo con la cadena abierta queda en
+`state.pendingStack` y se resuelve con `game.chooseStackTarget(col)`. En la ronda 5 solo
+se permite ponerlo en la 2ª columna (`colIndex: 1`), donde murió Planta.
 
 ---
 

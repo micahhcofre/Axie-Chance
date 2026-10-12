@@ -81,15 +81,15 @@ el mazo— resuelta con un clic accidental sobre un ícono de 54 píxeles.
 Ahora es una pantalla propia, y no un paso más entre dos botones. Ocupa la escena
 entera: el bicho grande a la izquierda, respirando, con una flecha de cada lado —seis se
 recorren, no se buscan—; su **nombre** y su **clase** debajo; y a la derecha un panel con
-**las diez cartas con las que arranca**, dibujadas en el mismo formato en que se van a
+**las ocho cartas con las que arranca**, dibujadas en el mismo formato en que se van a
 ver en la mesa, porque son las mismas cartas.
 
 Que se vean las cartas es todo el punto. Sin eso, elegir un Axie es elegir un dibujo:
 los seis mazos tienen exactamente la misma forma —cinco pares del color propio, una
-carta con el color propio solo y cuatro cartas ajenas— y lo único que cambia es **de qué
+carta con el color propio solo y dos cartas ajenas— y lo único que cambia es **de qué
 color** son esas repeticiones. Debajo de las cartas eso está dicho en números: la cuenta
 de cada símbolo en el mazo, de mayor a menor, con seis del propio arriba de todo y de
-tres para abajo el resto. Es la misma cuenta que después decide cada tirada.
+dos para abajo el resto. Es la misma cuenta que después decide cada tirada.
 
 A esta pantalla se llega de un solo lado: el botón de la izquierda de la portada. Elegís
 **el tuyo**, te lo deja puesto y te devuelve a la tapa sin arrancar nada — la vuelta tiene
@@ -111,7 +111,7 @@ portada propia— y su botón decía **Empezar partida**. Se fue el modo y se fu
 
 ### El (+): un símbolo de más
 
-Debajo de cada una de las diez cartas hay un **(+)**, y eso es la mejora del Axie: le
+Debajo de cada una de las ocho cartas hay un **(+)**, y eso es la mejora del Axie: le
 sumás **un símbolo** a la carta y queda puesto. Cuáles se pueden sumar no lo elige la
 pantalla, lo elige la carta ([`boostOptions`](src/data.js)):
 
@@ -120,10 +120,10 @@ pantalla, lo elige la carta ([`boostOptions`](src/data.js)):
   la cadena de tu color, que es la que tu mazo puede seguir seis veces, y no le abre la
   puerta a ningún color nuevo. Con una sola opción no hay nada que preguntar: el botón
   muestra el crest y lo pone de un toque.
-- Las **cuatro no favorables** —las que no llevan tu símbolo— admiten **uno de sus dos**,
+- Las **dos no favorables** —las que no llevan tu símbolo— admiten **uno de sus dos**,
   el que quieras. Son las cartas que no te representan, así que la mejora es decidir cuál
-  de las dos mitades ajenas pesa: un `pez+reptil` mejorado con reptil queda con **dos
-  reptiles y un pez**. Ahí el (+) sí pregunta, y abre los dos crests **debajo de su
+  de las dos mitades ajenas pesa: un `planta+reptil` mejorado con reptil queda con **dos
+  reptiles y una planta**. Ahí el (+) sí pregunta, y abre los dos crests **debajo de su
   carta** y no en un menú flotante — sobre un panel que además scrollea, un menú se abre
   lejos de la carta de la que habla.
 
@@ -458,7 +458,7 @@ vez de quedarse en un hueco transparente. Es lo que mira
 ## Reglas
 
 Es un combate. Elegís uno de los seis Axies —uno por clase— y peleás con su mazo personal
-contra la CPU, que usa otro. Los dos arrancan con **100 de vida**.
+contra la CPU, que usa otro. Los dos arrancan con **150 de vida**.
 
 Se turnan. En tu turno te reparten una carta y vas **cargando el ataque**: cada carta que
 robás lo hace más fuerte, pero si la cadena se corta el golpe falla. Al **plantarte** soltás
@@ -480,7 +480,7 @@ cuando todavía le falta —robar hasta llegar a la vida entera del rival es rob
 cortarse, y el golpe final salía en 0 casi siempre—.
 
 El daño es el puntaje de siempre, mostrado al revés: `totals[p]` es lo que repartió `p`, y
-la vida del otro es 100 menos eso ([`hpOf`](src/game.js)). Las reglas de la cadena no
+la vida del otro es 150 menos eso ([`hpOf`](src/game.js)). Las reglas de la cadena no
 cambian.
 
 **La cadena.** Cada símbolo de la **primera carta** abre una cadena. Cada carta que
@@ -503,19 +503,21 @@ la primera carta.
 <img src="Icons/bird-crest.png" width="18" alt="bird"> aparece en 3 cartas → 3² = **9**. <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"> en 2 → 2² = **4**. Total: **13**.
 <img src="Icons/beast-crest.png" width="18" alt="beast"> y <img src="Icons/plant-crest.png" width="18" alt="plant"> no estaban en la primera carta, así que no puntúan.
 
-**Tu mazo.** Cada jugador roba de su **propio mazo de 10 cartas**, armado alrededor de
+**Tu mazo.** Cada jugador roba de su **propio mazo de 8 cartas**, armado alrededor de
 su símbolo. Para <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"> Pez:
 
 | | cartas |
 |---|---|
 | 5 pares del símbolo propio | <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"><img src="Icons/beast-crest.png" width="18" alt="beast"> <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"><img src="Icons/bird-crest.png" width="18" alt="bird"> <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"><img src="Icons/plant-crest.png" width="18" alt="plant"> <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"><img src="Icons/bug-crest.png" width="18" alt="bug"> <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"><img src="Icons/reptile-crest.png" width="18" alt="reptile"> |
 | 1 carta sola | <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"> |
-| 4 cartas ajenas | <img src="Icons/beast-crest.png" width="18" alt="beast"><img src="Icons/bird-crest.png" width="18" alt="bird"> <img src="Icons/bird-crest.png" width="18" alt="bird"><img src="Icons/plant-crest.png" width="18" alt="plant"> <img src="Icons/beast-crest.png" width="18" alt="beast"><img src="Icons/plant-crest.png" width="18" alt="plant"> <img src="Icons/bug-crest.png" width="18" alt="bug"><img src="Icons/reptile-crest.png" width="18" alt="reptile"> |
+| 2 cartas ajenas | <img src="Icons/beast-crest.png" width="18" alt="beast"><img src="Icons/bug-crest.png" width="18" alt="bug"> <img src="Icons/plant-crest.png" width="18" alt="plant"><img src="Icons/reptile-crest.png" width="18" alt="reptile"> |
 
-Las ajenas salen de seis pares fijos — <img src="Icons/beast-crest.png" width="18" alt="beast"><img src="Icons/bird-crest.png" width="18" alt="bird"> <img src="Icons/bird-crest.png" width="18" alt="bird"><img src="Icons/plant-crest.png" width="18" alt="plant"> <img src="Icons/beast-crest.png" width="18" alt="beast"><img src="Icons/plant-crest.png" width="18" alt="plant">
-y <img src="Icons/bug-crest.png" width="18" alt="bug"><img src="Icons/reptile-crest.png" width="18" alt="reptile"> <img src="Icons/reptile-crest.png" width="18" alt="reptile"><img src="Icons/aquatic-crest.png" width="18" alt="aquatic"> <img src="Icons/aquatic-crest.png" width="18" alt="aquatic"><img src="Icons/bug-crest.png" width="18" alt="bug"> — de los que a cada jugador le
-tocan los cuatro que no llevan su símbolo. Son dos triángulos disjuntos, así que cada
-símbolo aparece en exactamente dos pares y a todos les sobran justo cuatro.
+Las ajenas son las tríadas de piedra-papel-tijera — <img src="Icons/plant-crest.png" width="18" alt="plant"><img src="Icons/reptile-crest.png" width="18" alt="reptile"> Roca,
+<img src="Icons/beast-crest.png" width="18" alt="beast"><img src="Icons/bug-crest.png" width="18" alt="bug"> Papel y <img src="Icons/bird-crest.png" width="18" alt="bird"><img src="Icons/aquatic-crest.png" width="18" alt="aquatic"> Tijera —: a cada jugador le tocan las
+dos que no son la suya, la que vence (**Doble Presa**) y la que lo vence
+(**Confinamiento**). Las dos no comparten ningún símbolo, y eso es a propósito: aunque un
+mismo color ajeno llegue a las seis favorables, siempre queda una ajena que no lo lleva y
+corta. No hay cadena asegurada.
 
 **No hay descarte.** Al empezar cada ronda el mazo se rebaraja entero —lo que se jugó la
 ronda pasada y lo que se sumó del centro—, como una tragamonedas. Dentro de la ronda las
@@ -730,7 +732,7 @@ Hay **seis Axies fijos, uno por clase**, en [`src/axies.js`](src/axies.js): Colm
 (<img src="Icons/reptile-crest.png" width="16" alt="reptile"> Reptil).
 
 Elegir un Axie es elegir con qué mazo jugás: **la clase del Axie es su símbolo**, y de ahí
-sale su mazo de 10 cartas. La CPU juega otro, siempre de otra clase.
+sale su mazo de 8 cartas. La CPU juega otro, siempre de otra clase.
 
 Cada Axie tiene además sus **seis partes** (`eyes`, `ears`, `mouth`, `horn`, `back`,
 `tail`). Hoy las partes solo lo dibujan: no tocan las reglas ni el mazo. El día que sí lo

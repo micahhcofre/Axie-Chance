@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axie Chance — Spot 30"</title>
+<link rel="icon" href="Icons/bug-crest.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caesar+Dressing&family=Lilita+One&family=Work+Sans:wght@400..600&display=swap">
+<!-- El spot dibuja con las piezas del juego: la carta de nogal, los símbolos y los
+     amuletos salen de `styles.css` tal cual. `spot.css` solo pone el cuadro, la
+     tipografía de cine y las capas de revelado; el movimiento entero vive en
+     `src/spot.js` y no hay una sola animación de CSS adentro del cuadro. -->
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="spot.css">
+</head>
+<body class="spot">
+
+<!-- El cuadro: negro, 16:9, centrado. Adentro va una composición de 1920x1080 px que se
+     escala entera con un solo `transform`. Todo lo de abajo está escrito en esos píxeles
+     de película, así que el spot se ve idéntico en un monitor y en un teléfono. -->
+<div class="sp-frame" id="sp-frame">
+  <div class="sp-comp" id="sp-comp">
+
+    <!-- el fondo: dos manchas de color que cambian de acto y un barrido de rayos -->
+    <div class="sp-sky" id="sp-sky"></div>
+    <div class="sp-rays" id="sp-rays"></div>
+
+    <!-- ---------- el mundo: lo único que la cámara mueve ----------
+         El piso, las vigas, las cartas y las chispas viven adentro y se acercan juntos.
+         El número, la rueda y la tipografía quedan afuera: son la lectura de la jugada,
+         no la jugada, y un acercamiento que los empuje fuera del cuadro los borra justo
+         cuando hay que leerlos (es la misma regla que las chapas de la mesa, `camera.js`). -->
+    <div class="sp-world" id="sp-world">
+      <div class="sp-floor" id="sp-floor"></div>
+
+      <!-- lo que va por detrás de las cartas: las vigas de cada racha y su resplandor -->
+      <canvas class="sp-cv" id="sp-under" width="1920" height="1080" aria-hidden="true"></canvas>
+
+      <!-- el escenario, que es lo único con arte del juego -->
+      <div class="sp-stage" id="sp-stage">
+        <div class="sp-ring" id="sp-ring" aria-hidden="true"></div>
+        <div class="sp-chain" id="sp-chain"></div>
+        <div class="sp-bars" id="sp-bars" aria-hidden="true"></div>
+      </div>
+
+      <!-- lo que va por delante: chispas, escombros, líneas de velocidad, polvo -->
+      <canvas class="sp-cv" id="sp-over" width="1920" height="1080" aria-hidden="true"></canvas>
+    </div>
+
+    <!-- El montaje del arsenal y el título del final: placas enteras, apoyadas sobre la
+         pantalla. Un acercamiento de cámara sobre un fondo a sangre le destapa el borde. -->
+    <div class="sp-reel" id="sp-reel"></div>
+    <div class="sp-logo" id="sp-logo">
+      <img id="sp-logo-img" src="logo/Axie%20Chance.png" alt="Axie Chance" width="1089" height="813">
+    </div>
+
+    <!-- el número del golpe y la cuenta que lo explica -->
+    <div class="sp-score" id="sp-score">
+      <b class="sp-num" id="sp-num">0</b>
+      <span class="sp-math" id="sp-math"></span>
+    </div>
+
+    <!-- la rueda de chances, la misma lectura que la mesa: cuánto te queda de vivir -->
+    <div class="sp-dial" id="sp-dial">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="sp-dial-bed" cx="60" cy="60" r="52"></circle>
+        <circle class="sp-dial-arc" id="sp-dial-arc" cx="60" cy="60" r="52"></circle>
+      </svg>
+      <b id="sp-dial-pct">100</b>
+    </div>
+
+    <!-- la tipografía: cada palabra es un renglón con máscara propia -->
+    <div class="sp-type" id="sp-type"></div>
+
+    <!-- el revelado: grano, viñeta, fogonazo y las barras negras. Van adentro de la
+         composición para que se escalen con ella y tapen exactamente el cuadro, ni un
+         píxel más: pegadas a la ventana, en un teléfono parado pintarían sobre el negro
+         de afuera y las barras no se verían nunca. -->
+    <div class="sp-grain" id="sp-grain" aria-hidden="true"></div>
+    <div class="sp-vig" id="sp-vig" aria-hidden="true"></div>
+    <div class="sp-flash" id="sp-flash" aria-hidden="true"></div>
+    <div class="sp-dark" id="sp-dark" aria-hidden="true"></div>
+    <div class="sp-lb" id="sp-lb" aria-hidden="true"><i></i><i></i></div>
+  </div>
+
+  <!-- la tapa: sin un toque el navegador no larga sonido -->
+  <div class="sp-start" id="sp-start">
+    <img class="sp-start-logo" src="logo/Axie%20Chance.png" alt="Axie Chance" width="1089" height="813">
+    <button class="btn sp-play" id="sp-play" type="button">Ver el spot</button>
+    <p class="sp-start-note">30 segundos. Con sonido queda mejor.</p>
+  </div>
+
+  <!-- los controles, que se esconden solos -->
+  <div class="sp-hud" id="sp-hud" hidden>
+    <button class="btn btn-ghost sp-hud-btn" id="sp-replay" type="button">Repetir</button>
+    <button class="btn btn-ghost sp-hud-btn" id="sp-sound" type="button" aria-pressed="true">Sonido</button>
+    <a class="btn btn-ghost sp-hud-btn" id="sp-goto" href="index.html">Jugar</a>
+    <div class="sp-track" id="sp-track"><i id="sp-track-fill"></i></div>
+  </div>
+</div>
+
+<script type="module" src="src/spot.js"></script>
+</body>
+</html>

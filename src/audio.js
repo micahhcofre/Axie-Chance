@@ -48,7 +48,11 @@ const MIX = {
  * lo que cuenta es el final, la nota cayéndose. Cortada a la mitad se queda con la
  * pregunta y se pierde la respuesta.
  */
-const CUT = { draw: 0.5, take: 0.25 };
+const CUT = {
+  draw: 0.5, take: 0.25,
+  // El aire del Axie que cruza: el vuelo dura lo que dura el cruce, no los dos segundos del archivo.
+  dashAquatic: 0.7, dashBeast: 0.7, dashBird: 0.7, dashBug: 0.7, dashPlant: 0.7, dashReptile: 0.7,
+};
 
 /**
  * Sonidos que no salen al tono del archivo.
@@ -232,6 +236,83 @@ export function createAudio() {
       osc.stop(at + stop);
     } catch {
       // Un navegador a medias con osciladores: el toque es decorado, no se rompe nada.
+    }
+  }
+
+  /**
+   * Ruido filtrado: el aire de algo que pasa, el chasquido de la viga, el vidrio. El
+   * kit trae golpes y estados, no esto, así que se sintetiza como en el tráiler. El
+   * ruido es uno solo, hecho la primera vez.
+   */
+  let noiseBuf = null;
+  function noise(at, dur, { type = 'bandpass', f0 = 800, f1 = 4000, q = 2, peak = 0.3, rise = 0.6, pan = 0 } = {}) {
+    try {
+      if (!noiseBuf) {
+        noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuf;
+      src.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = type;
+      filter.Q.value = q;
+      filter.frequency.setValueAtTime(f0, at);
+      filter.frequency.exponentialRampToValueAtTime(f1, at + dur);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(peak, at + dur * rise);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      src.connect(filter).connect(gain);
+      if (pan && ctx.createStereoPanner) {
+        const p = ctx.createStereoPanner();
+        p.pan.value = pan;
+        gain.connect(p).connect(sfxBus);
+      } else gain.connect(sfxBus);
+      src.start(at, Math.random() * 0.5);
+      src.stop(at + dur + 0.05);
+    } catch {
+      // decorado: sin filtros, no suena
+    }
+  }
+
+  /**
+   * Una nota de metal, la del trombón del tráiler (ver `createScore` en `trailer.js`):
+   * diente de sierra abierto por un filtro que se cierra al apagarse, con el empujón de
+   * aire antes del tono. `wobble` le pone vibrato, en semitonos: el "waaah" que tiembla.
+   */
+  function brass(at, from, to, dur, gain, wobble = 0) {
+    try {
+      const osc = ctx.createOscillator();
+      const lp = ctx.createBiquadFilter();
+      const vol = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(from, at);
+      if (to !== from) osc.frequency.exponentialRampToValueAtTime(to, at + dur * 0.9);
+      if (wobble) {
+        const lfo = ctx.createOscillator();
+        const depth = ctx.createGain();
+        lfo.frequency.value = 5.5;
+        depth.gain.setValueAtTime(0, at);
+        depth.gain.linearRampToValueAtTime(from * (2 ** (wobble / 12) - 1), at + dur * 0.5);
+        lfo.connect(depth).connect(osc.frequency);
+        lfo.start(at);
+        lfo.stop(at + dur + 0.02);
+      }
+      lp.type = 'lowpass';
+      lp.Q.value = 7;
+      lp.frequency.setValueAtTime(from * 6, at);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(180, from * 1.6), at + dur);
+      vol.gain.setValueAtTime(0.0001, at);
+      vol.gain.linearRampToValueAtTime(gain, at + 0.055);
+      vol.gain.setValueAtTime(gain, at + dur * 0.72);
+      vol.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      osc.connect(lp).connect(vol).connect(sfxBus);
+      osc.start(at);
+      osc.stop(at + dur + 0.02);
+    } catch {
+      // decorado: sin filtros, no suena
     }
   }
 
@@ -443,6 +524,91 @@ export function createAudio() {
     },
 
     /**
+     * El aire de algo que pasa volando: una carta que sale del mazo, el Axie que cruza
+     * la arena. `dur` en ms; `from`/`to`, adónde va el filtro (grave a agudo es acercarse).
+     */
+    whoosh(delay = 0, { dur = 300, from = 600, to = 4000, gain = 1, pan = 0 } = {}) {
+      const at = synthAt(delay);
+      if (at === null) return;
+      noise(at, dur / 1000, { f0: from, f1: to, q: 2.2, peak: 0.22 * gain, rise: 0.7, pan });
+    },
+
+    /** Un golpe grave contra el piso: un Axie que cae a la arena. */
+    thud(delay = 0, gain = 1) {
+      const at = synthAt(delay);
+      if (at === null) return;
+      tone(at, 'sine', [170, 0, 48, 0.2], [0.5 * gain, 0.004, 0.32], [0, 0.36]);
+      noise(at, 0.25, { type: 'lowpass', f0: 2600, f1: 300, q: 0.8, peak: 0.25 * gain, rise: 0.04 });
+    },
+
+    /** El chasquido eléctrico de una viga que se engancha; `rate` lo sube de tono. */
+    zap(delay = 0, rate = 1) {
+      const at = synthAt(delay);
+      if (at === null) return;
+      noise(at, 0.12, { f0: 5200 * rate, f1: 1800 * rate, q: 3, peak: 0.12, rise: 0.08 });
+      tone(at, 'sawtooth', [1500 * rate, 0, 420 * rate, 0.12], [0.03, 0.003, 0.13], [0, 0.14]);
+    },
+
+    /**
+     * El tono que sube antes de "¿una más?": avisa que algo va a pasar. Es el del
+     * tráiler, sobre el bus de efectos. `dur` en ms.
+     */
+    riser(delay = 0, dur = 1800) {
+      const at = synthAt(delay);
+      if (at === null) return;
+      const secs = dur / 1000;
+      tone(at, 'sawtooth', [70, 0, 700, secs], [0.09, secs * 0.92, secs], [0, secs + 0.05]);
+      noise(at, secs, { f0: 300, f1: 5000, q: 1.2, peak: 0.12, rise: 0.95 });
+    },
+
+    /**
+     * Wah — wah — wah — waaaah: el que fue por una más y se cortó. El trombón del
+     * tráiler, con la última nota temblando y una coda de dos notas más que se caen:
+     * tristeza, pero de chiste. Dura unos 2,9 s.
+     */
+    sadTrombone(delay = 0) {
+      const at = synthAt(delay);
+      if (at === null) return;
+      // Tres notas bajando de a un semitono y la cuarta larga, doblándose ocho
+      // semitonos: el "waaah" es el doblez, no la nota.
+      brass(at + 0.00, 233.08, 233.08, 0.22, 0.17);
+      brass(at + 0.26, 220.00, 220.00, 0.22, 0.17);
+      brass(at + 0.52, 207.65, 207.65, 0.22, 0.17);
+      brass(at + 0.80, 196.00, 123.47, 1.25, 0.2, 0.6);
+      // La coda: dos "bup" cortos y graves, como quien se encoge de hombros.
+      brass(at + 2.25, 110.0, 110.0, 0.16, 0.12);
+      brass(at + 2.5, 98.0, 92.5, 0.38, 0.13);
+    },
+
+    /**
+     * Baja la música un rato para que algo se oiga solo ("¿una más?", el trombón) y
+     * la devuelve despacio. `ms` es cuánto se queda abajo.
+     */
+    duck(ms = 1800, depth = 0.15) {
+      if (!musicBus) return;
+      const now = ctx.currentTime;
+      const full = musicGain();
+      ramp(musicBus.gain, full * depth, 0.25, now);
+      musicBus.gain.setValueAtTime(full * depth, now + ms / 1000);
+      musicBus.gain.linearRampToValueAtTime(full, now + ms / 1000 + 0.9);
+    },
+
+    /** Vidrio que se rompe: un golpe de ruido agudo y astillas que suenan un instante. */
+    shatter(delay = 0) {
+      const at = synthAt(delay);
+      if (at === null) return;
+      noise(at, 0.35, { type: 'highpass', f0: 2600, f1: 2400, q: 0.7, peak: 0.3, rise: 0.02 });
+      for (let i = 0; i < 16; i++) {
+        const d = Math.random() * 0.45 * Math.random();
+        noise(at + d, 0.05 + Math.random() * 0.08, {
+          f0: 3000 + Math.random() * 7000, f1: 2500 + Math.random() * 6000, q: 22, peak: 0.25 + Math.random() * 0.25, rise: 0.05,
+          pan: Math.random() * 1.4 - 0.7,
+        });
+      }
+      tone(at, 'sine', [140, 0, 50, 0.3], [0.35, 0.004, 0.35], [0, 0.4]);
+    },
+
+    /**
      * El toque de un botón. El kit no trae sonidos de interfaz —son todos golpes y
      * estados—, así que se sintetiza: sale en el acto, sin esperar ninguna descarga, y
      * un botón que suena tarde se siente roto. Es un "toc" de madera de 70 ms: un
@@ -472,6 +638,18 @@ export function createAudio() {
       if (!ctx || !prefs.music) return;
       if (list) startMusic(list);
       else fadeOut();
+    },
+
+    /**
+     * Baja de antemano el tema con el que va a arrancar `list` —el que va a sonar apenas
+     * se la pida—, para que entre con la partida y no unos segundos después. Lo usa la
+     * pantalla de carga de la Aventura (ver `loading.js`). Devuelve cuándo está listo;
+     * sin mezclador o con la música apagada, ya.
+     */
+    prepare(list) {
+      if (!ctx || !prefs.music || !PLAYLISTS[list]) return Promise.resolve();
+      const key = upcoming[list] ?? (upcoming[list] = nextTrack(list));
+      return loadTrack(key).then(() => {});
     },
 
     setSfx(on) {

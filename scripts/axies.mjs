@@ -15,6 +15,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadStarter, restLayers } from './starters.mjs';
+import { mergeEvolved } from './evolved.mjs';
+import { keyOf, comboOf, fromOf, mixedAxies, variantOf } from './mixed.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(root, '.cache');
@@ -75,17 +77,8 @@ function partCatalog(mixer) {
  * se sacan width/height, que es lo que la propia librería usa para posicionar.
  */
 function buildLayers(mixer, axie) {
-  const combo = new Map([
-    ['body', axie.body ?? 'body-normal'],
-    ['body-class', axie.class],
-    ['back', axie.parts.back],
-    ['ears', axie.parts.ears],
-    ['eyes', axie.parts.eyes],
-    ['horn', axie.parts.horn],
-    ['mouth', axie.parts.mouth],
-    ['tail', axie.parts.tail],
-  ]);
-  const variantIdx = mixer.genesStuff.getAxieColorsVariant(axie.color ?? 0, 0, axie.class);
+  const combo = comboOf(axie);
+  const variantIdx = variantOf(mixer, axie);
   const built = mixer.getAxieSpineFromCombo(combo, variantIdx, true);
   if (built.error) throw new Error(`${axie.id}: ${built.error}`);
 
@@ -111,6 +104,7 @@ function buildLayers(mixer, axie) {
     // Mismo criterio que exportAvatarLayers: el attachment homónimo, o el primero.
     const chosen = slotName in bag ? bag[slotName] : bag[Object.keys(bag)[0]];
     return {
+      slot: slotName,
       src: layer.imagePath,
       x: layer.px,
       y: layer.py,
@@ -158,15 +152,45 @@ async function checkUrls(layers) {
 if (!existsSync(AVATARS_FILE)) {
   writeFileSync(AVATARS_FILE, 'export const AVATAR_BASE = "";\nexport const AVATARS = {};\n');
 }
-const { AXIES, STARTERS } = await import(pathToFileURL(join(root, 'src', 'axies.js')).href);
+const { AXIES, STARTERS, RIVALS, partClass } = await import(pathToFileURL(join(root, 'src', 'axies.js')).href);
+
+/**
+ * Las partes de evento y místicas cuentan como de la clase del que las lleva (ver
+ * `partClass` en `axies.js`). Se verifica contra la tabla de genes: si alguna es de
+ * otra clase, el mazo evolucionado sumaría un símbolo que no le corresponde.
+ */
+function checkPartClasses(mixer) {
+  const owner = new Map();
+  for (const sample of mixer.genesStuff.partSamples) {
+    for (const skin of sample.skins) {
+      if (skin) owner.set(`${sample.partType.toLowerCase()}:${skin}`, sample.class.toLowerCase());
+    }
+  }
+  const bad = [];
+  for (const rival of Object.values(RIVALS)) {
+    for (const [type, key] of Object.entries(rival.parts)) {
+      const real = owner.get(`${type}:${key}`);
+      if (!real) bad.push(`${rival.id}: ${type} ${key} no existe en el mixer`);
+      else if (real !== partClass(key, rival.class)) {
+        bad.push(`${rival.id}: ${type} ${key} es de ${real}, no de ${partClass(key, rival.class)}`);
+      }
+    }
+  }
+  if (bad.length) {
+    console.error('partes de rivales mal:');
+    for (const m of bad) console.error(`  ${m}`);
+    process.exit(1);
+  }
+}
 
 const mixer = await loadMixer();
+checkPartClasses(mixer);
 const avatars = {};
 const all = [];
-for (const axie of Object.values(AXIES)) {
+for (const axie of await mixedAxies()) {
   const layers = buildLayers(mixer, axie);
   avatars[axie.id] = {
-    from: { class: axie.class, color: axie.color ?? 0, parts: axie.parts },
+    from: fromOf(axie),
     ...normalize(layers),
   };
   all.push(...layers);
@@ -179,6 +203,36 @@ for (const axie of Object.values(STARTERS)) {
   const layers = restLayers(await loadStarter(axie));
   avatars[axie.id] = { from: { kit: axie.kit }, ...normalize(layers) };
   console.log(`  ${axie.id.padEnd(8)} ${axie.name.padEnd(10)} ${layers.length} capas (starter ${axie.kit} del kit)`);
+}
+
+// Los del roster evolucionan (ver `evolution.js`): cada uno lleva además su pila con las
+// dos versiones de cada parte en un mismo marco (ver `scripts/evolved.mjs`). Los del
+// mixer, con el arte `-lv2` de las seis partes; los starters, con su cuerpo despierto
+// del kit, que cambia una sola.
+const PART_SET = ['eyes', 'ears', 'mouth', 'horn', 'back', 'tail'];
+const evolved = {};
+for (const axie of Object.values(AXIES)) {
+  const [base, lv2] = axie.parts
+    ? [buildLayers(mixer, axie), buildLayers(mixer, { ...axie, evolved: PART_SET })]
+    : [restLayers(await loadStarter(axie)), restLayers(await loadStarter(axie, { awake: true }))];
+  const { layers, box } = mergeEvolved(base, lv2);
+  const round = (n) => Number(n.toFixed(5));
+  evolved[axie.id] = {
+    ratio: round(box.width / box.height),
+    layers: layers.map((l) => ({
+      slot: l.slot,
+      src: l.src,
+      x: round((l.x - box.x0) / box.width),
+      y: round((l.y - box.y0) / box.height),
+      w: round(l.w / box.width),
+      h: round(l.h / box.height),
+      ...(l.part ? { part: l.part } : {}),
+      ...(l.lv2 ? { lv2: true } : {}),
+    })),
+  };
+  if (axie.parts) all.push(...lv2);
+  const parts = [...new Set(layers.filter((l) => l.lv2).map((l) => l.part))];
+  console.log(`  ${axie.id.padEnd(8)} ${axie.name.padEnd(10)} evoluciona con dibujo: ${parts.join(', ')}`);
 }
 
 const missing = await checkUrls(all);
@@ -196,7 +250,17 @@ const body = Object.entries(avatars)
       .join('\n');
     // `from` es con qué se dibujó: si el roster cambia y nadie regenera, los tests lo ven.
     const from = JSON.stringify(av.from);
-    return `  ${id}: {\n    from: ${from},\n    ratio: ${av.ratio},\n    layers: [\n${layers}\n    ],\n  },`;
+    return `  ${keyOf(id)}: {\n    from: ${from},\n    ratio: ${av.ratio},\n    layers: [\n${layers}\n    ],\n  },`;
+  })
+  .join('\n');
+
+const evolvedBody = Object.entries(evolved)
+  .map(([id, av]) => {
+    const layers = av.layers
+      .map((l) => `      { slot: '${l.slot}', src: '${l.src}', x: ${l.x}, y: ${l.y}, w: ${l.w}, h: ${l.h}` +
+        `${l.part ? `, part: '${l.part}'` : ''}${l.lv2 ? ', lv2: true' : ''} },`)
+      .join('\n');
+    return `  ${keyOf(id)}: {\n    ratio: ${av.ratio},\n    layers: [\n${layers}\n    ],\n  },`;
   })
   .join('\n');
 
@@ -224,6 +288,14 @@ export const AVATAR_BASE = '${IMAGES}';
 
 export const AVATARS = {
 ${body}
+};
+
+// Los del roster, para cuando evolucionan (ver \`scripts/evolved.mjs\`): una sola pila con
+// las dos versiones de cada parte que cambia de dibujo, en un marco que envuelve a las
+// dos. \`part\` es de qué parte es una capa y \`lv2\` la evolucionada; sin \`part\`, la
+// capa es la misma siempre. \`axieArt\` enciende la versión que toca de cada parte.
+export const EVOLVED = {
+${evolvedBody}
 };
 
 // Partes válidas por clase, para armar el roster de \`src/axies.js\`. Cambiar una

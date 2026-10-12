@@ -47,14 +47,65 @@ const PICKS = {
   poison: 'poison_apply',
   feather: 'feather',
   strength: 'dmg_boost',
-  brutal: 'power_gain',
   octopus: 'buff_apply',
   bubble: 'bubble',
   pot: 'heal',
   leaf: 'leaf',
   snail: 'weak',
   leech: 'drain',
-  steelskin: 'shield_boost',
+  // La máscara de Gecko: las púas rosas que le crecen del piso al Axie. Las espinas que
+  // vuelven al que pega son `eggThorns` (`reflect_damage`), en `ui.js`.
+  steelskin: 'fury_form',
+  // Los poderes que llegaron después, cada uno con el suyo: lo que el kit dibujó para
+  // ese estado (sangrado, silencio, sueño, maldición, bloqueo de cura…), y los que se
+  // tiran, con el lanzamiento de su clase.
+  bleed: 'bleed_apply',
+  shuriken: 'bird_throw',
+  dagger: 'beast_throw',
+  // Los que pegan, con el golpe de su clase del kit (el que no usa el ataque: esos son
+  // los `slash`), arrancados en su impacto: el martillo de Pájaro, la navaja de Bestia,
+  // la medusa de Pez, los guantes y el filo de Reptil.
+  hammer: 'bird_smash',
+  razor: 'beast_gore',
+  jellyfish: 'aquatic_smash',
+  gloves: 'reptile_bite',
+  edge: 'reptile_smash',
+  // Las plumas del abanico suman daño: la ganancia de poder del kit.
+  fan: 'power_gain',
+  // Lo que la herida abierta le devuelve al que la abrió: la cura potenciada del kit.
+  wound: 'healing_boost',
+  // La almohada que frena el golpe: el Steelskin del kit ("recibe 10 menos").
+  pillow: 'shield_boost',
+  maker: 'summon_on_cast',
+  bubbleBomb: 'bubble_bomb',
+  stun: 'stunned',
+  silence: 'silence',
+  rage: 'rage',
+  fury: 'fury_on_transfrom',
+  cleanser: 'cleanser',
+  cleanse: 'cleanse',
+  cure: 'cure',
+  sleep: 'sleep',
+  cocoon: 'secret_apply',
+  scanner: 'dispel',
+  hex: 'hex',
+  doubt: 'doubt',
+  healBlock: 'heal_block',
+  debuff: 'debuff_apply',
+  // Los amuletos neutrales de la Aventura: los de las clases escondidas del kit (Dawn,
+  // Dusk, Mech), que ninguna clase del juego usa, y los estados que faltaban.
+  focus: 'mech_cast',
+  lens: 'stealth',
+  spell: 'dusk_cast',
+  mirror: 'dawn_projectile',
+  energy: 'fragile',
+  papa: 'dawn_smash',
+  mama: 'dawn_bite',
+  blood: 'dusk_gore',
+  dispel: 'dusk_slash',
+  stamp: 'mech_throw',
+  tape: 'taunt',
+  gift: 'summon_on_death',
   // La pantalla del final (ver `result.js`): el despertar dorado sobre el que ganó, la
   // marca de la muerte sobre el que cayó y el mareo sobre los dos del doble KO. Son los
   // mismos del sonido de cada remate (`win`, `lose`, `tie` en `scripts/sfx.mjs`).

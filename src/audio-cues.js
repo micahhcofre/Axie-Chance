@@ -13,8 +13,7 @@
 // Lo único que no se deduce acá es el golpe, porque no se oye cuando el estado cambia
 // sino cuando el efecto llega —hasta 700 ms después—: eso lo larga `playHit`, que es
 // quien sabe de ese instante.
-import { PLAYERS, TARGET, hpOf, ownedBy } from './game.js';
-import { hitDelay } from './vfx.js';
+import { PLAYERS, hpOf, maxHpOf, ownedBy, ONE_MORE_FLIP } from './game.js';
 
 /**
  * Cuánto más agudo suena el tic por cada carta que se suma a la cadena, y hasta dónde.
@@ -50,7 +49,6 @@ function snapPlayer(state, player) {
     cards: chain.cards.length + (chain.bustCard ? 1 : 0),
     busted: chain.busted,
     egg: st.egg,
-    eggBreak: st.eggBreak,
     // Todas sus cartas. Se cuenta con `ownedBy` y no con el mazo pelado porque el
     // mazo sube solo al cerrar el turno, cuando la cadena vuelve adentro, y eso no es
     // haber agarrado nada: `ownedBy` incluye lo que está en la mesa, así que la
@@ -83,14 +81,6 @@ export function createCues(audio) {
     // cosa —una cadena de 5 cartas que "vuelve" a 1, la vida entera de golpe—.
     if (!before || state.round < before.round || state.hitId < before.hitId) return music(state, null);
 
-    // Si en este repintado se soltó un ataque, todo lo que venga con él tiene que
-    // esperar a que el golpe llegue: el estado cambia al soltarlo, pero el impacto se
-    // ve y se oye hasta 700 ms más tarde.
-    const swung = state.hitId !== before.hitId && state.lastHit;
-    const impact = swung
-      ? hitDelay(state.lastHit.amount === 0 ? 'bust' : state.symbols[state.lastHit.by])
-      : 0;
-
     for (const player of PLAYERS) {
       const now = last[player];
       const was = before[player];
@@ -102,15 +92,14 @@ export function createCues(audio) {
       // desarme que llega 700 ms después: lo que el jugador tiene que oír es que su
       // carta no enganchó, y eso pasa cuando la ve. Puesto con la animación llegaba
       // tarde, y para entonces ya había leído en la pantalla que se le había cortado.
+      //
+      // La de "¿una más?" sale de espaldas y en cámara lenta: suena cuando se da vuelta.
       if (now.cards > was.cards) {
-        if (now.busted) audio.sfx('bust');
-        else audio.sfx('draw', { rate: chainRate(now.cards) });
-      }
-
-      // El escudo que se gasta del todo devuelve la cáscara, justo después del golpe,
-      // si había huevos cargándola: el escudo de la máscara solo no devuelve nada.
-      if (was.egg > 0 && now.egg === 0 && was.eggBreak > 0 && now.eggBreak === 0) {
-        audio.sfx('thorns', { delay: impact + 200 });
+        const bet = state.oneMore;
+        const epic = bet?.player === player && (bet.stage === 'draw' || bet.stage === 'bust');
+        const delay = epic ? ONE_MORE_FLIP : 0;
+        if (now.busted) audio.sfx('bust', { delay });
+        else audio.sfx('draw', { rate: chainRate(now.cards), delay });
       }
 
       // Una carta más en el mazo es una carta que se llevó del centro.
@@ -139,7 +128,8 @@ export function createCues(audio) {
       if (before?.phase !== 'matchEnd') audio.music(null);
       return;
     }
-    const low = PLAYERS.some((p) => hpOf(state, p) <= TARGET * LOW_HP);
+    // Contra un jefe de la Aventura la música es la del jefe desde la primera carta.
+    const low = state.adventure?.boss || PLAYERS.some((p) => hpOf(state, p) <= maxHpOf(state, p) * LOW_HP);
     audio.music(low ? 'boss' : 'battle');
   }
 

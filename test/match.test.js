@@ -2,8 +2,10 @@
 import assert from 'node:assert/strict';
 import {
   aimMs, createGame, TARGET, TUNING, PLAYERS, MARKET_SIZE, CLOCK, hpOf, lastChance, matchResult, overkillOf, ownedBy,
+  oneMoreOf, projectedHit, koInOf, KO_COUNTDOWN, leavesLastChance,
 } from '../src/game.js';
-import { scoreChain } from '../src/rules.js';
+import { playCard, scoreChain } from '../src/rules.js';
+import { SYMBOLS, makeCard } from '../src/data.js';
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
 const other = (p) => (p === 'p1' ? 'p2' : 'p1');
@@ -44,6 +46,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         pool: s.pool.length + s.market.length,
         // Cada pulpo puesto paga una carta de más, aparte del reparto.
         octopus: s.status[s.draft.order[0]].stacked,
+        // Y cada Trickster le roba una al otro antes del centro.
+        tricks: s.status[s.draft.order[0]].tricks,
       };
     } else if (s.phase !== 'draft' && before) {
       const p = before.player;
@@ -56,6 +60,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
         busted: s.chains[p].busted,
         octopus: before.octopus,
         extra: before.octopus - s.status[p].stacked,
+        tricks: before.tricks,
       });
       before = null;
     }
@@ -72,10 +77,10 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       openers.push(s.order[0]);
     }
 
-    // Invariante: 86 comunes + 10 de cada mazo base, nunca se pierde ni se duplica nada.
+    // Invariante: 86 comunes + 8 de cada mazo base, nunca se pierde ni se duplica nada.
     assert.equal(
       s.pool.length + s.market.length + owned(s, 'p1') + owned(s, 'p2'),
-      106,
+      102,
       'cartas totales en juego',
     );
     // Ninguna carta está en dos lados a la vez: el pulpo saca cartas del reparto y
@@ -102,6 +107,14 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
     if (s.phase === 'draft') {
       const picking = game.drafting();
       if (picking === 'p2') { await idle(); continue; }
+      // El Trickster se cobra antes del centro: ahí no se elige del centro, se apaga una
+      // carta del rival (o ninguna).
+      if (s.draft.step === 'trick') {
+        const [target] = game.trickTargets();
+        if (target) await game.stealCard(target.uid);
+        else await game.skipDraft();
+        continue;
+      }
       const options = game.pickable();
       assert.ok(options.length <= MARKET_SIZE, 'se elige solo entre las cartas del centro');
       assert.ok(options.every((c) => s.market.includes(c)), 'las opciones salen del centro');
@@ -110,6 +123,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
       if (options.length === 0) {
         assert.ok(s.market.length > 0 && s.market.every((c) => c.power),
           'sin nada elegible, el centro es todo poderes');
+        // No se llevó nada: la rama del reparto anterior no dice nada de este.
+        if (!s.draft.mode) p1Mode = null;
         if (game.canRenew('p1')) game.renewMarket();
         else await game.skipDraft();
         continue;
@@ -150,13 +165,16 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
 
     while (drafts.length) {
       const d = drafts.shift();
-      // El que no repartió no toca su mazo: cada uno se lleva lo suyo en su turno.
-      assert.equal(d.otherGain, 0, `${other(d.player)} sumó en el reparto ajeno`);
+      // El que no repartió no suma nada: cada uno se lleva lo suyo en su turno. Solo
+      // puede perder lo que le robe el Trickster del que reparte, una carta por copia.
+      const stolen = -d.otherGain;
+      assert.ok(stolen >= 0 && stolen <= d.tricks,
+        `${other(d.player)} cambió ${d.otherGain} cartas en el reparto ajeno (tricksters: ${d.tricks})`);
       // Las cartas del pulpo se cuentan aparte: son de más, no parte del reparto. Así
       // los invariantes del reparto siguen siendo los de siempre en vez de aflojarse.
       assert.ok(d.extra >= 0 && d.extra <= d.octopus,
         `${d.player} cobró ${d.extra} cartas de pulpo y debía ${d.octopus}`);
-      const draftGain = d.gain - d.extra;
+      const draftGain = d.gain - d.extra - stolen;
       // Nadie se lleva más de dos cartas del reparto, y una cadena cortada nunca llega
       // a dos: le toca una sola, y sin poder.
       assert.ok(draftGain >= 0 && draftGain <= 2, `${d.player} sumó ${draftGain}`);
@@ -196,7 +214,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   // turnos seguidos al cambiar de ronda.
   assert.deepEqual(openers, openers.map(() => 'p1'), 'abre siempre el jugador');
   assert.ok(gains.includes(1) && gains.includes(2), 'se probaron poder y cantidad');
-  assert.equal(s.pool.length + s.market.length + owned(s, 'p1') + owned(s, 'p2'), 106);
+  assert.equal(s.pool.length + s.market.length + owned(s, 'p1') + owned(s, 'p2'), 102);
   console.log(
     `  ${difficulty.padEnd(6)} ${s.totals.p1} — ${s.totals.p2} en ${s.round} rondas` +
       ` · mazos ${owned(s, 'p1')}/${owned(s, 'p2')}` +
@@ -220,8 +238,19 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
 
 // El reloj: al que no juega su turno a tiempo el juego lo planta y ataca con lo que
 // llegó a robar, y al que no elige del centro a tiempo se queda sin carta.
-// La CPU no lleva reloj.
+// Solo en red: contra la CPU (y en la Aventura) no hay a quién hacer esperar.
 {
+  for (const mode of ['cpu', 'adventure']) {
+    const solo = createGame({ pace: 0, seed: 4, clock: { turn: 40, draft: 25 } });
+    let ticked = false;
+    solo.subscribe((s) => { if (s.clock) ticked = true; });
+    solo.newMatch({ mode, difficulty: 'normal', axie: 'aquatic', adventureLevel: 1 });
+    await new Promise((r) => setTimeout(r, 120));
+    assert.equal(ticked, false, `${mode}: sin reloj`);
+    assert.ok(!solo.state.roundScores.p1, `${mode}: nadie se planta por el jugador`);
+    solo.abortMatch();
+  }
+
   const game = createGame({ pace: 0, seed: 4, clock: { turn: 40, draft: 25 } });
   const until = async (ok, what) => {
     for (let i = 0; i < 400; i++) {
@@ -230,9 +259,7 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
     }
     assert.fail(what);
   };
-  let botClock = false;
-  game.subscribe((s) => { if (s.turn === 'p2' && s.clock) botClock = true; });
-  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+  game.newMatch({ mode: 'net', axie: 'aquatic', axie2: 'plant' });
 
   await until(() => game.state.turn === 'p1', 'no arranca el turno');
   const c = game.state.clock;
@@ -256,9 +283,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.equal(owned(game.state, 'p1'), deck, 'sin elegir no se lleva nada');
 
   await until(() => game.state.round === 2 || game.state.phase === 'matchEnd',
-    'la CPU no cierra la ronda');
-  assert.equal(botClock, false, 'la CPU juega sin reloj');
-  game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+    'el otro asiento no cierra la ronda');
+  game.abortMatch();
 }
 
 // No hay descarte: cada ronda arranca con todas las cartas propias barajadas de nuevo.
@@ -347,13 +373,14 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   assert.equal(CLOCK.draft, 20000, 'el reloj del draft por defecto dura 20 segundos');
 
   const game = createGame({ pace: 0, seed: 10, clock: CLOCK });
-  game.newMatch({ difficulty: 'normal', axie: 'plant' });
+  game.newMatch({ mode: 'net', axie: 'plant', axie2: 'aquatic' });
   let guard = 0;
   while (!(game.state.phase === 'draft' && game.drafting() === 'p1')) {
     assert.ok(guard++ < 4000, 'no se llegó al reparto del jugador');
     const s = game.state;
-    if (s.phase === 'draft' || s.busy || s.turn !== 'p1') await idle();
-    else await game.stand();
+    if (s.phase === 'draft' && game.drafting()) await game.skipDraft(game.drafting());
+    else if (game.acting()) await game.stand(game.acting());
+    else await idle();
   }
 
   const s = game.state;
@@ -514,7 +541,8 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
   game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
   await idle();
   game.state.totals.p1 = TARGET - 1;
-  game.state.status.p1.strength = TUNING.overkill + 5;
+  // Las plumas del abanico suman un número fijo al golpe: con esto se pasa del cero.
+  game.state.status.p1.feathers = Math.ceil((TUNING.overkill + 5) / TUNING.fanStep);
   await game.stand();
   let guard = 0;
   while (game.state.phase !== 'matchEnd') {
@@ -641,5 +669,199 @@ for (const difficulty of ['facil', 'normal', 'duro']) {
 }
 
 console.log('✓ levantarse de la mesa ok');
+
+// "¿Una más?": el ataque armado no es K.O. directo —acá lo tumba, pero le deja la
+// última chance—, una carta del mazo lo haría pasar el overkill y otra corta la cadena.
+// Antes de robar se anuncia; si engancha y pasa el overkill, ataca solo y el rival no
+// tiene última chance, por la regla de siempre. Si corta, cero como cualquier corte.
+{
+  /**
+   * Una partida con el jugador en su turno, el mazo puesto a mano (se roba desde el
+   * final) y el rival con la vida justa para que la carta que engancha lo deje un
+   * punto más allá del overkill.
+   */
+  async function gamble(order) {
+    const game = createGame({ pace: 0, seed: 7 });
+    const stages = [];
+    game.subscribe((s) => {
+      const tag = s.oneMore && `${s.oneMore.player}:${s.oneMore.stage}`;
+      if (tag && stages[stages.length - 1] !== tag) stages.push(tag);
+    });
+    const halo = new Set();
+    game.subscribe((s) => halo.add(lastChance(s)));
+    game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+    await idle();
+    const s = game.state;
+    s.status.p1.feathers = 40 / TUNING.fanStep;
+    const chain = s.chains.p1;
+    const live = chain.cards[0].symbols[0];
+    const dead = Object.keys(SYMBOLS).find((x) => !chain.cards[0].symbols.includes(x));
+    const cards = { live: makeCard([live]), dead: makeCard([dead]) };
+    s.decks.p1 = order.map((k) => cards[k]);
+    const after = projectedHit({ ...s, chains: { ...s.chains, p1: playCard(chain, cards.live) } }, 'p1');
+    s.totals.p1 = TARGET - (after - TUNING.overkill - 1);
+    const now = projectedHit(s, 'p1');
+    assert.ok(now >= hpOf(s, 'p2'), 'lo que tiene armado ya lo tumba…');
+    assert.ok(now - hpOf(s, 'p2') <= TUNING.overkill, '…pero le deja la última chance');
+    return { game, stages, halo };
+  }
+
+  // La que engancha sale primero: K.O. directo.
+  {
+    const { game, stages, halo } = await gamble(['dead', 'live']);
+    assert.equal(oneMoreOf(game.state, 'p1'), true, 'una carta da el K.O. directo y otra corta: es la apuesta');
+    await game.hit();
+    let guard = 0;
+    while (game.state.phase !== 'matchEnd') {
+      assert.ok(guard++ < 400, 'la partida no termina');
+      await idle();
+    }
+    const s = game.state;
+    assert.deepEqual(stages, ['p1:ask', 'p1:draw', 'p1:ko'], 'se anuncia, la carta cae en cámara lenta y es K.O.');
+    assert.ok(overkillOf(s, 'p2') > TUNING.overkill, 'por overkill');
+    assert.ok(!halo.has('p2'), 'el rival no tiene última chance');
+    assert.equal(s.roundScores.p2, null, 'ni devuelve el golpe');
+    assert.equal(matchResult(s), 'p1');
+  }
+
+  // La que corta sale primero: cero, y la partida sigue.
+  {
+    const { game, stages } = await gamble(['live', 'dead']);
+    const hp = hpOf(game.state, 'p2');
+    await game.hit();
+    let guard = 0;
+    while (game.state.turn === 'p1' || game.state.busy) {
+      assert.ok(guard++ < 400, 'el turno no termina');
+      await idle();
+    }
+    assert.deepEqual(stages.slice(0, 2), ['p1:ask', 'p1:bust'], 'se anuncia y se corta');
+    assert.equal(game.state.roundScores.p1, 0);
+    assert.equal(hpOf(game.state, 'p2'), hp, 'el corte no pega');
+    assert.notEqual(game.state.phase, 'matchEnd');
+  }
+
+  // Sin riesgo, sin K.O. directo posible o con el K.O. directo ya armado, no hay
+  // pregunta: es un robo cualquiera.
+  {
+    const { game } = await gamble(['live', 'live']);
+    assert.equal(oneMoreOf(game.state, 'p1'), false, 'sin carta que corte no hay apuesta');
+    const [deadCard] = (await gamble(['dead'])).game.state.decks.p1;
+    const mixed = [deadCard, game.state.decks.p1[0]];
+    game.state.decks.p1 = [deadCard];
+    assert.equal(oneMoreOf(game.state, 'p1'), false, 'sin carta que dé el K.O. directo tampoco');
+    game.state.decks.p1 = mixed;
+    assert.equal(oneMoreOf(game.state, 'p1'), true);
+    game.state.totals.p1 = TARGET - 1;
+    assert.equal(oneMoreOf(game.state, 'p1'), false, 'si ya es K.O. directo, se planta: no hay nada que preguntar');
+  }
+  console.log('  ¿una más?: K.O. directo por overkill, corte y cuándo no se pregunta');
+}
+
+// La cuenta atrás del K.O.: cuántas cartas que sigan la racha más larga le faltan para
+// el K.O. —sin vida y sin última chance, pasado el overkill—. Se muestra desde
+// `KO_COUNTDOWN`, se recalcula con cada carta que engancha y nunca va para atrás: baja
+// por lo menos uno, y más si la carta suma dos.
+{
+  // Con 40 de plumas los golpes son grandes desde la primera carta: da para pasar el
+  // overkill con un rival que todavía tiene vida.
+  const setup = async () => {
+    const game = createGame({ pace: 0, seed: 7 });
+    game.newMatch({ difficulty: 'normal', axie: 'aquatic' });
+    await idle();
+    game.state.status.p1.feathers = 40 / TUNING.fanStep;
+    return game;
+  };
+  // Lo que pega la cadena de ahora más `n` cartas de un símbolo.
+  const hitAfter = (s, n, sym) => {
+    let c = s.chains.p1;
+    for (let i = 0; i < n; i++) c = playCard(c, makeCard([sym]));
+    return projectedHit({ ...s, chains: { ...s.chains, p1: c } }, 'p1');
+  };
+  // La vida del rival para que ese golpe sea K.O. justo: un punto pasado el overkill.
+  const koAt = (hit) => TARGET - (hit - TUNING.overkill - 1);
+
+  // La cuenta: la racha más larga, un eslabón por carta, hasta pasar el overkill.
+  {
+    const game = await setup();
+    const s = game.state;
+    const [a] = s.chains.p1.cards[0].symbols;
+    for (const n of [1, 3, KO_COUNTDOWN]) {
+      s.totals.p1 = koAt(hitAfter(s, n, a));
+      assert.equal(koInOf(s, 'p1'), n, `a ${n} del K.O.`);
+    }
+    s.totals.p1 = koAt(hitAfter(s, KO_COUNTDOWN + 1, a));
+    assert.equal(koInOf(s, 'p1'), null, 'más lejos no se cuenta');
+    s.totals.p1 = koAt(projectedHit(s, 'p1'));
+    assert.equal(koInOf(s, 'p1'), 0, 'con lo que tiene ya es K.O.');
+    assert.equal(koInOf(s, 'p2'), null, 'ni fuera de su turno');
+  }
+
+  // Lo deja en cero pero se levanta: eso no es el K.O., y se avisa.
+  {
+    const game = await setup();
+    const s = game.state;
+    const [a] = s.chains.p1.cards[0].symbols;
+    const now = projectedHit(s, 'p1');
+    s.totals.p1 = TARGET - now;
+    assert.equal(leavesLastChance(s, 'p1'), true, 'justo en cero: queda con última chance');
+    assert.ok(koInOf(s, 'p1') > 0, 'y la cuenta sigue hasta el K.O.');
+    s.totals.p1 = TARGET - (now - TUNING.overkill);
+    assert.equal(leavesLastChance(s, 'p1'), true, 'en el tope del overkill todavía se levanta');
+    s.totals.p1 = koAt(now);
+    assert.equal(leavesLastChance(s, 'p1'), false, 'pasado el overkill es K.O.');
+    s.totals.p1 = TARGET - now - 1;
+    assert.equal(leavesLastChance(s, 'p1'), false, 'si no lo tumba no hay nada que avisar');
+    s.totals.p1 = koAt(hitAfter(s, 2, a));
+    assert.equal(koInOf(s, 'p1'), 2);
+  }
+
+  // Robando: cada carta que engancha la baja de a uno.
+  {
+    const game = await setup();
+    const s = game.state;
+    const [a] = s.chains.p1.cards[0].symbols;
+    s.decks.p1 = [makeCard([a]), makeCard([a]), makeCard([a])];
+    s.totals.p1 = koAt(hitAfter(s, 8, a));
+    const counts = [koInOf(s, 'p1')];
+    for (let i = 0; i < 3; i++) {
+      await game.hit();
+      await idle();
+      counts.push(koInOf(game.state, 'p1'));
+    }
+    assert.deepEqual(counts, [8, 7, 6, 5], 'baja de a uno con cada carta que sigue la racha');
+  }
+
+  // La carta de dos símbolos alarga las dos rachas: se recalcula y salta más de uno.
+  // Abre con A y B de un eslabón (2 + 40 de fuerza). El K.O. pide 53: con solo A hacen
+  // falta tres (45, 50, 57); con A+B quedan dos y dos (48), y una A más ya son 53.
+  {
+    const game = await setup();
+    const s = game.state;
+    const [a, b] = s.chains.p1.cards[0].symbols;
+    assert.ok(b, 'la carta que abre tiene dos símbolos');
+    s.decks.p1 = [makeCard([a]), makeCard([a, b])];
+    s.totals.p1 = koAt(53);
+    assert.equal(koInOf(s, 'p1'), 3);
+    await game.hit();
+    await idle();
+    assert.equal(koInOf(game.state, 'p1'), 1, 'de 3 a 1 de un salto');
+  }
+
+  // Nunca para atrás: lo que ya bajó queda guardado (`koCount`), y si la cuenta de la
+  // racha más larga diera más —un Rocket montado en otra columna, una carta evolucionada
+  // que suma dos veces un símbolo—, se queda con lo que ya había bajado.
+  {
+    const game = await setup();
+    const s = game.state;
+    const [a] = s.chains.p1.cards[0].symbols;
+    s.totals.p1 = koAt(hitAfter(s, 4, a));
+    assert.equal(koInOf(s, 'p1'), 4);
+    s.koCount = { player: 'p1', n: 2 };
+    assert.equal(koInOf(s, 'p1'), 2, 'se queda con lo que ya bajó');
+    s.koCount = { player: 'p2', n: 1 };
+    assert.equal(koInOf(s, 'p1'), 4, 'lo guardado es de quien juega');
+  }
+  console.log('  cuenta atrás del K.O. y aviso de última chance');
+}
 
 console.log('✓ flujo de partida ok');

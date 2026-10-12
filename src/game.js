@@ -1,8 +1,9 @@
-import { buildPool, shuffle, makeRng, cardLabel, crest, powerIcon, POWERS, TUNING, chooseActivePowers, makeCard } from './data.js';
-import { AXIES, AXIE_IDS, axie, deckFor } from './axies.js';
-import { emptyChain, playCard, scoreChain, stackOnCard } from './rules.js';
-import { decideDraw, planDraft, pickBest, pickBonus, sloppyDraft, renewsMarket } from './ai.js';
-import { getAdventureLevel } from './adventure.js';
+import { buildPool, shuffle, makeRng, cardLabel, crest, powerIcon, POWERS, TUNING, chooseActivePowers, makeCard, makeJelly, cleanExtras, extraCards } from './data.js';
+import { AXIES, AXIE_IDS, axie, deckFor, evolvedId } from './axies.js';
+import { bestStack, emptyChain, isFreeStack, playCard, scoreChain, stackOnCard } from './rules.js';
+import { decideDraw, planDraft, pickBest, pickBonus, sloppyDraft, renewsMarket, POWER_WORTH } from './ai.js';
+import { getAdventureLevel, adventurePowers, adventureCharms, levelTitle } from './adventure.js';
+import { isStage, pickStage, TUTORIAL_STAGE } from './stages.js';
 import { tr } from './i18n.js';
 
 // Los números de los poderes viven en `data.js`, al lado de los carteles que los
@@ -16,8 +17,26 @@ export const PLAYERS = ['p1', 'p2'];
  * hace al rival, así que `totals[p]` es "daño repartido por p" y la vida que le
  * queda a alguien es TARGET menos el daño del otro (ver `hpOf`). Cuando uno llega
  * a cero le queda un golpe más, salvo overkill (ver `lastChance`).
+ *
+ * Con el mazo de 8 cartas los turnos pegan más fuerte y con 100 la partida se iba en
+ * diez rondas; 150 le devuelve el aire sin volver a las partidas largas.
  */
-export const TARGET = 100;
+export const TARGET = 150;
+/**
+ * La vida del tutorial. Su guión está contado para 100: los cinco golpes del jugador
+ * suman justo lo que hace falta para que el remate de la ronda 5 deje al rival en 0.
+ */
+export const TUTORIAL_TARGET = 100;
+/** La vida con la que arrancó esta partida: la del juego, o la del tutorial. */
+export const maxHpOf = (state, player) =>
+  state?.maxHp?.[player] ?? (state?.tutorial ? TUTORIAL_TARGET : TARGET);
+/** Lo que se ve el cierre de una ronda antes de que la siguiente arranque sola. */
+const ROUND_PAUSE = 1100;
+/**
+ * En el tutorial, más: el cartel del corte ("¡Cadena rota!") sale cuando la carta
+ * aterriza y con 1,1 s se iba antes de terminar de leerlo.
+ */
+const TUTORIAL_ROUND_PAUSE = 2600;
 /** Cartas boca arriba en el centro. Se repone en el acto al llevarse una. */
 export const MARKET_SIZE = 6;
 /**
@@ -27,6 +46,42 @@ export const MARKET_SIZE = 6;
  * nadie deja la mesa esperando. La máquina no lleva reloj: no tarda.
  */
 export const CLOCK = { turn: 30000, draft: 20000 };
+
+/**
+ * Cuánto se queda a la vista la carta que cortó la cadena antes de cerrar el turno, en ms.
+ * Cubre lo que tarda la pantalla en mostrarla, buscarle enganche símbolo por símbolo y
+ * romper la cadena (`BUST_BREAK` en `table-fx.js`, 1,7 s): si el centro se abre antes,
+ * el jugador no llega a leer qué le salió.
+ */
+export const BUST_HOLD = 1900;
+
+/**
+ * Lo que dura "¿una más?" antes de que salga la carta (ver `oneMoreOf`): la mesa se
+ * apaga, sube el tono y el cartel golpea, como en el tráiler. El motor espera esto con
+ * el turno ocupado, así nadie roba ni se planta en el medio.
+ */
+export const ONE_MORE_MS = 1500;
+
+/**
+ * La carta de "¿una más?" no vuela como las demás: sale en cámara lenta (ver `flyEpic`
+ * en `table-fx.js`). Sube del mazo de espaldas hasta el medio de la pantalla, se queda
+ * temblando, se da vuelta y recién ahí cae. `ONE_MORE_FLIP` es cuándo se da vuelta y
+ * `ONE_MORE_LAND` cuándo cae, en ms desde que entra al estado. El motor espera que caiga
+ * antes de resolverla; el sonido y el cuerpo del Axie reaccionan cuando se da vuelta,
+ * que es cuando se ve qué salió.
+ */
+export const ONE_MORE_FLIP = 1150;
+export const ONE_MORE_LAND = 1550;
+
+/**
+ * El Secret Egg perdona el corte en tres tiempos, y el motor espera cada uno (ver
+ * `state.eggSave`): la carta cae al final de la cadena y corta (`bust`), el huevo de la
+ * mesa se rompe (`crack`) y la carta vuelve volando al mazo (`back`). En ms.
+ */
+export const EGG_SAVE = { bust: 1250, crack: 1100, back: 650 };
+
+/** Desde cuántas cartas para el K.O. se muestra la cuenta atrás (ver `koInOf`). */
+export const KO_COUNTDOWN = 10;
 
 /**
  * El compás que hay entre soltar el ataque y el golpe: la cadena se recorre sola,
@@ -51,18 +106,48 @@ export const aimMs = (cards) => (cards > 0 ? Math.min(1500, 380 + 210 * (cards -
  * decide cuándo se abre el centro. Un poder que no está acá no agrega espera.
  */
 export const POWER_BEAT = {
-  strength: { draw: 1300 },
-  brutal: { stand: 1500 },
+  strength: { draw: 1300, apply: 1400 },
+  brutal: { apply: 1500, drain: 900 },
+  razor: { apply: 1500, bleed: 900 },
+  dagger: { draw: 1200 },
+  rage: { draw: 1200, fury: 1400 },
   octopus: { apply: 1500, pick: 1100 },
   bubble: { apply: 1700, trap: 1300, open: 1300 },
-  egg: { apply: 1500 },
+  maker: { draw: 1100, bomb: 1600 },
+  jellyfish: { apply: 1500, sting: 900 },
+  redbubble: { apply: 1500 },
+  egg: { save: EGG_SAVE.crack },
   feather: { draw: 2000 },
+  shuriken: { apply: 1500 },
+  fan: { draw: 1100 },
+  hammer: { apply: 1200 },
   pot: { apply: 1600 },
   leaf: { apply: 1600, tick: 1500 },
+  guard: { apply: 1500, cleanse: 900 },
+  sage: { apply: 1600 },
+  pillow: { apply: 1500, block: 1000 },
   snail: { apply: 1900, slow: 900 },
   leech: { apply: 2100 },
+  cocoon: { apply: 1500, tick: 1300 },
+  scanner: { draw: 1300 },
+  trickster: { apply: 1300, pick: 1100 },
   poison: { apply: 1900, tick: 1900 },
-  steelskin: { apply: 1700, block: 1000 },
+  steelskin: { apply: 1700, spike: 1300 },
+  viper: { apply: 1500, block: 900 },
+  gloves: { draw: 1500, self: 1100, cure: 1300 },
+  edge: { draw: 1200 },
+  focus: { draw: 1200 },
+  lens: { draw: 1100 },
+  spell: { cast: 1400 },
+  mirror: { draw: 1000 },
+  energy: { apply: 1400 },
+  papa: { apply: 1400 },
+  mama: { apply: 1400 },
+  blood: { apply: 1300 },
+  dispel: { apply: 1400 },
+  stamp: { apply: 1100, pick: 1100 },
+  tape: { save: 1300 },
+  gift: { apply: 1200 },
 };
 
 /** Del golpe al primer poder: lo que tarda en conectar el golpe (hasta 700) y un respiro. */
@@ -72,26 +157,96 @@ export const POWER_LEAD = 1000;
 export const powerBeat = (fx) => POWER_BEAT[fx.power]?.[fx.moment] ?? 0;
 
 /**
- * Lo que le queda puesto a un jugador de una ronda a la otra:
- *   `egg`      vida del escudo; aguanta golpes hasta gastarse. Se llama así por el
- *              huevo, pero es el escudo entero: lo suman el huevo y la máscara
- *   `eggBreak` daño acumulado que devuelve al romperse el escudo; solo lo cargan
- *              los huevos
- *   `steelskin` tope del daño que llega a la vida en el próximo golpe (máscara)
- *   `poison`   cuánto muerde al finalizar el turno, partiéndose al medio después
- *   `weak`     cuántos de sus próximos ataques salen partidos al medio. Los
- *              caracoles se suman: dos caracoles, los dos próximos ataques
- *   `strength` daño extra acumulado, para siempre
- *   `stacked`  cuántas de las próximas cartas que agarre del centro van arriba del
- *              mazo en vez de perderse en el barajado (ver el pulpo)
+ * Lo que le queda puesto a un jugador de una ronda a la otra. Lo propio:
+ *   `egg`      el escudo; aguanta golpes hasta gastarse. Se llama así por el huevo
+ *              de antes, pero es el escudo entero, lo sume quien lo sume (tope
+ *              `TUNING.shieldMax`)
+ *   `pillow`   turnos del rival en los que la almohada le resta `pillowCut` a cada
+ *              ataque; se gasta uno al terminar cada turno suyo
+ *   `claws`    garras de Charm of Power: cada ataque pone 2 de sangrado por garra
+ *   `rage`     Rage de la Mask of Frenzy: +2 de daño por punto; al tope, Furia
+ *   `feathers` plumas del abanico, que se gastan en el próximo golpe que conecta
+ *   `bomb`     burbujas del Bubble Maker, hasta la bomba
+ *   `leaf`     turnos de brote que quedan (cada uno cura al empezar el turno)
+ *   `cocoon`   turnos de capullo que quedan (cada uno da escudo al empezar el turno)
+ *   `spikes`   espinas: el próximo golpe rival que conecta se las lleva
+ *   `antidote` guantes: al final de este turno su veneno lo cura en vez de dañarlo
+ *   `cleanser` Limpiadores: cada uno cancela el próximo efecto que le pongan
+ *   `stacked`  cartas extra del centro que debe el pulpo
+ *   `bubbles`  burbujas de Bubble Paste: la próxima carta del centro abre la ronda
+ *   `tricks`   cartas del rival que todavía tiene que robarle (Trickster's Card)
+ *   `focus`    focos de Charm of Focus: cada ataque suma `focusStep` por foco, para siempre
+ *   `gift`     daño que guardó Last Gift para su próximo ataque
+ *   `stamps`   cartas de regalo del centro que debe la Earth Stamp
+ * Y lo que le pusieron (los efectos que cancela el Limpiador y limpia la Red Sage):
+ *   `poison`   cuánto muerde al finalizar su turno; después baja 1
+ *   `bleed`    cuántas de las cartas que robe le cuestan `bleedDamage`; baja 1 con
+ *              cada una
+ *   `wound`    heridas abiertas (Energy Drink): en su próximo turno, cada carta que
+ *              pague sangrando cura al rival `drinkHeal` por herida; se cierran al
+ *              terminar ese turno
+ *   `weak`     cuántas de sus mejores rachas no cuentan en su próximo ataque
+ *   `healBlock` turnos en los que no le va a entrar ninguna cura (Viper's Venom): se
+ *              gasta uno la primera vez que se cura en un turno
+ *   `healShut` si la cura ya se le cerró en el turno que corre (ver `heal`)
+ *   `noPowers` cartas sin poder que tiene que llevarse antes de volver a poder
+ *              llevarse una con poder
  */
-const emptyStatus = () => ({ egg: 0, eggBreak: 0, poison: 0, weak: 0, strength: 0, stacked: 0, bubbles: 0, leaf: 0, steelskin: 0 });
+const emptyStatus = () => ({
+  egg: 0, pillow: 0, claws: 0, rage: 0, feathers: 0, bomb: 0, leaf: 0, cocoon: 0, spikes: 0, antidote: 0,
+  cleanser: 0, stacked: 0, bubbles: 0, tricks: 0, focus: 0, gift: 0, stamps: 0,
+  poison: 0, bleed: 0, wound: 0, weak: 0, healBlock: 0, healShut: 0, noPowers: 0,
+});
 
-/** Las cartas de una fila de la mesa, desarmando las montadas (Free Game, burbuja). */
-const unstack = (cards) => cards.flatMap((c) => c.stackedCards || [c]);
+/**
+ * Lo que hizo cada uno en la partida, contado mientras pasa. La partida no lo usa: es
+ * para las misiones (ver `matchEvent` en `missions.js`), que lo leen al terminar, y se
+ * cuenta acá porque después ya no se puede reconstruir.
+ *
+ *   `attacks`  la racha más larga de cada ataque que no se cortó, en orden
+ *   `busts`    las veces que se cortó la cadena
+ *   `powers`   las cartas con poder de clase que robó, por clase (las apagadas no)
+ *   `picks`    las cartas que se llevó del centro
+ *   `stacks`   los Rocket Stamps que montó
+ *   `oneMoreKo` los K.O. directos con la carta de "¿una más?"
+ *   `bleed`, `poison`, `thorns`  el daño que le hicieron al rival su sangrado, su veneno
+ *              y sus espinas
+ *   `direct`   el daño directo de las plumas y el que el shuriken le llevó a la vida
+ *   `stolen`   la vida (Mantis Dagger) y el escudo (Metal Scanner) que le robó al rival
+ */
+const emptyStats = () => ({
+  attacks: [], busts: 0, powers: {}, picks: 0, stacks: 0, oneMoreKo: 0,
+  bleed: 0, poison: 0, thorns: 0, direct: 0, stolen: 0,
+});
+
+
+/** Los efectos que un jugador le puede poner al otro (ver `resist` y la Red Sage). */
+const DEBUFFS = ['poison', 'bleed', 'wound', 'weak', 'healBlock', 'healShut', 'noPowers'];
+
+/**
+ * Las cartas de una fila de la mesa, desarmando las montadas (Free Game, burbuja). El
+ * Red Mirror juega con los símbolos de la carta anterior en una copia (`mirrorOf`): lo
+ * que vuelve al mazo es el espejo de verdad.
+ */
+const unstack = (cards) => cards.flatMap((c) => c.stackedCards || [c]).map((c) => c.mirrorOf ?? c);
+
+/** Cuántas cartas de la cadena de `player` traen `power` (no la que cortó). */
+const chainCount = (state, player, power) => unstack(state.chains[player].cards).filter((c) => c.power === power).length;
 
 /** El largo de la racha más larga de la cadena. */
 const longestRun = (chain) => Math.max(0, ...chain.runs.map((r) => r.length));
+
+/**
+ * Los huevos de la mesa de `player` que todavía no se rompieron este turno: cada uno
+ * perdona un corte (ver `extend`).
+ */
+export function eggsLeft(state, player) {
+  const chain = state.chains?.[player];
+  if (!chain) return 0;
+  const hatched = state.hatched?.[player] ?? [];
+  return unstack(chain.cards)
+    .filter((c) => c.power === 'egg' && !hatched.includes(c.uid)).length;
+}
 
 // Cada jugador roba de su propio mazo y no hay descarte: cada ronda arranca con el
 // mazo entero barajado de nuevo, como una tragamonedas. Contar lo que salió sigue
@@ -152,69 +307,104 @@ export const isBotSeat = (state, player) => state.mode !== 'net' && player === '
  * (ver `heal`), así que nunca hace falta recortar por arriba.
  */
 export const hpOf = (state, player) =>
-  Math.max(TARGET - state.totals[other(player)] + state.healed[player], 0);
+  Math.max(maxHpOf(state, player) - state.totals[other(player)] + state.healed[player], 0);
 
-/** Bono de daño de la Energy Drink: `TUNING.brutalStep` por cada símbolo de la cadena más larga, por carta. Se activa siempre. */
-export function brutalBonusOf(chain) {
-  if (!chain || chain.busted) return 0;
-  const claws = unstack(chain.cards).filter((c) => c.power === 'brutal').length;
-  return claws * TUNING.brutalStep * longestRun(chain);
+/**
+ * Los puntos de la cadena de `player` con el caracol encima: sus `weak` mejores rachas
+ * no cuentan. Una cadena cortada hace 0.
+ */
+export function pointsOf(state, player) {
+  const chain = state.chains[player];
+  if (chain.busted) return 0;
+  const runs = scoreChain(chain).breakdown; // de la que más puntúa a la que menos
+  const cut = state.status[player]?.weak ?? 0;
+  return runs.slice(cut).reduce((sum, r) => sum + r.points, 0);
 }
 
 /**
- * Lo que pegaría `player` si soltara el ataque ahora: los puntos de su cadena más la
- * fuerza que acumuló, partido al medio si tiene un caracol encima. Una cadena cortada
- * hace 0 y no la levanta ningún modificador.
+ * Lo que pegaría `player` si soltara el ataque ahora: los puntos de su cadena (sin las
+ * rachas que le apagó el caracol) más las plumas del abanico y la Rage. Una cadena
+ * cortada hace 0 y no la levanta nada; una entera que el caracol dejó en 0 es igual un
+ * ataque, y lo que suma números fijos suma igual.
  *
- * El caracol parte y no resta, y esa es toda la diferencia entre el poder de ahora y
- * el de antes. Antes mordía un número fijo —la mitad del golpe **con que se lo
- * pusieron**—, así que un atacante grande dejaba puesto un mordisco de 15 que borraba
- * los tres ataques siguientes del otro enteros: el caracol no debilitaba, apagaba. La
- * mitad no depende de quién lo puso y no puede apagar a nadie.
- *
- * Redondea para arriba a propósito: un ataque que sacó puntos siempre pega algo. Si
- * redondeara para abajo, una cadena de 1 saldría en 0 y volvería la misma pregunta
- * que el mordisco fijo —¿el caracol se gastó o no, si el ataque no hizo nada?—.
- *
- * Vive acá y no en la UI porque es la cuenta con la que se reparte el daño: el
- * número grande de la pantalla tiene que ser exactamente el que se va a aplicar.
- *
- * Con `brutal: false` es el mismo golpe sin la bebida: lo que muestra la pantalla
- * mientras la bebida todavía no se volcó (ver `poured`).
+ * Casi ningún poder multiplica el golpe: los que suman daño suman un número fijo por
+ * copia. La excepción es la Energy Drink S, que dobla los puntos de la cadena (una sola
+ * vez, tenga las que tenga) y se rompe al usarse. El número grande de la pantalla ya la
+ * cuenta: es el que se va a aplicar.
  */
-export function swingOf(state, player, { brutal = true } = {}) {
+export function swingOf(state, player) {
   const chain = state.chains[player];
-  const points = chain.busted ? 0 : scoreChain(chain).total;
-  if (points <= 0) return 0;
+  if (chain.busted || chain.cards.length === 0) return 0;
+  const points = pointsOf(state, player) * (chainCount(state, player, 'energy') > 0 ? TUNING.energyMult : 1);
   const st = state.status[player];
-  const hit = points + st.strength + (brutal ? brutalBonusOf(chain) : 0);
-  return st.weak > 0 ? Math.ceil(hit / TUNING.snailShare) : hit;
+  return points + (st.feathers ?? 0) * TUNING.fanStep + rageBonusOf(st) + neutralBonusOf(state, player);
+}
+
+/**
+ * Lo que suman al golpe los neutrales: los focos (para siempre), el regalo guardado, y
+ * los osos y el pacto de sangre de la cadena. Números fijos, como las plumas.
+ */
+export function neutralBonusOf(state, player) {
+  const st = state.status[player];
+  const even = (state.round ?? 0) % 2 === 0;
+  return (st.focus ?? 0) * TUNING.focusStep + (st.gift ?? 0)
+    + (even ? chainCount(state, player, 'papa') * TUNING.papaDamage : 0)
+    + chainCount(state, player, 'blood') * TUNING.bloodDamage;
+}
+
+/**
+ * Lo que suma la Rage al golpe: +2 por punto, y con la Rage al tope, la Furia encima
+ * (se gasta en el próximo golpe que conecta, ver `finishTurn`).
+ */
+export function rageBonusOf(st) {
+  const rage = st?.rage ?? 0;
+  return rage * TUNING.rageStep + (rage >= TUNING.rageMax ? TUNING.furyBonus : 0);
+}
+
+/**
+ * Cuánta vida le sacaría al rival el ataque que `player` tiene armado, si se plantara
+ * ahora: el golpe entero (`swingOf`), menos lo que se come el escudo del rival y lo
+ * que le resta su almohada. Es lo que la pantalla pinta en rojo sobre la vida del otro
+ * mientras se roba (ver `plateHtml` en `ui.js`), así que tiene que ser la misma cuenta
+ * que hace el golpe de verdad en `stand`. No cuenta lo que llega después —el veneno,
+ * el sangrado, las espinas—: eso no sale de este golpe.
+ */
+export function projectedHit(state, player) {
+  const swing = swingOf(state, player);
+  if (swing <= 0) return 0;
+  const theirs = state.status[other(player)];
+  const landed = swing - Math.min(theirs.egg, swing);
+  return theirs.pillow > 0 ? Math.max(landed - TUNING.pillowCut, 0) : landed;
 }
 
 /**
  * La mesa vista desde el asiento de `player`, con lo que la CPU "duro" necesita para
  * medir un ataque contra la partida y no solo contra sus puntos (ver `decideDraw`):
- * su fuerza y su caracol, las dos vidas, lo que protege a cada uno y si este es el
- * golpe de su última chance.
+ * sus plumas, las dos vidas, lo que protege a cada uno, los huevos que le quedan y si
+ * este es el golpe de su última chance.
  */
 export function attackViewOf(state, player) {
   const foe = other(player);
   const mine = state.status[player];
   const theirs = state.status[foe];
   return {
-    strength: mine.strength,
-    weak: mine.weak > 0,
+    feathers: mine.feathers,
+    rage: rageBonusOf(mine),
+    weak: mine.weak,
+    claws: mine.claws,
     myHp: hpOf(state, player),
+    maxHp: maxHpOf(state, player),
     myShield: mine.egg,
-    myCap: mine.steelskin,
+    myPillow: mine.pillow,
     myPoison: mine.poison,
+    myBleed: mine.bleed,
     foeHp: hpOf(state, foe),
     foeShield: theirs.egg,
-    foeThorns: theirs.eggBreak || 0,
-    foeCap: theirs.steelskin,
-    foeStrength: theirs.strength,
-    foeWeak: theirs.weak > 0,
+    foeSpikes: theirs.spikes,
+    foePillow: theirs.pillow,
     lastChance: lastChance(state) === player,
+    // Los huevos que le quedan sin romper en la mesa: cada uno perdona un corte.
+    saves: eggsLeft(state, player),
   };
 }
 
@@ -237,11 +427,25 @@ export function matchResult(state) {
 }
 
 /**
+ * Si la partida la ganó alguien por **K.O.**: el derrotado quedó sin vida sin llegar a
+ * jugar su última chance (overkill, ver `lastChance`). Tumbarlo y que su último golpe
+ * no alcance también es ganar, pero no es un K.O.: en la Aventura pasa el nivel sin la
+ * estrella, y en la mesa el derrotado se desploma sin el cartel de "¡K.O.!".
+ * Un abandono o un empate no son K.O.
+ */
+export function wonByKo(state) {
+  const won = matchResult(state);
+  if (state?.forfeit || (won !== 'p1' && won !== 'p2')) return false;
+  const loser = other(won);
+  return hpOf(state, loser) <= 0 && !state.lastChanceUsed?.[loser];
+}
+
+/**
  * Daño que recibió `player` de más, pasado el cero: lo que el golpe que lo dejó sin
  * vida —y lo que le siguió cayendo después— se pasó de la vida que tenía.
  */
 export const overkillOf = (state, player) =>
-  Math.max(state.totals[other(player)] - state.healed[player] - TARGET, 0);
+  Math.max(state.totals[other(player)] - state.healed[player] - maxHpOf(state, player), 0);
 
 /**
  * El que está jugando su última chance, o esperándola: lo dejaron sin vida y todavía
@@ -274,6 +478,109 @@ export function lastChance(state) {
   if (state.lastChanceUsed?.[player]) return null;
   if (!state.tutorial && overkillOf(state, player) > TUNING.overkill) return null;
   return player;
+}
+
+/**
+ * Si el golpe que `player` tiene armado sería un K.O. directo: lo deja sin vida y con
+ * más de `TUNING.overkill` pasado el cero, así que el rival no tiene última chance (ver
+ * `lastChance`). Es la misma cuenta que hace el golpe de verdad (`projectedHit`).
+ */
+const directKo = (state, player) =>
+  projectedHit(state, player) - hpOf(state, other(player)) > TUNING.overkill;
+
+/**
+ * Cuántas cartas le faltan a `player` para el **K.O.** —dejar al rival sin vida y sin
+ * última chance: más de `TUNING.overkill` pasado el cero (ver `directKo`)— si cada una
+ * sigue su racha más larga todavía viva (un eslabón más por carta), contando desde la
+ * cadena que tiene ahora. 0 si con lo que tiene ya es K.O.; `null` si harían falta más
+ * de `KO_COUNTDOWN`. No mira el mazo: es la cuenta que el jugador puede hacer mirando
+ * su cadena, y la que hace la cuenta atrás (ver `koInOf`).
+ */
+export function koProjection(state, player) {
+  let chain = state.chains[player];
+  const ko = (c) => directKo({ ...state, chains: { ...state.chains, [player]: c } }, player);
+  if (ko(chain)) return 0;
+  for (let n = 1; n <= KO_COUNTDOWN; n++) {
+    const alive = chain.runs.filter((r) => r.alive);
+    if (alive.length === 0) return null;
+    const longest = alive.reduce((a, b) => (b.length > a.length ? b : a));
+    chain = playCard(chain, makeCard([longest.symbol]));
+    if (ko(chain)) return n;
+  }
+  return null;
+}
+
+/**
+ * Si el ataque que `player` tiene armado deja al rival en cero pero **con última
+ * chance**: lo tumba sin pasarse `TUNING.overkill`, así que se levanta para un golpe
+ * más. La pantalla lo avisa arriba del daño (ver `swingHtml` en `ui.js`), porque
+ * plantarse ahí no es el K.O.
+ */
+export function leavesLastChance(state, player) {
+  if (!state || state.tutorial || state.phase !== 'turn' || state.turn !== player) return false;
+  if (lastChance(state) || state.chains[player].busted) return false;
+  const foeHp = hpOf(state, other(player));
+  return foeHp > 0 && projectedHit(state, player) >= foeHp && !directKo(state, player);
+}
+
+/**
+ * La cuenta atrás del K.O.: cuántas cartas más tiene que robar `player` para el K.O.,
+ * sin última chance para el rival (ver `koProjection`). Es la tentación puesta en número: la pantalla la muestra pegada al
+ * daño (ver `swingHtml` en `ui.js`).
+ *
+ * Cuenta con la racha más larga (`koProjection`) y **nunca va para atrás**: cada carta
+ * que engancha la baja por lo menos uno, y la que suma dos símbolos —o alarga otra
+ * racha que empuja más— la hace saltar más de uno, porque se recalcula. Lo que ya bajó
+ * lo guarda el motor en `state.koCount` (ver `countDown`). No baja de 1 mientras el
+ * golpe no lo tumbe de verdad: nunca dice "cero" de mentira.
+ *
+ * `null` si no hay cuenta que mostrar: no es su turno, ya lo tumba (0) o faltan más de
+ * `KO_COUNTDOWN`.
+ */
+export function koInOf(state, player) {
+  if (!state || state.tutorial || state.phase !== 'turn' || state.turn !== player) return null;
+  const chain = state.chains[player];
+  if (chain.busted || chain.cards.length === 0) return null;
+  // Con alguien en su última chance no hay K.O. que contar: el golpe que queda es el
+  // último, y dejarlo en cero es el empate.
+  if (hpOf(state, other(player)) <= 0 || lastChance(state)) return null;
+  const fresh = koProjection(state, player);
+  if (fresh === 0) return 0;
+  const kept = state.koCount?.player === player ? state.koCount.n : null;
+  const n = Math.min(fresh ?? Infinity, kept ?? Infinity);
+  return n <= KO_COUNTDOWN ? n : null;
+}
+
+/**
+ * "¿Una más?": el robo de `player` es la apuesta del K.O. directo. El ataque que tiene
+ * armado no lo da —no alcanza, o alcanza pero le deja la última chance al rival—, pero
+ * alguna carta de su mazo lo daría, y alguna otra le corta la cadena. Es el chiste del
+ * tráiler hecho momento: la pantalla lo anuncia antes de que salga la carta, y el motor
+ * lo resuelve con las reglas de siempre.
+ *
+ * - Si la carta engancha y el golpe ya es K.O. directo, ataca solo en el acto.
+ * - Si corta, cero de daño, como cualquier corte (la pantalla le pone el trombón).
+ * - Si engancha y todavía no lo es, el turno sigue como siempre.
+ *
+ * Mira el mazo entero y no la carta de arriba, como la rueda de chances: la apuesta es
+ * sobre lo que puede salir, no sobre lo que va a salir. Sin tutorial —ahí no hay
+ * overkill— y sin nadie en su última chance: ahí dejarlo en cero es el empate.
+ */
+export function oneMoreOf(state, player) {
+  if (!state || state.tutorial || state.phase !== 'turn' || state.turn !== player) return false;
+  if (state.pendingStack || lastChance(state)) return false;
+  const chain = state.chains[player];
+  if (chain.busted || chain.cards.length === 0) return false;
+  if (hpOf(state, other(player)) <= 0 || directKo(state, player)) return false;
+  let kills = false;
+  let busts = false;
+  for (const card of state.decks[player]) {
+    const next = isFreeStack(card) ? stackOnCard(chain, bestStack(chain, card), card) : playCard(chain, card);
+    if (next.busted) busts = true;
+    else if (!kills) kills = directKo({ ...state, chains: { ...state.chains, [player]: next } }, player);
+    if (kills && busts) return true;
+  }
+  return false;
 }
 
 // ---- las vistas del estado --------------------------------------------------
@@ -311,8 +618,15 @@ export const actingOf = (state) => {
 /** Cartas que todavía pueden salir del mazo de `player`: el mazo, sin más. */
 export const unseenOf = (state, player) => state.decks[player];
 
-/** Cómo terminó la ronda de `player`, que es lo que decide qué le toca del centro. */
-const awardKindOf = (state, player) => (state.chains[player].busted ? 'bust' : 'stand');
+/**
+ * Cómo terminó la ronda de `player`, que es lo que decide qué le toca del centro. Pegada
+ * con la Scotch Tape (`'taped'`) no le toca nada: solo la carta de regalo de la Earth
+ * Stamp, si tiene.
+ */
+const awardKindOf = (state, player) => {
+  const chain = state.chains[player];
+  return chain.taped ? 'taped' : chain.busted ? 'bust' : 'stand';
+};
 const plainCardsOf = (state) => state.market.filter((c) => !c.power);
 
 /**
@@ -322,14 +636,20 @@ const plainCardsOf = (state) => state.market.filter((c) => !c.power);
  * llevar poder. El tamaño de la carta dejó de importar.
  */
 export function draftableFor(state, player) {
+  // Robándole cartas al rival (Trickster's Card) no se elige del centro.
+  if (state.draft?.step === 'trick') return [];
+  // Con la Red Bubble encima no se lleva nada con poder, ni en el reparto ni del pulpo,
+  // hasta que se lleve una sin poder.
+  const locked = (state.status?.[player]?.noPowers ?? 0) > 0;
   // La carta del pulpo es aparte del reparto: no la limita ni la rama que eligió ni
-  // haberse cortado. Es un turno de mercado suelto.
+  // haberse cortado. Es un turno de mercado suelto. La de la Earth Stamp, igual.
   if (state.draft?.step === 'bonus') {
-    return TUNING.octopusPowers ? state.market.slice() : plainCardsOf(state);
+    return (TUNING.octopusPowers || state.draft.bonusBy === 'stamp') && !locked ? state.market.slice() : plainCardsOf(state);
   }
+  if (awardKindOf(state, player) === 'taped') return [];
   const mode = state.draft?.mode;
   if (mode === 'power') return []; // la carta con poder cierra el reparto
-  if (mode === 'plain' || awardKindOf(state, player) === 'bust') return plainCardsOf(state);
+  if (locked || mode === 'plain' || awardKindOf(state, player) === 'bust') return plainCardsOf(state);
   return state.market.slice();
 }
 
@@ -339,10 +659,30 @@ export function draftableFor(state, player) {
  */
 export function canRenewFor(state, player) {
   if (!state || state.phase !== 'draft' || draftingSeat(state) !== player) return false;
+  if (state.draft.step === 'trick') return false;
   if (state.draft.renewed[player] || state.pool.length === 0) return false;
   const own = state.symbols[player];
   return !draftableFor(state, player).some((c) => c.symbols.includes(own));
 }
+
+/**
+ * Las cartas del rival de `player` que el Trickster le puede robar: todas las suyas con
+ * poder que están en su mazo o en su burbuja, Rocket incluido. Las de la mesa no: en el
+ * reparto la mesa ya volvió al mazo (ver `finishTurn`). Van en un orden fijo (por uid) y
+ * no en el del mazo: el mazo viaja barajado en red y la lista no puede cambiar de lugar
+ * entre dos pantallas.
+ */
+export function trickTargetsFor(state, player) {
+  const foe = other(player);
+  const cards = [
+    ...state.decks[foe],
+    ...(state.bubbleCard?.[foe] ? [state.bubbleCard[foe].card] : []),
+  ];
+  return cards.filter((c) => c.power).sort((a, b) => a.uid - b.uid);
+}
+
+/** Cuántas de `cards` son del jugador: las medusas del rival no (se rompen al salir). */
+const realCount = (cards) => cards.filter((c) => !c.jelly).length;
 
 /**
  * Cartas de `player` que están en la mesa y todavía no volvieron a su mazo. Apenas
@@ -353,15 +693,18 @@ export function onTable(state, player) {
   if (state.returned[player]) return 0;
   const chain = state.chains[player];
   const pending = state.pendingStack?.player === player ? 1 : 0;
-  return unstack(chain.cards).length - state.recycled[player] + (chain.bustCard ? 1 : 0) + pending;
+  const bust = chain.bustCard && !chain.bustCard.jelly ? 1 : 0;
+  return realCount(unstack(chain.cards).slice(state.recycled[player])) + bust + pending;
 }
 
 /**
- * Todas las cartas de `player`: el mazo, la que espera en la burbuja, y lo que sigue
- * en la mesa sin devolver.
+ * Todas las cartas de `player`: el mazo, la que espera en la burbuja, lo que sigue
+ * en la mesa sin devolver y la que el Secret Egg está devolviendo (ver `saveWithEgg`).
+ * Las medusas que le metió el rival no cuentan: no son suyas y no vuelven.
  */
 export const ownedBy = (state, player) =>
-  state.decks[player].length + (state.bubbleCard?.[player] ? 1 : 0) + onTable(state, player);
+  realCount(state.decks[player]) + (state.bubbleCard?.[player] ? 1 : 0) + onTable(state, player)
+  + (state.eggSave?.player === player && !state.eggSave.card?.jelly ? 1 : 0);
 
 /**
  * @param {{pace?: number, seed?: number}} opts
@@ -379,6 +722,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   const rng = seed === undefined ? Math.random : makeRng(seed);
   /** Baraja con el azar de esta partida, no con el del sistema. */
   const deal = (cards) => shuffle(cards, rng);
+  // El escenario se sortea con su propio azar: si saliera de `rng`, sumar escenarios
+  // le cambiaría el reparto a toda partida sembrada (los tests, el banco de balance).
+  const stageRng = seed === undefined ? Math.random : makeRng((seed ^ 0x5ce7a9) >>> 0);
   let state = null;
   // Los turnos son asíncronos. Si se arranca otra partida en el medio, la época
   // cambia y las corrutinas viejas se cortan en vez de escribir sobre el estado nuevo.
@@ -403,6 +749,15 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     fxOpen = true;
   }
 
+  /**
+   * Las cuentas de `player` para las misiones (ver `emptyStats`). Un estado armado a mano
+   * —los tests, la zona de testeo— puede no traerlas: se arman al primer uso.
+   */
+  function statsOf(player) {
+    state.stats ??= { p1: emptyStats(), p2: emptyStats() };
+    return state.stats[player];
+  }
+
   /** Espera `ms` y devuelve false si esta corrutina quedó obsoleta. */
   async function tick(ms, era) {
     await sleep(ms);
@@ -415,8 +770,6 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   const whom = (p) => voice(p).mid;
   const toWhom = (p) => voice(p).to;
   const ofWhom = (p) => voice(p).of;
-  /** El verbo en la persona que le toca al asiento (ver `VOICE`). */
-  const verb = (p, second, third) => (voice(p).you ? second : third);
   const cap = (s) => s[0].toUpperCase() + s.slice(1);
   const isBot = (p) => isBotSeat(state, p);
 
@@ -441,13 +794,17 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
    * (ver `redact` en `rooms.js`), porque el reloj del celular no es el del
    * anfitrión.
    */
-  function armClock(player, kind) {
+  function armClock(player, kind, left = null) {
     clearTimeout(alarm);
     const ms = clock?.[kind];
-    if (!ms || isBot(player) || state.tutorial) { state.clock = null; return; }
+    // El reloj es para no hacer esperar a otra persona: solo en red. Contra la CPU
+    // (la Aventura, el tutorial) cada uno piensa lo que quiera.
+    if (!ms || state.mode !== 'net' || isBot(player)) { state.clock = null; return; }
     const era = epoch;
-    state.clock = { seat: player, kind, ms, ends: Date.now() + ms };
-    alarm = setTimeout(() => { if (era === epoch) timeUp(player, kind); }, ms);
+    // `left`: lo que le quedaba, si se lo frenó a mitad de camino (ver `askOneMore`).
+    const wait = left ?? ms;
+    state.clock = { seat: player, kind, ms, ends: Date.now() + wait };
+    alarm = setTimeout(() => { if (era === epoch) timeUp(player, kind); }, wait);
     // En Node no retiene el proceso: un test con pausas no se queda 30 segundos colgado.
     alarm.unref?.();
   }
@@ -485,15 +842,61 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // Sin descarte, lo único fuera del mazo es lo que ya salió esta ronda: vuelve
       // adentro. `recycled` marca hasta dónde de la cadena ya se devolvió, para no
       // contarlo otra vez al cerrar la ronda.
+      // La medusa no: se rompió al salir.
       const played = unstack(state.chains[player].cards);
-      state.decks[player] = deal(played.slice(state.recycled[player]));
+      state.decks[player] = deal(played.slice(state.recycled[player]).filter((c) => !c.jelly));
       state.recycled[player] = played.length;
+      // Lo que mostró la lente ya no es lo de arriba: se barajó.
+      if (state.peek?.player === player) state.peek = null;
       log(voice(player).you
         ? tr('Vos rebarajás lo que ya salió.')
         : tr('{who} rebaraja lo que ya salió.', { who: who(player) }), 'muted');
     }
-    const card = state.decks[player].pop();
-    return card ?? makeCard([state.symbols[player]]);
+    const card = state.decks[player].pop() ?? makeCard([state.symbols[player]]);
+    if (state.peek?.player === player) {
+      const left = state.peek.cards.filter((c) => c.uid !== card.uid);
+      state.peek = left.length ? { ...state.peek, cards: left } : null;
+    }
+    reveal(player, card);
+    return card;
+  }
+
+  /**
+   * Lo que pasa con cada carta que le sale a `player`, venga del mazo o de la burbuja:
+   * si es una medusa, se rompe (no vuelve al mazo: ver `finishTurn`), y si sangra, la
+   * paga.
+   */
+  function reveal(player, card) {
+    if (card.jelly) {
+      stageFx({ power: 'jellyfish', moment: 'sting', by: other(player), on: player, amount: 1 });
+      log(`${powerIcon('jellyfish', 'sm')} ${tr('Una medusa: no comparte nada y se rompe.')}`, other(player));
+    }
+    bleedOnDraw(player);
+  }
+
+  /**
+   * El sangrado: cada carta que roba el que sangra le cuesta `bleedDamage` de vida, y el
+   * sangrado baja 1: cuenta cartas, no vida. No pasa por el escudo. Con la herida
+   * abierta de la Energy Drink, cada carta que paga le cura al rival `drinkHeal` por
+   * herida.
+   */
+  function bleedOnDraw(player) {
+    const st = state.status[player];
+    if (st.bleed <= 0) return;
+    const foe = other(player);
+    const dmg = TUNING.bleedDamage;
+    addDamage(foe, dmg);
+    statsOf(foe).bleed += dmg;
+    st.bleed--;
+    stageFx({ power: 'razor', moment: 'bleed', by: foe, on: player, amount: dmg });
+    log(`${powerIcon('razor', 'sm')} ${tr('Sangrado: −{dmg} de vida {target} (queda en {hp}).', { dmg, target: toWhom(player), hp: hpOf(state, player) })}`, foe);
+    if (st.wound > 0) {
+      const got = heal(foe, st.wound * TUNING.drinkHeal);
+      if (got > 0) {
+        stageFx({ power: 'brutal', moment: 'drain', by: foe, on: foe, amount: got });
+        powerLog('brutal', tr('Energy Drink M: la herida cura {got} a {who}.', { got, who: whom(foe) }), foe);
+      }
+    }
   }
 
   const unseenPool = (player) => unseenOf(state, player);
@@ -516,29 +919,41 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
    *   elección (ver `buildPersonalDeck`). Viajan al lado del Axie porque son de él: un
    *   mazo mejorado es el mazo de ese bicho y de ningún otro. La CPU no lleva: su Axie
    *   se sortea en el momento y no pasó por ninguna pantalla donde elegir nada.
+   *
+   *   `extras` y `extras2` son las cartas de la mochila que cada uno le puso a su Axie
+   *   (ver `backpack.js`): se suman a sus 8 de fábrica y valen lo mismo que las
+   *   mejoras, solo si se sentó el Axie que se pidió.
+   *
+   *   `evolved` y `evolved2` son las partes evolucionadas de cada uno (ver
+   *   `evolution.js`). No van aparte: se meten en el id del Axie (`'buba~horn'`, ver
+   *   `evolvedId`), y de ahí salen solos el mazo, el dibujo y la revancha, que reparte
+   *   con `state.axies`. Sin ellas, el id se queda como vino.
    */
   function newMatch({
-    difficulty, mode, axie: axieId, axie2: axieId2, boosts, boosts2, activePowers,
-    adventureLevel, scriptedDecks, scriptedPool, onRoundStart,
+    difficulty, mode, axie: axieId, axie2: axieId2, boosts, boosts2, extras, extras2, evolved, evolved2,
+    activePowers, adventureLevel, scriptedDecks, scriptedPool, onRoundStart, stage,
   } = {}) {
     mode = mode ?? state?.mode ?? 'cpu';
     const advCfg = mode === 'adventure'
       ? getAdventureLevel(adventureLevel ?? state?.adventure?.level ?? 1)
       : null;
     difficulty = difficulty ?? advCfg?.difficulty ?? state?.difficulty ?? 'normal';
-    const mine = axie(axieId ?? state?.axies.p1 ?? 'aquatic');
+    const withParts = (id, parts) => (parts && id ? evolvedId(id, parts) : id);
+    const mine = axie(withParts(axieId, evolved) ?? state?.axies.p1 ?? 'aquatic');
     // El Axie que pidió el segundo asiento, que solo existe en una sala o en el tutorial:
     // ahí vale tal cual para mantener el guión contra el Axie indicado.
     const wanted = (mode === 'net' || mode === 'tutorial')
-      ? (axieId2 ?? state?.axies.p2)
-      : (mode === 'adventure' ? (axieId2 ?? advCfg?.rival ?? state?.axies.p2) : null);
+      ? (withParts(axieId2, evolved2) ?? state?.axies.p2)
+      : (mode === 'adventure' ? (advCfg?.rival ?? axieId2 ?? state?.axies.p2) : null);
     // El sorteo, para cuando no hay nadie que haya elegido: el de la CPU, y el del
     // asiento que entró a la sala sin pasar por la elección. Ese sí es de otra clase,
     // que es lo mismo que decir de otro mazo: al que juega solo, verse en el espejo no
     // le agrega nada.
     const rivals = AXIE_IDS.filter((id) => AXIES[id].class !== mine.class);
     // En la Aventura el rival es un starter, que no está en el roster pero `axie()` conoce.
-    const known = mode === 'adventure' ? axie(wanted).id === wanted : AXIE_IDS.includes(wanted);
+    const known = mode === 'adventure'
+      ? axie(wanted).id === wanted
+      : AXIE_IDS.includes(String(wanted).split('~')[0]) && axie(wanted).id === wanted;
     const theirs = known ? axie(wanted) : AXIES[rivals[Math.floor(rng() * rivals.length)]];
     // Las mejoras de cada asiento. Las del segundo solo valen si de verdad se sentó el
     // Axie que se pidió: si salió sorteado —contra la CPU, o porque el pedido no era
@@ -547,15 +962,27 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       p1: boosts ?? state?.boosts?.p1 ?? {},
       p2: (theirs.id === wanted ? (boosts2 ?? state?.boosts?.p2) : null) ?? {},
     };
+    // Las cartas de la mochila de cada asiento, con la misma regla que las mejoras. El
+    // rival de la Aventura trae las de su nivel (ver `RIVAL_LADDER` en `adventure.js`).
+    const packs = {
+      p1: cleanExtras(extras ?? state?.extras?.p1),
+      p2: advCfg ? cleanExtras(advCfg.extras)
+        : theirs.id === wanted ? cleanExtras(extras2 ?? state?.extras?.p2) : [],
+    };
 
     // El mazo de fábrica de cada uno, armado una sola vez y guardado tal cual: de acá
     // sale el que se baraja para jugar, y la copia sin barajar es la que se mira en el
     // panel del mazo. Tiene que ser **el mismo** armado y no dos llamadas a `deckFor`,
     // porque cada llamada crea cartas nuevas con uid nuevos y entonces el panel no
     // podría reconocer las que están en juego.
-    const start = { p1: deckFor(mine.id, bags.p1), p2: deckFor(theirs.id, bags.p2) };
-
-    const powers = activePowers || (advCfg ? advCfg.activePowers : chooseActivePowers(rng));
+    const powers = activePowers || (advCfg ? adventurePowers(advCfg) : chooseActivePowers(rng));
+    // Las partes con amuleto de un jefe de la Aventura llevan un poder de su pozo,
+    // sorteado en cada partida (ver `adventureCharms`).
+    const charm = advCfg ? adventureCharms(advCfg) : null;
+    const start = {
+      p1: [...deckFor(mine.id, bags.p1), ...extraCards(packs.p1)],
+      p2: [...deckFor(theirs.id, bags.p2, null, { charm }), ...extraCards(packs.p2)],
+    };
 
     epoch++;
     clearTimeout(alarm);
@@ -567,9 +994,16 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       difficulty,
       mode,
       axies: { p1: mine.id, p2: theirs.id },
+      // Dónde se pelea (ver `stages.js`): el del nivel en la Aventura, la plaza en el
+      // tutorial y uno al azar en cada partida suelta. Va en el estado para que en red
+      // las dos pantallas estén paradas en el mismo lugar.
+      stage: isStage(stage) ? stage
+        : advCfg?.stage ?? (mode === 'tutorial' ? TUTORIAL_STAGE : pickStage(stageRng)),
       // Las mejoras puestas, guardadas para que "Jugar de nuevo" reparta el mismo mazo
       // sin que la portada tenga que volver a mandarlas.
       boosts: bags,
+      // Y las cartas de la mochila, por lo mismo.
+      extras: packs,
       // La clase del Axie es el símbolo con el que puntúa; el resto del juego usa esto.
       symbols: { p1: mine.class, p2: theirs.class },
       round: 0,
@@ -597,6 +1031,12 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // Si la cadena entera ya volvió al mazo, al terminar el turno de ese jugador.
       returned: { p1: false, p2: false },
       totals: { p1: 0, p2: 0 },
+      // La vida con la que arranca cada uno: la de siempre, salvo el jefe de un nivel de
+      // la Aventura, que trae más (ver `hp` en `adventure-levels.js`).
+      maxHp: {
+        p1: mode === 'tutorial' ? TUTORIAL_TARGET : TARGET,
+        p2: mode === 'tutorial' ? TUTORIAL_TARGET : (advCfg?.hp ?? TARGET),
+      },
       // Vida recuperada con la maceta. Va aparte de `totals` porque `totals` es
       // "daño repartido" y se usa para juzgar el intercambio, no para la vida.
       healed: { p1: 0, p2: 0 },
@@ -605,12 +1045,32 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // (ver `result.js`), y se anotan acá porque después del golpe ya no se pueden
       // reconstruir: la cadena vuelve al mazo.
       records: { p1: { hit: 0, chain: 0 }, p2: { hit: 0, chain: 0 } },
-      // Huevo, veneno, caracol y fuerza: lo que dejan puesto las cartas con poder.
+      // Lo que hizo cada uno, para las misiones (ver `emptyStats`).
+      stats: { p1: emptyStats(), p2: emptyStats() },
+      // Lo que dejan puesto las cartas con poder (ver `emptyStatus`).
       status: { p1: emptyStatus(), p2: emptyStatus() },
+      // Los huevos que ya se rompieron este turno (uid): se vacía al empezar el turno.
+      hatched: { p1: [], p2: [] },
       chains: { p1: emptyChain(), p2: emptyChain() },
       roundScores: { p1: null, p2: null },
       // Si cada uno ya soltó el golpe de su última chance (ver `lastChance`).
       lastChanceUsed: { p1: false, p2: false },
+      // "¿Una más?" (ver `oneMoreOf`): `{ id, player, stage }`. `stage` es 'ask' mientras
+      // se anuncia; 'bust' si la carta cortó, o 'draw' si enganchó y está cayendo (ver
+      // `ONE_MORE_LAND`), y al caer 'ko' o 'short' según si el golpe ya es K.O. directo.
+      // La UI compara `id` y `stage` con lo que ya mostró, como con `lastHit`.
+      oneMore: null,
+      oneMoreId: 0,
+      // El Secret Egg que está perdonando un corte (ver `saveWithEgg`): `{ id, player,
+      // card, egg, stage }`, con `card` la que cortaba, `egg` el uid de la carta del huevo
+      // y `stage` 'bust', 'crack' o 'back' (ver `EGG_SAVE`). Mientras dura, la carta no
+      // está ni en la cadena ni en el mazo: la pantalla la dibuja aparte.
+      eggSave: null,
+      eggSaveId: 0,
+      // La cuenta atrás del K.O. de quien juega, como quedó con su última carta que
+      // enganchó: `{ player, n }` (ver `koInOf` y `countDown`). `n` es `null` si faltan
+      // más de `KO_COUNTDOWN`.
+      koCount: null,
       // Quién abre, para toda la partida. Contra la CPU es fijo a propósito (abajo);
       // entre dos personas se sortea.
       order: mode === 'net' && rng() < 0.5 ? ['p2', 'p1'] : ['p1', 'p2'],
@@ -641,8 +1101,16 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // bebida cuenta en el golpe desde que entra a la cadena, pero se ve recién al
       // plantarse: hasta entonces el número grande la deja afuera (ver `finishTurn`).
       poured: { p1: false, p2: false },
-      freeGame: { p1: false, p2: false },
+      // El Rocket Stamp recién robado que espera columna: `{ player, card }`.
       pendingStack: null,
+      // La Novice Spell que espera que su dueño elija qué hace: `{ player, count }`.
+      pendingSpell: null,
+      // Lo que la Lens of Revelation le muestra a su dueño: `{ id, player, cards }`, las
+      // de arriba del mazo en el orden en que van a salir. Se borra al cerrar su turno.
+      peek: null,
+      peekId: 0,
+      // La cadena como quedó con la última Scotch Tape, por si se corta (ver `saveWithTape`).
+      taped: { p1: null, p2: null },
       lastStacked: null,
       stackId: 0,
       log: [],
@@ -664,9 +1132,11 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       onRoundStart,
       adventure: advCfg ? {
         level: advCfg.id,
-        name: advCfg.name,
+        name: levelTitle(advCfg),
         newPowers: advCfg.newPowers,
         rival: advCfg.rival,
+        boss: advCfg.boss,
+        evolved: advCfg.evolved,
       } : null,
     };
     refillMarket();
@@ -674,10 +1144,12 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       mine: `${mine.name} ${crest(mine.class, 'sm')}`,
       theirs: `${theirs.name} ${crest(theirs.class, 'sm')}`,
     });
-    const hp = tr('{target} de vida cada uno.', { target: TARGET });
+    const hp = maxHpOf(state, 'p1') === maxHpOf(state, 'p2')
+      ? tr('{target} de vida cada uno.', { target: maxHpOf(state, 'p1') })
+      : tr('{p1} de vida contra {p2}.', { p1: maxHpOf(state, 'p1'), p2: maxHpOf(state, 'p2') });
     log(
       mode === 'net' ? tr('{versus}, dos jugadores. {hp}', { versus, hp })
-        : advCfg ? tr('Modo Aventura ({name}): {versus}. {hp}', { name: advCfg.name, versus, hp })
+        : advCfg ? tr('Modo Aventura ({name}): {versus}. {hp}', { name: levelTitle(advCfg), versus, hp })
         : tr('Jugás con {versus}. {hp}', { versus, hp }),
       'muted',
     );
@@ -700,11 +1172,13 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     state.returned = { p1: false, p2: false };
     state.chains = { p1: emptyChain(), p2: emptyChain() };
     state.poured = { p1: false, p2: false };
+    state.taped = { p1: null, p2: null };
+    state.peek = null;
+    state.pendingSpell = null;
     state.roundScores = { p1: null, p2: null };
     state.roundWinner = null;
     state.draft = null;
     state.phase = 'turn';
-    state.freeGame = { p1: false, p2: false };
     state.pendingStack = null;
     // El orden no se toca: es el que se sorteó al empezar la partida y vale para todas
     // las rondas. Antes se alternaba entre rondas, y como la ronda es un turno de cada
@@ -732,25 +1206,28 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   function addDamage(by, amount) {
     state.totals[by] += amount;
     if (state.tutorial && by === 'p2') {
-      state.totals.p2 = Math.min(state.totals.p2, Math.max(0, TARGET + state.healed.p1 - 20));
+      state.totals.p2 = Math.min(state.totals.p2, Math.max(0, maxHpOf(state, 'p1') + state.healed.p1 - 20));
     }
   }
 
-  /** Una carta de Free Game que entra en la cadena deja montado el próximo robo. */
-  function armFreeGame(player, card) {
-    if (card.power !== 'freegame') return;
-    state.freeGame[player] = true;
-    log(`${powerIcon('freegame', 'sm')} ${tr('Free Game activo: tu próximo robo no corta y se monta sobre una carta')}`, player);
+  /**
+   * La cuenta atrás después de una carta que enganchó (o de la que abre el turno, con
+   * `opened`): la de la racha más larga recalculada, pero nunca para atrás —baja por lo
+   * menos uno— y sin bajar de 1 mientras el golpe no lo tumbe (ver `koInOf`).
+   */
+  function countDown(player, opened = false) {
+    const fresh = koProjection(state, player) ?? Infinity;
+    const prev = !opened && state.koCount?.player === player ? state.koCount.n ?? Infinity : Infinity;
+    const n = fresh === 0 ? 0 : Math.max(1, Math.min(prev - 1, fresh));
+    state.koCount = { player, n: Number.isFinite(n) ? n : null };
   }
 
-  /** Monta `card` sobre la columna `col` de la cadena de `player` (Free Game). */
+  /** Monta el Rocket Stamp `card` sobre la columna `col` de la cadena de `player`. */
   function stackCard(player, col, card) {
     state.chains[player] = stackOnCard(state.chains[player], col, card);
     state.lastStacked = { player, colIndex: col, card, id: ++state.stackId };
-    state.freeGame[player] = card.power === 'freegame';
-    if (state.freeGame[player]) {
-      log(`${powerIcon('freegame', 'sm')} ${tr('Free Game encadenado: el próximo robo también se monta en mesa')}`, player);
-    }
+    statsOf(player).stacks++;
+    countDown(player);
     const stackMsg = voice(player).you
       ? tr('Vos montás {card} sobre la columna {col} alargándola → ataque de {swing}', {
           card: cardLabel(card),
@@ -767,21 +1244,31 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   }
 
   /**
-   * Juega `card` en la cadena de `player`. Si la corta, deja caer la carta `ms`, cierra
-   * el turno en 0 y devuelve false.
+   * Juega `card` en la cadena de `player`. Si la corta, deja la carta a la vista
+   * (`BUST_HOLD`, o `ms` × 3 en el tutorial), cierra el turno en 0 y devuelve false.
    */
   async function extend(player, card, ms, era) {
     const next = playCard(state.chains[player], card);
+    // El Secret Egg: con un huevo sano en la mesa, el corte no pasa (ver `saveWithEgg`).
+    if (next.busted && eggsLeft(state, player) > 0) return saveWithEgg(player, card, era);
+    // La Scotch Tape: sin huevo, la cadena queda pegada hasta la última cinta y ataca.
+    if (next.busted && state.taped?.[player]) return saveWithTape(player, card, era);
     state.chains[player] = next;
+    if (!next.busted && card.power === 'tape') state.taped[player] = next;
     if (next.busted) {
-      state.freeGame[player] = false;
+      if (state.oneMore?.player === player && state.oneMore.stage === 'ask') {
+        state.oneMore = { ...state.oneMore, stage: 'bust' };
+      }
       log(bustLine(player, card), 'bad');
       emit();
-      // En el tutorial el corte se queda un rato a la vista: si pasa rápido, no se ve.
-      if (await tick(state.tutorial ? ms * 3 : ms, era)) await finishTurn(player, 0, era);
+      // La carta que cortó se queda a la vista hasta que la cadena se rompe en pantalla
+      // (`BUST_HOLD`); en el tutorial, un rato más.
+      // La de "¿una más?" tarda más en caer (ver `ONE_MORE_LAND`).
+      const epic = state.oneMore?.player === player && state.oneMore.stage === 'bust' ? ONE_MORE_LAND : 0;
+      if (await tick(state.tutorial ? Math.max(BUST_HOLD, ms * 3) : BUST_HOLD + epic, era)) await finishTurn(player, 0, era);
       return false;
     }
-    armFreeGame(player, card);
+    countDown(player);
     const swingText = voice(player).you
       ? tr('Vos sacás {card} → ataque de {swing}', { card: cardLabel(card), swing: swingOf(state, player) })
       : tr('{who} saca {card} → ataque de {swing}', { who: who(player), card: cardLabel(card), swing: swingOf(state, player) });
@@ -789,13 +1276,172 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     return true;
   }
 
+  /**
+   * El Secret Egg perdona el corte, y se ve: la carta cae y corta, el huevo de la mesa
+   * se rompe y la carta vuelve al mazo —puede volver a salir— (ver `EGG_SAVE`). Después
+   * sigue el turno: el jugador decide si roba otra o se planta. El reloj se frena
+   * mientras tanto, como en "¿una más?". Devuelve 'saved', o false si la partida cambió.
+   */
+  async function saveWithEgg(player, card, era) {
+    const egg = unstack(state.chains[player].cards)
+      .find((c) => c.power === 'egg' && !state.hatched[player].includes(c.uid));
+    const left = state.clock?.seat === player ? Math.max(state.clock.ends - Date.now(), 0) : null;
+    stopClock();
+    if (state.oneMore?.player === player) state.oneMore = null;
+    state.eggSave = { id: ++state.eggSaveId, player, card, egg: egg.uid, stage: 'bust' };
+    emit();
+    if (!(await tick(EGG_SAVE.bust, era))) return false;
+    state.hatched[player].push(egg.uid);
+    state.eggSave = { ...state.eggSave, stage: 'crack' };
+    // `col`: la columna de la carta del huevo, que es donde se rompe (ver `power-fx.js`).
+    const col = state.chains[player].cards.findIndex((c) => unstack([c]).includes(egg));
+    stageFx({ power: 'egg', moment: 'save', by: player, on: player, amount: eggsLeft(state, player), col });
+    log(`${powerIcon('egg', 'sm')} ${tr('Secret Egg: {card} cortaba, pero el huevo se rompe y la carta vuelve al mazo. Sigue el turno.', { card: cardLabel(card) })}`, player);
+    emit();
+    if (!(await tick(EGG_SAVE.crack, era))) return false;
+    state.eggSave = { ...state.eggSave, stage: 'back' };
+    emit();
+    if (!(await tick(EGG_SAVE.back, era))) return false;
+    // La medusa no vuelve: el huevo salva el turno, pero ella se rompió al salir.
+    const deck = state.decks[player];
+    if (!card.jelly) deck.splice(Math.floor(rng() * (deck.length + 1)), 0, card.mirrorOf ?? card);
+    state.eggSave = null;
+    if (left !== null) armClock(player, 'turn', left);
+    return 'saved';
+  }
+
+  /**
+   * La Scotch Tape perdona el corte a medias: la cadena vuelve a como estaba con la última
+   * cinta y el turno termina atacando con eso. Lo que salió después de la cinta y la carta
+   * que cortó vuelven al mazo. No hay centro (ver `awardKindOf`), salvo la carta de
+   * regalo de la Earth Stamp. Devuelve false: el turno se cerró.
+   */
+  async function saveWithTape(player, card, era) {
+    const cur = state.chains[player];
+    const snap = state.taped[player];
+    state.taped[player] = null;
+    const keep = new Set(unstack(snap.cards).map((c) => c.uid));
+    const played = unstack(cur.cards);
+    const rec = state.recycled[player];
+    // Las que ya volvieron al mazo con un rebarajado siguen ahí; las demás, de la cinta
+    // para adelante, vuelven ahora. La cuenta de devueltas queda la de la cadena pegada.
+    state.decks[player].push(...played.slice(rec).filter((c) => !keep.has(c.uid) && !c.jelly));
+    state.recycled[player] = played.slice(0, rec).filter((c) => keep.has(c.uid)).length;
+    if (!card.jelly) state.decks[player].push(card.mirrorOf ?? card);
+    state.chains[player] = { ...snap, taped: true, tapeCut: card };
+    if (state.oneMore?.player === player) state.oneMore = null;
+    stageFx({ power: 'tape', moment: 'save', by: player, on: player, amount: unstack(snap.cards).length });
+    log(`${powerIcon('tape', 'sm')} ${voice(player).you
+      ? tr('Scotch Tape: {card} cortaba, pero la cadena queda pegada hasta la cinta. Atacás con eso.', { card: cardLabel(card) })
+      : tr('Scotch Tape: {card} cortaba, pero la cadena queda pegada hasta la cinta. {who} ataca con eso.', { card: cardLabel(card), who: who(player) })}`, player);
+    emit();
+    if (await tick(BUST_HOLD, era)) await finishTurn(player, scoreChain(state.chains[player]).total, era);
+    return false;
+  }
+
+  /**
+   * El Red Mirror copia los símbolos de la carta anterior de la cadena: lo que se juega
+   * es una copia (`mirrorOf` apunta al espejo, que es lo que vuelve al mazo). Si abre la
+   * ronda, va con los suyos.
+   */
+  function mirrored(player, card) {
+    const chain = state.chains[player];
+    if (card.power !== 'mirror' || chain.cards.length === 0) return card;
+    const prev = chain.cards.at(-1);
+    stageFx({ power: 'mirror', moment: 'draw', by: player, on: player, amount: 1, col: chain.cards.length - 1 });
+    powerLog('mirror', tr('Red Mirror: copia {card}.', { card: cardLabel(prev) }), player);
+    return { ...card, symbols: prev.symbols.slice(), mirrorOf: card };
+  }
+
+  /**
+   * La Novice Spell: `kind` es lo que eligió su dueño —`'heal'`, `'shield'` o `'hit'`—,
+   * por cada copia. El golpe va directo a la vida, como la pluma.
+   */
+  function castSpell(player, kind, count) {
+    const foe = other(player);
+    const amount = count * TUNING.spellAmount;
+    let got = 0;
+    if (kind === 'heal') got = heal(player, amount);
+    else if (kind === 'shield') got = gainShield(player, amount);
+    else {
+      kind = 'hit';
+      got = amount;
+      addDamage(player, amount);
+      statsOf(player).direct += amount;
+    }
+    stageFx({ power: 'spell', moment: 'cast', by: player, on: kind === 'hit' ? foe : player, amount: got, kind });
+    powerLog('spell', kind === 'heal'
+      ? tr('Novice Spell: cura {got} a {who}.', { got, who: whom(player) })
+      : kind === 'shield'
+        ? tr('Novice Spell: +{got} de escudo para {who}.', { got, who: whom(player) })
+        : tr('Novice Spell: {got} de daño {target} (queda en {hp}).', { got, target: toWhom(foe), hp: hpOf(state, foe) }), player);
+  }
+
+  /** La CPU: se cura si está baja y tiene lugar; si no, pega. */
+  function botSpell(player) {
+    const hp = hpOf(state, player);
+    const max = maxHpOf(state, player);
+    if (hp > 0 && hp <= max * 0.4 && max - hp >= TUNING.spellAmount) return 'heal';
+    return 'hit';
+  }
+
+  /** La Novice Spell que quedó sin elegir sale como golpe (se atacó, se cortó o se robó). */
+  function settleSpell(player) {
+    const pending = state.pendingSpell;
+    if (pending?.player !== player) return;
+    state.pendingSpell = null;
+    castSpell(player, 'hit', pending.count);
+  }
+
+  /**
+   * "¿Una más?" antes de robar (ver `oneMoreOf`): se anuncia, la mesa lo muestra
+   * `ONE_MORE_MS` y recién ahí sale la carta. El reloj del turno se frena mientras
+   * tanto —el que apretó robar ya decidió— y vuelve con lo que le quedaba. Devuelve
+   * false si la partida cambió en el medio.
+   */
+  async function askOneMore(player, era) {
+    const left = state.clock?.seat === player ? Math.max(state.clock.ends - Date.now(), 0) : null;
+    stopClock();
+    state.oneMore = { id: ++state.oneMoreId, player, stage: 'ask' };
+    const askMsg = voice(player).you
+      ? tr('¿Una más? Estás a una carta del K.O. directo.')
+      : tr('¿Una más? {who} está a una carta del K.O. directo.', { who: who(player) });
+    log(askMsg, 'round');
+    emit();
+    if (!(await tick(ONE_MORE_MS, era))) return false;
+    if (left !== null) armClock(player, 'turn', left);
+    return true;
+  }
+
+  /**
+   * La carta de "¿una más?" enganchó: si el golpe ya es K.O. directo (overkill, sin
+   * última chance para el rival), ataca solo. Si no, el turno sigue. Devuelve true si
+   * el turno se cerró acá.
+   */
+  async function settleOneMore(player, era) {
+    // Primero la carta, que sale en cámara lenta: se la deja caer y asentarse.
+    state.oneMore = { ...state.oneMore, stage: 'draw' };
+    emit();
+    if (!(await tick(ONE_MORE_LAND + 250, era))) return true;
+    const ko = directKo(state, player);
+    state.oneMore = { ...state.oneMore, stage: ko ? 'ko' : 'short' };
+    if (!ko) return false;
+    statsOf(player).oneMoreKo++;
+    const points = scoreChain(state.chains[player]).total;
+    log(voice(player).you
+      ? tr('¡Una más y K.O. directo! Atacás con {points}.', { points })
+      : tr('¡Una más y K.O. directo! {who} ataca con {points}.', { who: who(player), points }), player);
+    await finishTurn(player, points, era);
+    return true;
+  }
+
   /** La Pluma Sagrada pega apenas sale del mazo, una vez por cada pluma de la carta. */
-  function applyFeathers(player, card) {
-    const count = unstack([card]).filter((c) => c.power === 'feather').length;
+  function applyFeathers(player, count) {
     if (count === 0) return;
     const foe = other(player);
     const dmg = count * TUNING.featherDamage;
     state.totals[player] += dmg;
+    statsOf(player).direct += dmg;
     state.lastHit = {
       id: ++state.hitId,
       by: player,
@@ -811,28 +1457,154 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     log(`${powerIcon('feather', 'sm')} ${featherMsg}`, player);
   }
 
-  /** Charm of Power suma fuerza permanente apenas aparece en mesa. */
-  function applyStrength(player, card) {
-    const count = unstack([card]).filter((c) => c.power === 'strength').length;
-    if (count === 0) return;
+  /** Cuántas copias de cada poder trae `cards`. */
+  function countPowers(player, cards) {
+    const counts = {};
+    for (const c of unstack(cards)) if (c.power) counts[c.power] = (counts[c.power] ?? 0) + 1;
+    return counts;
+  }
+
+  /** Una línea del registro para un poder: su amuleto y el texto. */
+  const powerLog = (power, text, kind) => log(`${powerIcon(power, 'sm')} ${text}`, kind);
+
+  /**
+   * Lo que se lleva el escudo de `target` de un daño de `amount`, y lo que pasa: el
+   * escudo aguanta primero y lo que sobra llega a la vida. Devuelve lo que llegó a la
+   * vida. La almohada no entra: frena ataques, no poderes.
+   */
+  function throughShield(by, target, amount) {
+    const st = state.status[target];
+    const blocked = Math.min(st.egg, amount);
+    st.egg -= blocked;
+    const landed = amount - blocked;
+    addDamage(by, landed);
+    return landed;
+  }
+
+  /**
+   * Los poderes que actúan apenas sale la carta, se corte o no la cadena después: el
+   * Pájaro (pluma, abanico), el Bubble Maker, la daga de Buba, la garra de Charm of
+   * Power, el escáner, los guantes y el filo. Cada copia suma lo suyo.
+   */
+  function onDraw(player, card) {
+    const foe = other(player);
     const mine = state.status[player];
-    mine.strength += count * TUNING.strengthStep;
-    stageFx({ power: 'strength', moment: 'draw', by: player, on: player, amount: count * TUNING.strengthStep });
-    const strMsg = voice(player).you
-      ? tr('Vos afilás: +{str} de daño de acá en más.', { str: mine.strength })
-      : tr('{who} afila: +{str} de daño de acá en más.', { who: who(player), str: mine.strength });
-    log(`${powerIcon('strength', 'sm')} ${strMsg}`, player);
+    const theirs = state.status[foe];
+    const n = countPowers(player, [card]);
+    const drawn = statsOf(player).powers;
+    for (const [power, copies] of Object.entries(n)) {
+      const cls = POWERS[power]?.symbol;
+      if (cls) drawn[cls] = (drawn[cls] ?? 0) + copies;
+    }
+
+    applyFeathers(player, n.feather ?? 0);
+
+    if (n.strength) {
+      const before = mine.claws;
+      mine.claws = Math.min(TUNING.clawsMax, mine.claws + n.strength);
+      stageFx({ power: 'strength', moment: 'draw', by: player, on: player, amount: mine.claws - before });
+      powerLog('strength', tr('Charm of Power: {claws} de {max} garras. Cada golpe que conecte pone {bleed} de sangrado.', { claws: mine.claws, max: TUNING.clawsMax, bleed: mine.claws * TUNING.clawBleed }), player);
+    }
+    if (n.rage) {
+      const before = mine.rage;
+      mine.rage = Math.min(TUNING.rageMax, mine.rage + n.rage);
+      stageFx({ power: 'rage', moment: 'draw', by: player, on: player, amount: mine.rage - before });
+      powerLog('rage', mine.rage >= TUNING.rageMax
+        ? tr('Mask of Frenzy: ¡Furia! El próximo golpe que conecte suma +{dmg}.', { dmg: rageBonusOf(mine) })
+        : tr('Mask of Frenzy: {rage} de Rage, +{dmg} de daño en cada golpe.', { rage: mine.rage, dmg: rageBonusOf(mine) }), player);
+    }
+    if (n.fan) {
+      const before = mine.feathers;
+      mine.feathers = Math.min(TUNING.fanMax, mine.feathers + n.fan);
+      stageFx({ power: 'fan', moment: 'draw', by: player, on: player, amount: mine.feathers - before });
+      powerLog('fan', tr('Feather Fan: {feathers} plumas para el próximo golpe.', { feathers: mine.feathers }), player);
+    }
+    if (n.maker) {
+      mine.bomb += n.maker;
+      stageFx({ power: 'maker', moment: 'draw', by: player, on: player, amount: mine.bomb });
+      powerLog('maker', tr('Bubble Maker: {bubbles} de {at} burbujas.', { bubbles: Math.min(mine.bomb, TUNING.bombAt), at: TUNING.bombAt }), player);
+      while (mine.bomb >= TUNING.bombAt) {
+        mine.bomb -= TUNING.bombAt;
+        const landed = throughShield(player, foe, TUNING.bombDamage);
+        stageFx({ power: 'maker', moment: 'bomb', by: player, on: foe, amount: landed });
+        powerLog('maker', tr('¡Bomba de burbujas! {dmg} de daño {target} (queda en {hp}).', { dmg: landed, target: toWhom(foe), hp: hpOf(state, foe) }), player);
+      }
+    }
+    if (n.dagger) addBleed(player, foe, n.dagger * TUNING.daggerBleed, 'dagger', 'draw');
+    if (n.scanner) {
+      for (let i = 0; i < n.scanner; i++) {
+        const took = theirs.egg;
+        theirs.egg = 0;
+        statsOf(player).stolen += took;
+        const got = gainShield(player, took > 0 ? took : TUNING.scannerShield);
+        stageFx({ power: 'scanner', moment: 'draw', by: player, on: player, amount: got, took });
+        powerLog('scanner', took > 0
+          ? tr('Metal Scanner: le saca {took} de escudo {target} y gana {got}.', { took, target: toWhom(foe), got })
+          : tr('Metal Scanner: el rival no tenía escudo, gana {got}.', { got }), player);
+      }
+    }
+    if (n.gloves) {
+      // Veneno para los dos: el del rival lo puede frenar su Limpiador; el propio no,
+      // y al final de este turno cura en vez de dañar (ver `tickPoison`).
+      addPoison(player, foe, TUNING.glovesPoison, 'gloves', 'draw', n.gloves);
+      const before = mine.poison;
+      mine.poison = Math.min(TUNING.poisonMax, mine.poison + n.gloves * TUNING.glovesPoison);
+      mine.antidote = 1;
+      stageFx({ power: 'gloves', moment: 'self', by: player, on: player, amount: mine.poison - before });
+      powerLog('gloves', tr('Gloves of Infection: {n} de veneno para {who} también; al final de este turno le cura.', { n: mine.poison - before, who: whom(player) }), player);
+    }
+    if (n.edge) {
+      const got = addSpikes(player, n.edge * TUNING.edgeSpikes);
+      stageFx({ power: 'edge', moment: 'draw', by: player, on: player, amount: got });
+      powerLog('edge', tr('Sharp Edge: {spikes} espinas.', { spikes: mine.spikes }), player);
+    }
+    if (n.focus) {
+      const before = mine.focus;
+      mine.focus = Math.min(TUNING.focusMax, mine.focus + n.focus);
+      stageFx({ power: 'focus', moment: 'draw', by: player, on: player, amount: (mine.focus - before) * TUNING.focusStep });
+      powerLog('focus', tr('Charm of Focus: +{dmg} de daño en cada ataque, para toda la partida.', { dmg: mine.focus * TUNING.focusStep }), player);
+    }
+    if (n.lens) {
+      const deck = state.decks[player];
+      const cards = deck.slice(-n.lens * TUNING.lensCards).reverse();
+      state.peek = cards.length ? { id: ++state.peekId, player, cards } : null;
+      stageFx({ power: 'lens', moment: 'draw', by: player, on: player, amount: cards.length });
+      powerLog('lens', voice(player).you
+        ? tr('Lens of Revelation: ves las {n} cartas que siguen.', { n: cards.length })
+        : tr('Lens of Revelation: {who} mira las {n} cartas que siguen.', { who: who(player), n: cards.length }), player);
+    }
+    if (n.spell) {
+      if (isBot(player)) castSpell(player, botSpell(player), n.spell);
+      else {
+        const count = (state.pendingSpell?.player === player ? state.pendingSpell.count : 0) + n.spell;
+        state.pendingSpell = { player, count };
+        powerLog('spell', voice(player).you
+          ? tr('Novice Spell: elegí curarte, escudarte o pegarle.')
+          : tr('Novice Spell: {who} elige qué hace.', { who: who(player) }), player);
+      }
+    }
   }
 
   async function beginTurn(player, era) {
-    // Las hojas curan antes de robar: la cura se ve sola, con la mesa quieta, y no
-    // encimada con el golpe y los poderes del final del turno. `turn` sigue vacío
-    // mientras tanto, así que nadie puede robar ni plantarse en el medio.
+    state.hatched[player] = [];
+    state.taped[player] = null;
+    state.peek = null;
+    state.status[player].stamps = 0;
+    // El bloqueo de la víbora dura el turno en que se cerró la cura (ver `heal`).
+    for (const p of PLAYERS) state.status[p].healShut = 0;
+    // Las hojas curan y el capullo escuda antes de robar: se ve solo, con la mesa
+    // quieta, y no encimado con el golpe y los poderes del final del turno. `turn`
+    // sigue vacío mientras tanto, así que nadie puede robar ni plantarse en el medio.
     // Sin vida no hay cura: las hojas esperan (ver `heal`).
     if (state.status[player].leaf > 0 && hpOf(state, player) > 0) {
       tickLeaf(player);
       emit();
       if (!(await tick(Math.max(1000, POWER_BEAT.leaf.tick), era))) return;
+    }
+    if (state.status[player].cocoon > 0) {
+      tickCocoon(player);
+      emit();
+      if (!(await tick(Math.max(900, POWER_BEAT.cocoon.tick), era))) return;
     }
     if (lastChance(state) === player) {
       const lcMsg = voice(player).you
@@ -841,6 +1613,8 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       log(lcMsg, 'round');
     }
     state.turn = player;
+    state.oneMore = null;
+    state.eggSave = null;
     armClock(player, 'turn');
     let card;
     const bubble = state.bubbleCard[player];
@@ -848,6 +1622,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // La carta de la burbuja abre la ronda; con varias burbujas se le funden encima
       // las primeras del mazo en una carta gigante.
       state.bubbleCard[player] = null;
+      // Es la primera carta del turno: como cualquier robo, cuesta sangrado y sale
+      // apagada si el Trickster la eligió en la burbuja.
+      reveal(player, bubble.card);
       const extra = [];
       for (let i = 1; i < bubble.count; i++) extra.push(draw(player));
       card = extra.length === 0 ? bubble.card : {
@@ -876,9 +1653,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       log(openMsg, player);
     }
     state.chains[player] = playCard(state.chains[player], card);
-    applyFeathers(player, card);
-    applyStrength(player, card);
-    armFreeGame(player, card);
+    if (unstack([card]).some((c) => c.power === 'tape')) state.taped[player] = state.chains[player];
+    onDraw(player, card);
+    countDown(player, true);
     emit();
     if (isBot(player)) {
       if (!(await tick(800, era))) return;
@@ -889,22 +1666,18 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   /**
    * Puntos de cadena que le alcanzan a la CPU para empatar en su última chance. Ya
    * está sin vida y este es su último turno: ganar no está sobre la mesa, y el empate
-   * pide que el golpe se lleve toda la vida que le sobra al otro, huevo incluido.
+   * pide que el golpe se lleve toda la vida que le sobra al otro, escudo incluido.
    * Llegado ese número se planta y lo asegura (ver `decideDraw`).
    *
-   * Va en puntos de cadena y no en daño porque es lo que mira `decideDraw`: hay que
-   * deshacer los dos modificadores que `swingOf` mete entre la cadena y el golpe.
-   * La fuerza se descuenta; el caracol se deshace al revés de como se aplica —para
-   * que `ceil(golpe / s)` llegue a `wall` hace falta `s · (wall − 1) + 1`, o sea casi
-   * el doble—.
+   * Va en puntos de cadena y no en daño porque es lo que mira `decideDraw`: las plumas
+   * del abanico se descuentan, que suman al golpe sin salir de la cadena.
    */
   function needsOf(player) {
     if (lastChance(state) !== player) return null;
     const foe = other(player);
     const mine = state.status[player];
     const wall = hpOf(state, foe) + state.status[foe].egg;
-    const hit = mine.weak > 0 ? TUNING.snailShare * (wall - 1) + 1 : wall;
-    return hit - mine.strength;
+    return wall - mine.feathers * TUNING.fanStep - rageBonusOf(mine) - neutralBonusOf(state, player);
   }
 
   /**
@@ -916,21 +1689,6 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     voice(player).you
       ? tr('Vos sacás {card}: se te desarma el ataque. 0 de daño.', { card: cardLabel(card) })
       : tr('{who} saca {card}: se le desarma el ataque. 0 de daño.', { who: who(player), card: cardLabel(card) });
-
-  function pickStackColumn(chain, card) {
-    if (!chain || chain.cards.length <= 1) return 0;
-    let bestCol = 0;
-    let bestScore = -1;
-    for (let i = 0; i < chain.cards.length; i++) {
-      const sim = stackOnCard(chain, i, card);
-      const score = scoreChain(sim).total;
-      if (score > bestScore) {
-        bestScore = score;
-        bestCol = i;
-      }
-    }
-    return bestCol;
-  }
 
   /** El turno de un asiento que juega la máquina. Solo puede ser `p2` (ver `isBotSeat`). */
   async function botTurn(player, era) {
@@ -945,16 +1703,22 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       if (!(await tick(750, era))) return;
       const chain = state.chains[player];
 
-      const isFree = state.freeGame[player];
       let willStand = false;
       if (state.tutorial) {
         // La CPU del tutorial ataca con las cartas que diga el guión; sin tope, roba
         // hasta cortarse (ver `BOT_STAND_AT` en `tutorial.js`).
         willStand = chain.cards.length >= (state.tutorialBotStandAt ?? 2);
       } else {
-        willStand = !isFree && !decideDraw(chain, unseenPool(player), {
+        willStand = !decideDraw(chain, unseenPool(player), {
           needs, difficulty: state.difficulty, view: attackViewOf(state, player),
         });
+        // Con la lente sabe qué viene: si la de arriba engancha (o no corta), roba; si
+        // corta y no tiene con qué salvarse, se planta.
+        const next = state.peek?.player === player ? state.peek.cards[0] : null;
+        if (next) {
+          const safe = isFreeStack(next) || next.power === 'mirror' || !playCard(chain, next).busted;
+          willStand = !safe && eggsLeft(state, player) === 0 && !state.taped[player];
+        }
       }
 
       if (willStand) {
@@ -967,211 +1731,375 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         return;
       }
 
+      const gamble = oneMoreOf(state, player);
+      if (gamble && !(await askOneMore(player, era))) return;
       const card = draw(player);
-      applyFeathers(player, card);
-      applyStrength(player, card);
-      if (isFree) stackCard(player, pickStackColumn(chain, card), card);
-      else if (!(await extend(player, card, 600, era))) return;
+      onDraw(player, card);
+      let played = true;
+      if (isFreeStack(card) && chain.cards.length > 0) stackCard(player, bestStack(chain, card), card);
+      else if (!(played = await extend(player, mirrored(player, card), 600, era))) return;
+      if (gamble && played !== 'saved' && (await settleOneMore(player, era))) return;
     }
   }
 
   /**
-   * Los poderes de las cartas que salieron este turno, incluida la que cortó la
-   * cadena: el poder es de la carta, no del ataque. El pulpo no aparece acá —ya
-   * corrió al salir del mazo—.
+   * Las cartas que salieron este turno, incluida la que cortó la cadena: el poder es de
+   * la carta, no del ataque.
    */
-  function powersPlayed(player) {
+  function cardsPlayed(player) {
     const chain = state.chains[player];
-    const baseCards = chain.bustCard ? [...chain.cards, chain.bustCard] : chain.cards;
-    const cards = baseCards.flatMap((c) => c.stackedCards || [c]);
-    return cards.map((c) => c.power).filter(Boolean);
+    if (chain.bustCard) return [...chain.cards, chain.bustCard];
+    return chain.tapeCut ? [...chain.cards, chain.tapeCut] : chain.cards;
   }
 
   /**
    * Cura a `player` sin pasarse de la vida inicial y devuelve cuánto curó de verdad.
    * Recortar acá y no en `hpOf` es lo que mantiene la cuenta honesta: si `healed`
    * guardara curación desperdiciada, después amortiguaría golpes que sí tendrían
-   * que entrar.
+   * que entrar. Con el veneno de víbora encima, la cura no entra (solo si había algo
+   * para curar: ver `healShut`).
    */
   function heal(player, amount) {
     // En la última chance no hay cura: sin esto la maceta o la daga levantaban del cero
     // al que solo tenía que devolver un golpe.
-    if (hpOf(state, player) <= 0) return 0;
-    const room = TARGET - hpOf(state, player);
+    if (amount <= 0 || hpOf(state, player) <= 0) return 0;
+    const room = maxHpOf(state, player) - hpOf(state, player);
+    if (room <= 0) return 0;
+    if (healShut(player)) return 0;
     const got = Math.min(amount, room);
     state.healed[player] += got;
     return got;
   }
 
+  /** Suma escudo a `player` hasta el tope. */
+  function gainShield(player, amount) {
+    const st = state.status[player];
+    const room = TUNING.shieldMax - st.egg;
+    if (amount <= 0 || room <= 0) return 0;
+    const got = Math.min(amount, room);
+    st.egg += got;
+    return got;
+  }
+
   /**
-   * Los poderes jugados en el turno, todos juntos al soltar el ataque. Casi todos se
-   * miden contra el daño del golpe —el huevo, el veneno, el caracol, la maceta y la
-   * fuerza salen de él—, así que un ataque en cero no deja nada puesto. El pulpo es
-   * el único que cobra igual, porque no se mide contra el daño sino contra haberse
-   * plantado.
-   *
-   * Cada uno queda anotado para la pantalla (ver `stageFx`).
+   * Si la cura que iba a recibir `player` no entra (Viper's Venom). La primera cura de
+   * un turno con la víbora encima la gasta y cierra la cura el resto de ese turno: no
+   * le entra ninguna más hasta que empiece el siguiente (ver `beginTurn`).
    */
-  function applyPowers(player, swing) {
+  function healShut(player) {
+    const st = state.status[player];
+    if (st.healShut) return true;
+    if (st.healBlock <= 0) return false;
+    st.healBlock--;
+    st.healShut = 1;
+    stageFx({ power: 'viper', moment: 'block', by: other(player), on: player, amount: 0 });
+    powerLog('viper', tr("Viper's Venom: este turno no le entra ninguna cura {to}.", { to: toWhom(player) }), other(player));
+    return true;
+  }
+
+  /**
+   * Cuántas de `copies` aplicaciones de un efecto le llegan a `target`: cada Limpiador
+   * que tenga cancela una entera (ver la Sleepy Guard).
+   */
+  function resist(target, copies) {
+    const st = state.status[target];
+    const stopped = Math.min(st.cleanser, copies);
+    if (stopped > 0) {
+      st.cleanser -= stopped;
+      stageFx({ power: 'guard', moment: 'cleanse', by: target, on: target, amount: stopped });
+      powerLog('guard', stopped === 1
+        ? tr('Limpiador: se cancela un efecto sobre {who}.', { who: whom(target) })
+        : tr('Limpiador: se cancelan {n} efectos sobre {who}.', { n: stopped, who: whom(target) }), target);
+    }
+    return copies - stopped;
+  }
+
+  /** `copies` aplicaciones de `amount` de sangrado de `by` sobre `target` (sin tope). */
+  function addBleed(by, target, amount, power, moment, copies = 1) {
+    return putBleed(by, target, amount, power, moment, resist(target, copies));
+  }
+
+  /** Lo mismo, con las `through` aplicaciones que ya pasaron el Limpiador. */
+  function putBleed(by, target, amount, power, moment, through) {
+    if (through <= 0) return 0;
+    const st = state.status[target];
+    const got = amount * through;
+    st.bleed += got;
+    stageFx({ power, moment, by, on: target, amount: got });
+    powerLog(power, tr('{name}: +{n} de sangrado para {who} (total {total}).', { name: tr(POWERS[power].name), n: got, who: whom(target), total: st.bleed }), by);
+    return got;
+  }
+
+  /** `copies` aplicaciones de `amount` de veneno de `by` sobre `target`, hasta el tope. */
+  function addPoison(by, target, amount, power, moment, copies = 1) {
+    const through = resist(target, copies);
+    if (through <= 0) return 0;
+    const st = state.status[target];
+    const before = st.poison;
+    st.poison = Math.min(TUNING.poisonMax, st.poison + amount * through);
+    const got = st.poison - before;
+    stageFx({ power, moment, by, on: target, amount: got });
+    powerLog(power, tr('{name}: +{n} de veneno para {who} (total {total}).', { name: tr(POWERS[power].name), n: got, who: whom(target), total: st.poison }), by);
+    return got;
+  }
+
+  /** Suma espinas a `player` hasta el tope y devuelve cuántas entraron. */
+  function addSpikes(player, amount) {
+    const st = state.status[player];
+    const before = st.spikes;
+    st.spikes = Math.min(TUNING.spikesMax, st.spikes + amount);
+    return st.spikes - before;
+  }
+
+  /** La Red Sage: le saca a `player` todo lo que le pusieron. Devuelve si había algo. */
+  function cleanse(player) {
+    const st = state.status[player];
+    const had = DEBUFFS.some((k) => st[k] > 0);
+    for (const k of DEBUFFS) st[k] = 0;
+    return had;
+  }
+
+  /**
+   * Los poderes jugados en el turno, todos juntos al soltar el ataque. Dos momentos,
+   * que son las dos formas de cerrar el turno:
+   * - cortado: el Flamingo Hammer y el Storm Shuriken, que son justamente para eso.
+   * - plantado sin cortarse: todos los que dicen "al plantarte". Plantarse es atacar
+   *   aunque el caracol deje el golpe en 0: la decisión del jugador es la misma.
+   * Cada copia suma lo suyo. Cada uno queda anotado para la pantalla (ver `stageFx`).
+   */
+  function applyPowers(player) {
     const foe = other(player);
     const mine = state.status[player];
     const theirs = state.status[foe];
-    const kind = player;
-    const mark = (id) => powerIcon(id, 'sm');
+    const chain = state.chains[player];
+    const busted = chain.busted;
+    // Pegada con la Scotch Tape: se cortó (y lo de cortarse vale) y además ataca.
+    const taped = Boolean(chain.taped);
+    let n = countPowers(player, cardsPlayed(player));
+    let broke = null;
 
-    for (const power of powersPlayed(player)) {
-      if (power === 'octopus' && (!TUNING.octopusOnStand || !state.chains[player].busted)) {
-        mine.stacked++;
-        stageFx({ power: 'octopus', moment: 'apply', by: player, on: player, amount: mine.stacked });
-        const octMsg = mine.stacked === 1
-          ? (voice(player).you
-              ? tr('Vos vas a elegir una carta extra para tu mazo.')
-              : tr('{who} va a elegir una carta extra para tu mazo.', { who: who(player) }))
-          : (voice(player).you
-              ? tr('Vos vas a elegir {count} cartas extra para tu mazo.', { count: mine.stacked })
-              : tr('{who} va a elegir {count} cartas extra para tu mazo.', { who: who(player), count: mine.stacked }));
-        log(`${mark('octopus')} ${octMsg}`, kind);
-      } else if (power === 'bubble' && !state.chains[player].busted) {
-        mine.bubbles = (mine.bubbles || 0) + 1;
-        stageFx({ power: 'bubble', moment: 'apply', by: player, on: player, amount: mine.bubbles });
-        const bubMsg = voice(player).you
-          ? tr('Vos atrapás la apertura en una burbuja: la carta que elijas del centro abrirá tu próxima ronda.')
-          : tr('{who} atrapa la apertura en una burbuja: la carta que elijas del centro abrirá tu próxima ronda.', { who: who(player) });
-        log(`${mark('bubble')} ${bubMsg}`, kind);
-      } else if (power === 'freegame') {
-        // Free Game actúa al robar/apilar; no tiene efecto de ataque al cerrar el turno.
-      } else if (power === 'feather') {
-        // La pluma ya pegó directo al salir del mazo.
-      } else if (power === 'strength') {
-        // Charm of Power ya sumó fuerza directo al aparecer en mesa.
-      } else if (power === 'poison' && !state.chains[player].busted) {
-        // El veneno no se mide contra el golpe: cada frasco pone una dosis fija, alcanza
-        // con plantarse. Sumar o quedarse con el mayor es la diferencia entre un veneno
-        // que se acumula con cada frasco y uno que respeta la regla del caracol.
-        const dose = TUNING.poisonDose;
-        theirs.poison = TUNING.poisonStacks ? theirs.poison + dose : Math.max(theirs.poison, dose);
-        stageFx({ power: 'poison', moment: 'apply', by: player, on: foe, amount: dose });
-        const poiMsg = voice(foe).you
-          ? tr('Vos quedás con {poison} de veneno.', { poison: theirs.poison })
-          : tr('{who} queda con {poison} de veneno.', { who: who(foe), poison: theirs.poison });
-        log(`${mark('poison')} ${poiMsg}`, kind);
-      } else if (swing <= 0) {
-        // Sin daño no hay poder. Ninguno: un ataque que no salió no envenena,
-        // no debilita, no cura y no pone huevo.
-        // El pulpo sigue afuera de esta regla porque no se mide contra el daño
-        // sino contra plantarse, que es una decisión y no un resultado.
-        log(`${mark(power)} ${tr('{name} sin efecto: el ataque hizo 0.', { name: tr(POWERS[power].name) })}`, 'muted');
-      } else if (power === 'snail') {
-        // Los caracoles se suman y no hay nada más que guardar: cuántos ataques, y
-        // listo. El golpe con que se lo pusieron ya no entra en la cuenta —era lo que
-        // hacía que el mismo caracol valiera cuatro veces más en manos del que venía
-        // pegando fuerte—, así que este poder es el único de los seis que se mide
-        // contra el daño para salir pero no para cuánto pega.
-        theirs.weak += TUNING.snailAttacks;
-        stageFx({ power: 'snail', moment: 'apply', by: player, on: foe, amount: theirs.weak });
-        const snailMsg = theirs.weak === 1
-          ? (voice(foe).you
-              ? tr('Vos quedás debilitado: su próximo ataque pega la mitad.')
-              : tr('{who} queda debilitado: su próximo ataque pega la mitad.', { who: who(foe) }))
-          : (voice(foe).you
-              ? tr('Vos quedás debilitado: sus próximos {weak} ataques pegan la mitad.', { weak: theirs.weak })
-              : tr('{who} queda debilitado: sus próximos {weak} ataques pegan la mitad.', { who: who(foe), weak: theirs.weak }));
-        log(`${mark('snail')} ${snailMsg}`, kind);
-      } else if (power === 'egg') {
-        // El escudo se suma al que ya había —otro huevo, la máscara—, y la cáscara
-        // también. Siempre al menos 1: un huevo sin escudo cargaría una cáscara que no
-        // tiene qué romper.
-        const gain = Math.max(1, Math.floor(swing / TUNING.eggShare));
-        mine.egg += gain;
-        mine.eggBreak = (mine.eggBreak || 0) + TUNING.eggBreak;
-        stageFx({ power: 'egg', moment: 'apply', by: player, on: player, amount: gain });
-        const eggMsg = voice(player).you
-          ? tr('Vos quedás con un huevo de {egg}.', { egg: mine.egg })
-          : tr('{who} queda con un huevo de {egg}.', { who: who(player), egg: mine.egg });
-        log(`${mark('egg')} ${eggMsg}`, kind);
-      } else if (power === 'pot') {
-        const got = heal(player, swing);
-        stageFx({ power: 'pot', moment: 'apply', by: player, on: player, amount: got });
-        const potMsg = got > 0
-          ? (voice(player).you
-              ? tr('Vos te curás {got} y quedás en {hp}.', { got, hp: hpOf(state, player) })
-              : tr('{who} se cura {got} y queda en {hp}.', { who: who(player), got, hp: hpOf(state, player) }))
-          : hpOf(state, player) <= 0
-            ? (voice(player).you
-                ? tr('Vos no te podés curar en la última chance: la maceta no cura nada.')
-                : tr('{who} no se puede curar en la última chance: la maceta no cura nada.', { who: who(player) }))
-            : (voice(player).you
-                ? tr('Vos ya estás entero: la maceta no cura nada.')
-                : tr('{who} ya está entero: la maceta no cura nada.', { who: who(player) }));
-        log(`${mark('pot')} ${potMsg}`, got > 0 ? kind : 'muted');
-      } else if (power === 'brutal') {
-        const longest = longestRun(state.chains[player]);
-        if (longest > 0) {
-          const step = TUNING.brutalStep;
-          const brutMsg = voice(player).you
-            ? tr('Vos desgarrás: +{dmg} de daño (+{step} × {longest} de tu cadena más larga).', { dmg: step * longest, step, longest })
-            : tr('{who} desgarra: +{dmg} de daño (+{step} × {longest} de tu cadena más larga).', { who: who(player), dmg: step * longest, step, longest });
-          log(`${mark('brutal')} ${brutMsg}`, kind);
-        }
-      } else if (power === 'leaf') {
-        mine.leaf = Math.min(TUNING.leafMax, mine.leaf + TUNING.leafGain);
-        stageFx({ power: 'leaf', moment: 'apply', by: player, on: player, amount: TUNING.leafGain });
-        const leafMsg = voice(player).you
-          ? tr('Vos sumás +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al inicio de tu próximo turno.', {
-              gain: TUNING.leafGain,
-              leaf: mine.leaf,
-              max: TUNING.leafMax,
-              heal: mine.leaf * TUNING.leafHeal,
-            })
-          : tr('{who} suma +{gain} hojas (Leaf) ({leaf}/{max}): curará +{heal} de vida al inicio de su próximo turno.', {
-              who: who(player),
-              gain: TUNING.leafGain,
-              leaf: mine.leaf,
-              max: TUNING.leafMax,
-              heal: mine.leaf * TUNING.leafHeal,
-            });
-        log(`${mark('leaf')} ${leafMsg}`, kind);
-      } else if (power === 'leech') {
-        const drain = TUNING.leechDrain;
-        state.totals[player] += drain;
-        const got = heal(player, drain);
-        stageFx({ power: 'leech', moment: 'apply', by: player, on: foe, amount: drain, heal: got });
-        const healStr = got > 0
-          ? (voice(player).you ? tr(' y te curás {got}', { got }) : tr(' y se cura {got}', { got }))
-          : '';
-        const foeEndStr = voice(foe).you
-          ? tr('Vos quedás en {hp}.', { hp: hpOf(state, foe) })
-          : tr('{who} queda en {hp}.', { who: who(foe), hp: hpOf(state, foe) });
-        const drainMsg = voice(player).you
-          ? tr('Vos drenás {drain} de vida {target}{bonus}{heal}: {foeEnd}', {
-              drain,
-              target: toWhom(foe),
-              bonus: '',
-              heal: healStr,
-              foeEnd: foeEndStr,
-            })
-          : tr('{who} drena {drain} de vida {target}{bonus}{heal}: {foeEnd}', {
-              who: who(player),
-              drain,
-              target: toWhom(foe),
-              bonus: '',
-              heal: healStr,
-              foeEnd: foeEndStr,
-            });
-        log(`${mark('leech')} ${drainMsg}`, kind);
-      } else if (power === 'steelskin') {
-        // La primera pone el tope; cada una más lo baja, hasta el piso. Y cada una suma
-        // escudo, que se apila con el del huevo.
-        mine.steelskin = mine.steelskin > 0
-          ? Math.max(TUNING.steelskinFloor, mine.steelskin - TUNING.steelskinStep)
-          : TUNING.steelskinBaseCap;
-        mine.egg += TUNING.steelskinShield;
-        stageFx({ power: 'steelskin', moment: 'apply', by: player, on: player, amount: mine.steelskin, shield: TUNING.steelskinShield });
-        const steelMsg = voice(player).you
-          ? tr('Vos te ponés la Gecko Mask: +{shield} de escudo, y el próximo golpe rival te saca {cap} de vida como máximo.', { cap: mine.steelskin, shield: TUNING.steelskinShield })
-          : tr('{who} se pone la Gecko Mask: +{shield} de escudo, y el próximo golpe rival le saca {cap} de vida como máximo.', { who: who(player), cap: mine.steelskin, shield: TUNING.steelskinShield });
-        log(`${mark('steelskin')} ${steelMsg}`, kind);
+    if (busted || taped) {
+      // El martillo primero: el shuriken que viene detrás encuentra al rival sin escudo.
+      if (n.hammer) {
+        const lost = theirs.egg;
+        theirs.egg = 0;
+        stageFx({ power: 'hammer', moment: 'apply', by: player, on: foe, amount: lost });
+        powerLog('hammer', lost > 0
+          ? tr('Flamingo Hammer: le rompe los {lost} de escudo {to}.', { lost, to: toWhom(foe) })
+          : tr('Flamingo Hammer: no había escudo que romper.'), lost > 0 ? player : 'muted');
       }
+      if (n.shuriken) {
+        const dmg = n.shuriken * TUNING.shuriken;
+        const landed = throughShield(player, foe, dmg);
+        statsOf(player).direct += landed;
+        stageFx({ power: 'shuriken', moment: 'apply', by: player, on: foe, amount: landed });
+        powerLog('shuriken', tr('Storm Shuriken: la cadena se rompe y {dmg} de daño {target} (queda en {hp}).', { dmg: landed, target: toWhom(foe), hp: hpOf(state, foe) }), player);
+      }
+      if (n.stamp) {
+        mine.stamps += n.stamp;
+        stageFx({ power: 'stamp', moment: 'apply', by: player, on: player, amount: mine.stamps });
+        powerLog('stamp', mine.stamps === 1
+          ? tr('Earth Stamp: una carta del centro de regalo para {who}.', { who: whom(player) })
+          : tr('Earth Stamp: {n} cartas del centro de regalo para {who}.', { n: mine.stamps, who: whom(player) }), player);
+      }
+      if (n.gift) {
+        const before = mine.gift;
+        mine.gift = Math.min(TUNING.giftMax, mine.gift + n.gift * TUNING.giftDamage);
+        stageFx({ power: 'gift', moment: 'apply', by: player, on: player, amount: mine.gift - before });
+        powerLog('gift', tr('Last Gift: el próximo ataque {of} suma +{dmg}.', { of: ofWhom(player), dmg: mine.gift }), player);
+      }
+      if (busted) return { broke };
+      // Lo de atacar, solo con las cartas que quedaron pegadas.
+      n = countPowers(player, chain.cards);
+    }
+
+    // La salvia va primero: si le habían bloqueado la cura, que la cura de este turno entre.
+    if (n.sage) {
+      const had = cleanse(player);
+      const got = heal(player, n.sage * TUNING.sageHeal);
+      stageFx({ power: 'sage', moment: 'apply', by: player, on: player, amount: got });
+      powerLog('sage', had
+        ? tr('Red Sage: limpia a {who} y cura {got}.', { who: whom(player), got })
+        : tr('Red Sage: cura {got} a {who}.', { got, who: whom(player) }), player);
+    }
+    if (n.octopus && !taped && (!TUNING.octopusOnStand || !busted)) {
+      mine.stacked += n.octopus;
+      stageFx({ power: 'octopus', moment: 'apply', by: player, on: player, amount: mine.stacked });
+      powerLog('octopus', mine.stacked === 1
+        ? tr('Sticky Octopus: una carta extra del centro para {who}.', { who: whom(player) })
+        : tr('Sticky Octopus: {count} cartas extra del centro para {who}.', { count: mine.stacked, who: whom(player) }), player);
+    }
+    if (n.bubble) {
+      mine.bubbles += n.bubble;
+      stageFx({ power: 'bubble', moment: 'apply', by: player, on: player, amount: mine.bubbles });
+      powerLog('bubble', tr('Bubble Paste: la carta que se lleve del centro abre la próxima ronda {of}.', { of: ofWhom(player) }), player);
+    }
+    if (n.poison) addPoison(player, foe, TUNING.poisonDose, 'poison', 'apply', n.poison);
+    if (n.jellyfish) {
+      const got = resist(foe, n.jellyfish);
+      if (got > 0) {
+        // Mezcladas en el mazo, cada una en un lugar al azar.
+        const count = got * TUNING.jellyCards;
+        const deck = state.decks[foe];
+        for (let i = 0; i < count; i++) deck.splice(Math.floor(rng() * (deck.length + 1)), 0, makeJelly());
+        stageFx({ power: 'jellyfish', moment: 'apply', by: player, on: foe, amount: count });
+        powerLog('jellyfish', tr('Paralyzing Jellyfish: {n} medusas en el mazo {of}.', { n: count, of: ofWhom(foe) }), player);
+      }
+    }
+    if (n.redbubble) {
+      const got = resist(foe, n.redbubble);
+      if (got > 0) {
+        theirs.noPowers += got * TUNING.redbubbleCards;
+        stageFx({ power: 'redbubble', moment: 'apply', by: player, on: foe, amount: theirs.noPowers });
+        powerLog('redbubble', tr('Red Bubble: sin poderes del centro para {who} hasta llevarse {n} sin poder.', { who: whom(foe), n: theirs.noPowers }), player);
+      }
+    }
+    if (n.guard) {
+      const got = gainShield(player, n.guard * TUNING.guardShield);
+      mine.cleanser += n.guard;
+      stageFx({ power: 'guard', moment: 'apply', by: player, on: player, amount: got, cleanser: mine.cleanser });
+      powerLog('guard', tr('Sleepy Guard: +{got} de escudo y {n} Limpiador para {who}.', { got, n: mine.cleanser, who: whom(player) }), player);
+    }
+    if (n.trickster) {
+      mine.tricks += n.trickster;
+      stageFx({ power: 'trickster', moment: 'apply', by: player, on: foe, amount: mine.tricks });
+      powerLog('trickster', tr("Trickster's Card: {n} carta del rival para robar.", { n: mine.tricks }), player);
+    }
+
+
+    // Las garras de Charm of Power son de la partida, no de esta mano: cada ataque pone
+    // su sangrado, esté o no la carta en la mesa.
+    if (mine.claws > 0) addBleed(player, foe, mine.claws * TUNING.clawBleed, 'strength', 'apply');
+    if (n.razor) addBleed(player, foe, TUNING.razorBleed, 'razor', 'apply', n.razor);
+    if (n.brutal) {
+      // Cada bebida es una aplicación entera —sangrado y herida—: un Limpiador la
+      // cancela toda, no la mitad.
+      const got = resist(foe, n.brutal);
+      putBleed(player, foe, TUNING.drinkBleed, 'brutal', 'apply', got);
+      if (got > 0) {
+        theirs.wound += got;
+        powerLog('brutal', tr('Energy Drink M: herida abierta para {who}: en su próximo turno, lo que sangre te cura.', { who: whom(foe) }), player);
+      }
+    }
+    if (n.pot) {
+      const got = heal(player, n.pot * TUNING.potHeal);
+      stageFx({ power: 'pot', moment: 'apply', by: player, on: player, amount: got });
+      powerLog('pot', got > 0
+        ? tr('Leafy Pot: cura {got} a {who} (queda en {hp}).', { got, who: whom(player), hp: hpOf(state, player) })
+        : tr('Leafy Pot: no cura nada.'), got > 0 ? player : 'muted');
+    }
+    if (n.leaf) {
+      const before = mine.leaf;
+      mine.leaf = Math.min(TUNING.leafMax, mine.leaf + n.leaf * TUNING.leafTurns);
+      stageFx({ power: 'leaf', moment: 'apply', by: player, on: player, amount: mine.leaf - before });
+      powerLog('leaf', tr('Spring Leaf: {turns} turnos de brote para {who} ({heal} de cura cada uno).', { turns: mine.leaf, who: whom(player), heal: TUNING.leafHeal }), player);
+    }
+    if (n.leech) {
+      // El escudo frena primero, y se cura solo lo que llegó a la vida.
+      const drain = throughShield(player, foe, n.leech * TUNING.leechDrain);
+      statsOf(player).stolen += drain;
+      const got = heal(player, drain);
+      stageFx({ power: 'leech', moment: 'apply', by: player, on: foe, amount: drain, heal: got });
+      powerLog('leech', tr('Mantis Dagger: le roba {drain} de vida {target} y cura {got} (queda en {hp}).', { drain, target: toWhom(foe), got, hp: hpOf(state, foe) }), player);
+    }
+    if (n.snail) {
+      const got = resist(foe, n.snail);
+      if (got > 0) {
+        theirs.weak += got;
+        stageFx({ power: 'snail', moment: 'apply', by: player, on: foe, amount: theirs.weak });
+        powerLog('snail', theirs.weak === 1
+          ? tr('Lazy Snail: en el próximo ataque {of} no cuenta su mejor racha.', { of: ofWhom(foe) })
+          : tr('Lazy Snail: en el próximo ataque {of} no cuentan sus {n} mejores rachas.', { of: ofWhom(foe), n: theirs.weak }), player);
+      }
+    }
+    if (n.cocoon) {
+      const before = mine.cocoon;
+      mine.cocoon = Math.min(TUNING.cocoonMax, mine.cocoon + n.cocoon * TUNING.cocoonTurns);
+      stageFx({ power: 'cocoon', moment: 'apply', by: player, on: player, amount: mine.cocoon - before });
+      powerLog('cocoon', tr('Cocoon Whistle: {turns} turnos de capullo para {who} ({shield} de escudo cada uno).', { turns: mine.cocoon, who: whom(player), shield: TUNING.cocoonShield }), player);
+    }
+    if (n.steelskin) {
+      const got = addSpikes(player, n.steelskin * TUNING.spikes);
+      stageFx({ power: 'steelskin', moment: 'apply', by: player, on: player, amount: got });
+      powerLog('steelskin', tr('Gecko Mask: {spikes} espinas para {who}.', { spikes: mine.spikes, who: whom(player) }), player);
+    }
+    if (n.viper) {
+      const got = resist(foe, n.viper);
+      if (got > 0) {
+        theirs.healBlock += got;
+        stageFx({ power: 'viper', moment: 'apply', by: player, on: foe, amount: theirs.healBlock });
+        powerLog('viper', tr("Viper's Venom: el próximo turno en que {who} se cure, no le entra nada ({n} turnos).", { who: whom(foe), n: theirs.healBlock }), player);
+      }
+    }
+    if (n.pillow) {
+      mine.pillow += n.pillow * TUNING.pillowTurns;
+      stageFx({ power: 'pillow', moment: 'apply', by: player, on: player, amount: TUNING.pillowCut });
+      powerLog('pillow', tr("Mít's Comfy Pillow: los ataques {to} sacan {cut} menos durante {turns} turnos del rival.", { to: toWhom(player), cut: TUNING.pillowCut, turns: mine.pillow }), player);
+    }
+    // Los neutrales que actúan al atacar. Lo que suman al golpe ya entró en `swingOf`:
+    // acá se ve, y se cobra lo demás.
+    const even = state.round % 2 === 0;
+    if (n.energy) {
+      // Una sola bebida se gasta por ataque: la que dobló el golpe se rompe.
+      broke = unstack(chain.cards).find((c) => c.power === 'energy') ?? null;
+      stageFx({ power: 'energy', moment: 'apply', by: player, on: player, amount: TUNING.energyMult });
+      powerLog('energy', tr('Energy Drink S: la cadena vale el doble y la bebida se rompe.'), player);
+    }
+    if (n.papa) {
+      if (even) {
+        stageFx({ power: 'papa', moment: 'apply', by: player, on: foe, amount: n.papa * TUNING.papaDamage, kind: 'hit' });
+        powerLog('papa', tr('Papa Bear: ronda par, +{dmg} al golpe.', { dmg: n.papa * TUNING.papaDamage }), player);
+      } else {
+        const got = gainShield(player, n.papa * TUNING.papaShield);
+        stageFx({ power: 'papa', moment: 'apply', by: player, on: player, amount: got, kind: 'shield' });
+        powerLog('papa', tr('Papa Bear: ronda impar, +{got} de escudo para {who}.', { got, who: whom(player) }), player);
+      }
+    }
+    if (n.mama) {
+      if (even) addBleed(player, foe, TUNING.mamaBleed, 'mama', 'apply', n.mama);
+      else {
+        const got = heal(player, n.mama * TUNING.mamaHeal);
+        stageFx({ power: 'mama', moment: 'apply', by: player, on: player, amount: got, kind: 'heal' });
+        powerLog('mama', tr('Mama Bear: ronda impar, cura {got} a {who}.', { got, who: whom(player) }), player);
+      }
+    }
+    if (n.blood) {
+      // El pacto es con uno mismo: el Limpiador no lo frena.
+      const got = n.blood * TUNING.bloodSelf;
+      mine.bleed += got;
+      stageFx({ power: 'blood', moment: 'apply', by: player, on: player, amount: got });
+      powerLog('blood', tr('Bloodpact: +{dmg} al golpe, y {who} queda con {n} de sangrado.', { dmg: n.blood * TUNING.bloodDamage, who: whom(player), n: mine.bleed }), player);
+    }
+    return { broke };
+  }
+
+  /**
+   * La Black Sage, antes del golpe: le saca al rival todo lo que tiene encima y lo
+   * protege o lo potencia. Devuelve cuánto escudo le rompió.
+   */
+  function dispelFoe(player) {
+    const foe = other(player);
+    const theirs = state.status[foe];
+    const had = ['egg', 'spikes', 'feathers', 'rage', 'pillow', 'gift'].filter((k) => theirs[k] > 0);
+    const shield = theirs.egg;
+    for (const k of had) theirs[k] = 0;
+    stageFx({ power: 'dispel', moment: 'apply', by: player, on: foe, amount: shield });
+    powerLog('dispel', had.length
+      ? tr('Black Sage: le saca todo lo que tenía encima {to}.', { to: toWhom(foe) })
+      : tr('Black Sage: no había nada que sacar.'), had.length ? player : 'muted');
+  }
+
+  /**
+   * `card` se rompe: sale de lo de `player` para el resto de la partida, del mazo (si ya
+   * había vuelto con un rebarajado) y de las listas del panel (ver `start` y `added`).
+   */
+  function breakCard(player, card) {
+    const deck = state.decks[player];
+    const at = deck.indexOf(card);
+    if (at >= 0) deck.splice(at, 1);
+    for (const list of [state.start[player], state.added[player]]) {
+      const i = list.findIndex((c) => c.uid === card.uid);
+      if (i >= 0) { list.splice(i, 1); break; }
     }
   }
 
@@ -1188,18 +2116,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // quedó sin tiempo— no tiene cadena que mostrar, ya se vio caer la carta que lo
     // rompió, y meterle una pausa acá sería hacerlo esperar por nada.
     stopClock();
-    // La bebida se activa al plantarse, antes que nada: se vuelca sobre el número de
-    // daño, que sube contando lo que suma, y recién después la cadena se recorre. Cuenta
-    // en el golpe desde que entró a la cadena (ver `brutalBonusOf`), pero hasta acá la
-    // pantalla la dejaba afuera y marcaba la racha más larga, que es la que la mide.
-    const drink = swingOf(state, player) - swingOf(state, player, { brutal: false });
+    settleSpell(player);
+    if (state.peek?.player === player) state.peek = null;
     state.poured[player] = true;
-    if (drink > 0) {
-      const fx = { power: 'brutal', moment: 'stand', by: player, on: player, amount: drink };
-      stageFx(fx);
-      emit();
-      if (!(await tick(powerBeat(fx), era))) return;
-    }
     const aimed = state.chains[player];
     if (!aimed.busted && aimed.cards.length > 0) {
       const ms = aimMs(aimed.cards.length);
@@ -1209,30 +2128,33 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       state.aiming = null;
     }
 
+    const busted = state.chains[player].busted;
     const swing = swingOf(state, player);
-    const brutal = brutalBonusOf(state.chains[player]);
     if (swing > 0) {
       const record = state.records[player];
       record.hit = Math.max(record.hit, swing);
-      record.chain = Math.max(record.chain, state.chains[player].cards.length);
+      // En símbolos, como el daño: la racha más larga (la mejorada cuenta doble, el
+      // Rocket suma sin sumar columna), no las cartas de la mesa.
+      record.chain = Math.max(record.chain, longestRun(state.chains[player]));
     }
-    // El caracol se gasta con un ataque que haya hecho daño, y no con el turno: una
-    // cadena cortada no le paga el caracol a nadie. Si se gastara igual, el debilitado
-    // se lo sacaría de encima justo con el turno que ya venía perdido.
-    //
-    // Por ataque y no por ronda, eso sí: así dura siempre lo mismo, sin depender de si
-    // le tocaba abrir o cerrar el intercambio.
-    const weakened = mine.weak > 0 && swing > 0;
-    if (weakened) mine.weak--;
+    if (busted) statsOf(player).busts++;
+    else statsOf(player).attacks.push(longestRun(state.chains[player]));
+    // El caracol se gasta con el ataque que no se cortó, pegue lo que pegue: ya le
+    // apagó sus mejores rachas (ver `pointsOf`). Una cadena cortada no lo gasta.
+    const weakened = !busted && mine.weak > 0 ? mine.weak : 0;
+    if (weakened) mine.weak = 0;
     // Lo que se anote de acá hasta el `emit` del golpe es de este ataque.
     const fxBefore = state.powerFxId;
     fxOpen = false;
-    if (weakened) stageFx({ power: 'snail', moment: 'slow', by: foe, on: player, amount: swing });
+    if (weakened) stageFx({ power: 'snail', moment: 'slow', by: foe, on: player, amount: weakened });
+    if (!busted && chainCount(state, player, 'dispel') > 0) dispelFoe(player);
     if (swing !== points) {
       const mods = [
-        mine.strength ? tr('+{str} de fuerza', { str: mine.strength }) : '',
-        brutal ? tr('+{brutal} de Energy Drink', { brutal }) : '',
-        weakened ? tr('partido al medio por el caracol') : '',
+        weakened ? tr('sin sus {n} mejores rachas por el caracol', { n: weakened }) : '',
+        mine.feathers ? tr('+{dmg} de plumas', { dmg: mine.feathers * TUNING.fanStep }) : '',
+        mine.rage ? tr('+{dmg} de Rage', { dmg: rageBonusOf(mine) }) : '',
+        chainCount(state, player, 'energy') ? tr('×{n} de la bebida', { n: TUNING.energyMult }) : '',
+        neutralBonusOf(state, player) ? tr('+{dmg} de amuletos', { dmg: neutralBonusOf(state, player) }) : '',
       ].filter(Boolean);
       const swingMsg = voice(player).you
         ? tr('Vos atacás por {swing}: {points} de cadena {mods}.', { swing, points, mods: mods.join(', ') })
@@ -1240,53 +2162,33 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       log(swingMsg, 'muted');
     }
 
-    // Primero el escudo del rival —huevos y máscaras, todo junto—, que se come lo que
-    // puede y solo se rompe cuando se gasta: si le sobra, sigue puesto para el próximo
-    // golpe.
+    // Primero el escudo del rival, que se come lo que puede y solo se rompe cuando se
+    // gasta: si le sobra, sigue puesto para el próximo golpe.
     const blocked = Math.min(theirs.egg, swing);
-    // La cáscara: daño fijo acumulable que devuelve al romperse (8 por cada huevo
-    // acumulado). Solo la cargan los huevos: el escudo de la máscara no devuelve nada.
-    let thorns = 0;
     let broke = false;
     if (blocked > 0) {
       theirs.egg -= blocked;
       broke = theirs.egg === 0;
-      if (broke) {
-        thorns = theirs.eggBreak || 0;
-        theirs.eggBreak = 0;
-      }
-      const rest = broke
-        ? (thorns > 0
-            ? (voice(player).you
-                ? tr(' y se rompe: la cáscara le devuelve {thorns} a vos', { thorns })
-                : tr(' y se rompe: la cáscara le devuelve {thorns} {target}', { thorns, target: toWhom(player) }))
-            : tr(' y se rompe'))
-        : tr(' y le quedan {egg}', { egg: theirs.egg });
+      const rest = broke ? tr(' y se rompe') : tr(' y le quedan {egg}', { egg: theirs.egg });
       const shieldMsg = voice(foe).you
         ? tr('Tu escudo aguanta {blocked}{rest}.', { blocked, rest })
         : tr('El escudo {owner} aguanta {blocked}{rest}.', { owner: ofWhom(foe), blocked, rest });
-      log(`${powerIcon('egg', 'sm')} ${shieldMsg}`, 'muted');
+      log(shieldMsg, 'muted');
     }
 
-    // Después el tope de la máscara, sobre lo que pasó el escudo: es un tope a la vida,
-    // no al golpe. Se gasta cuando algo le llega a la vida; un golpe que se come
-    // entero el escudo no la toca.
+    // Después la almohada, sobre lo que pasó el escudo: le resta `pillowCut` a lo que
+    // llega a la vida. Dura turnos del que ataca, no golpes: se gasta uno al final de
+    // este turno, pegue o se corte (ver más abajo).
     let landed = swing - blocked;
     let mitigated = 0;
-    if (theirs.steelskin > 0 && landed > 0) {
-      if (landed > theirs.steelskin) {
-        mitigated = landed - theirs.steelskin;
-        landed = theirs.steelskin;
-        stageFx({ power: 'steelskin', moment: 'block', by: foe, on: foe, amount: theirs.steelskin, mitigated });
-        const steelMsg = voice(foe).you
-          ? tr('Tu Gecko Mask frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).', { mitigated, cap: theirs.steelskin })
-          : tr('La Gecko Mask {owner} frena el golpe: mitiga {mitigated} de daño (tope máximo {cap}).', { owner: ofWhom(foe), mitigated, cap: theirs.steelskin });
-        log(`${powerIcon('steelskin', 'sm')} ${steelMsg}`, foe);
-      }
-      theirs.steelskin = 0;
+    if (theirs.pillow > 0 && landed > 0) {
+      mitigated = Math.min(landed, TUNING.pillowCut);
+      landed -= mitigated;
+      stageFx({ power: 'pillow', moment: 'block', by: foe, on: foe, amount: mitigated });
+      powerLog('pillow', tr("Mít's Comfy Pillow frena el golpe: le resta {mitigated}.", { mitigated }), foe);
     }
-    // Lo que vale el ataque para los poderes del que pegó: lo que frenó la máscara no
-    // cuenta, lo que se comió el escudo sí (como siempre con el huevo).
+    // Lo que vale el ataque para los poderes del que pegó: lo que frenó la almohada no
+    // cuenta, lo que se comió el escudo sí.
     const effectiveSwing = swing - mitigated;
 
     state.roundScores[player] = effectiveSwing;
@@ -1305,11 +2207,8 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // Un ataque hace 0 por dos motivos distintos y la pantalla los cuenta distinto: si
     // la cadena se cortó, el fallo ya se vio y se oyó cuando cayó la carta —no hay
     // nada nuevo que mostrar—; si se plantó y el caracol se lo comió, este es el
-    // primer momento en que el jugador se entera. `kind` es lo que los separa, y sale
-    // de acá porque es el juego el que sabe por qué el golpe quedó en cero.
-    const kind = effectiveSwing <= 0 && state.chains[player].busted ? { kind: 'bust' } : null;
-    // `broke` viaja con el golpe para que la pantalla pueda decir en el momento por
-    // qué, un beat después, le vuelve un número al que pegó (ver `playHit`).
+    // primer momento en que el jugador se entera. `kind` es lo que los separa.
+    const kind = effectiveSwing <= 0 && busted ? { kind: 'bust' } : null;
     state.lastHit = { id: ++state.hitId, by: player, target, amount: landed, blocked, broke, ...kind };
     if (landed > 0) {
       const hitMsg = voice(player).you
@@ -1319,66 +2218,82 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
             : tr('{who} pega por {landed}. {target} queda en {hp}.', { who: who(player), landed, target: who(target), hp: hpOf(state, target) }));
       log(hitMsg, player);
     }
-    applyPowers(player, effectiveSwing);
+
+    // Lo que le cuesta pegarle a alguien armado: sus espinas vuelven enteras (después
+    // del golpe, ver abajo).
+    let thorns = 0;
+    if (swing > 0 && theirs.spikes > 0) {
+      thorns = theirs.spikes;
+      theirs.spikes = 0;
+    }
+    // La Furia se gasta con el ataque: la Rage vuelve a 0.
+    if (swing > 0 && mine.rage >= TUNING.rageMax) {
+      mine.rage = 0;
+      stageFx({ power: 'rage', moment: 'fury', by: player, on: foe, amount: TUNING.furyBonus });
+      powerLog('rage', tr('Mask of Frenzy: la Furia se descarga y la Rage vuelve a 0.'), player);
+    }
+    // Las plumas del abanico y el regalo ya sumaron al golpe: se van.
+    if (swing > 0) {
+      mine.feathers = 0;
+      mine.gift = 0;
+    }
+    const { broke: drink } = applyPowers(player);
     const staged = state.powerFxId !== fxBefore ? state.powerFx.fx : [];
     emit();
 
     // Sus cartas vuelven al mazo antes de repartirle: lo que se lleve del centro entra
     // sobre el mazo completo, y la cadena sigue en pantalla hasta que cierre la ronda.
     const chain = state.chains[player];
-    const played = chain.cards.flatMap((c) => c.stackedCards || [c]);
-    state.decks[player].push(...played.slice(state.recycled[player]));
-    if (chain.bustCard) state.decks[player].push(chain.bustCard);
+    // Las medusas no vuelven: se rompieron al salir. Tampoco la bebida que se usó.
+    const played = unstack(chain.cards);
+    const kept = (c) => !c.jelly && c !== drink;
+    state.decks[player].push(...played.slice(state.recycled[player]).filter(kept));
+    if (chain.bustCard && !chain.bustCard.jelly) state.decks[player].push(chain.bustCard.mirrorOf ?? chain.bustCard);
+    if (drink) breakCard(player, drink);
     state.returned[player] = true;
 
     // Un golpe que conecta se mira entero, y "entero" es más largo de lo que parece:
     // el efecto de clase tarda hasta 700 ms en llegar al impacto (`hitDelay`) y recién
-    // ahí sale el número, que flota 900 ms más. Con 900 de espera el centro se abría
-    // encima del número todavía subiendo, y el jugador terminaba de leer cuánto le
-    // pegaron abajo del panel de cartas. Ahora la espera cubre el golpe completo y
+    // ahí sale el número, que flota 900 ms más. La espera cubre el golpe completo y
     // deja un beat después, antes de cambiar de tema.
-    //
-    // El ataque que se desarmó tiene su propio cartel —"fallo", 900 ms desde el
-    // impacto—, pero solo cuando se plantó: con la cadena cortada el desplome (slump)
-    // dura 1600 ms, y el fallo flotante 900 ms. Con 1000 ms para bust (sumado a los 700 ms
-    // de caída) o 1700 ms para fallo por plantarse, la animación termina por completo
-    // antes de que se abra el centro.
     //
     // Los poderes con animación propia salen después del golpe, de a uno y completos:
     // con alguno en juego la espera es la que ellos pidan, si es más larga.
     const powersMs = staged.length ? POWER_LEAD + staged.reduce((ms, fx) => ms + powerBeat(fx), 0) : 0;
-    const shown = Math.max(swing > 0 ? 1800 : state.chains[player].busted ? 1000 : 1700, powersMs);
+    const shown = Math.max(swing > 0 ? 1800 : busted ? 1000 : 1700, powersMs);
     if (!(await tick(shown, era))) return;
 
-    // Y recién ahí contesta la cáscara, con su propio golpe en sentido contrario. Va
+    // Y recién ahí vuelven las espinas, con su propio golpe en sentido contrario. Van
     // después y no junto con el ataque porque son dos cosas distintas —le pegaste, y
-    // el huevo te contestó— y encimadas se leen como un solo número mal sumado.
+    // las espinas te contestaron— y encimadas se leen como un solo número mal sumado.
     //
     // El daño se aplica acá, del otro lado del `tick`, y por eso el `return` de arriba
     // no lo pierde: cuando `tick` da false es porque arrancó otra partida y `state` ya
     // es otro objeto. Sumárselo ahí le metería daño de la partida anterior a la nueva.
     if (thorns > 0) {
       addDamage(foe, thorns);
+      statsOf(foe).thorns += thorns;
       state.lastHit = {
         id: ++state.hitId, by: foe, target: player, amount: thorns, blocked: 0, broke: false,
         kind: 'thorns',
       };
-      const shellMsg = voice(player).you
-        ? tr('La cáscara le vuelve a vos por {thorns}: quedás en {hp}.', { thorns, hp: hpOf(state, player) })
-        : tr('La cáscara le vuelve {target} por {thorns}: queda en {hp}.', { target: toWhom(player), thorns, hp: hpOf(state, player) });
-      log(`${powerIcon('egg', 'sm')} ${shellMsg}`, foe);
+      powerLog('steelskin', tr('Espinas: {thorns} de daño {target} (queda en {hp}).', { thorns, target: toWhom(player), hp: hpOf(state, player) }), foe);
       emit();
-      // La cáscara sale en el momento —no hay efecto de clase que esperar—, así que
-      // con 900 alcanzaba justo para su número y ni un instante más: cerraba al mismo
-      // tiempo que la animación. Un beat más y se termina de ver.
       if (!(await tick(1300, era))) return;
     }
 
-    if (state.status[player].poison > 0) {
+    // La herida abierta dura el turno entero del que sangra: al cerrarlo, se cierra.
+    // Y la almohada del rival cuenta este turno, haya pegado o no.
+    if (mine.wound > 0) mine.wound = 0;
+    if (theirs.pillow > 0) theirs.pillow--;
+
+    if (mine.poison > 0) {
       tickPoison(player);
       emit();
       if (!(await tick(Math.max(1000, POWER_BEAT.poison.tick), era))) return;
     }
+    // Los guantes curan con el veneno solo el turno en que salieron.
+    mine.antidote = 0;
 
     // Con alguien sin vida no hay mazo que armar: o la partida ya está resuelta, o
     // solo queda el golpe de la última chance.
@@ -1413,57 +2328,53 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   }
 
   /**
-   * Las hojas (Leaf) curan al empezar el turno de quien las tiene, antes de robar:
-   * curan 4 de vida por cada hoja activa y luego se consume una hoja.
+   * El brote de la Spring Leaf, al empezar el turno de quien lo tiene y antes de robar:
+   * cura un número fijo y se gasta un turno.
    */
   function tickLeaf(player) {
     const st = state.status[player];
-    const leaves = st.leaf;
-    const got = heal(player, leaves * TUNING.leafHeal);
-    const left = --st.leaf;
+    const got = heal(player, TUNING.leafHeal);
+    st.leaf--;
     stageFx({ power: 'leaf', moment: 'tick', by: player, on: player, amount: got });
-    const leftMsg = left > 0
-      ? (left === 1 ? tr(' (le queda 1 hoja)') : tr(' (le quedan {left} hojas)', { left }))
-      : tr(' (se consumió la última hoja)');
-    const leafCountStr = leaves === 1 ? tr('1 hoja') : tr('{leaves} hojas', { leaves });
-    const body = got > 0
-      ? (voice(player).you
-          ? tr('Vos te curás +{got} de vida ({leafCount}) y quedás en {hp}.', { got, leafCount: leafCountStr, hp: hpOf(state, player) })
-          : tr('{who} se cura +{got} de vida ({leafCount}) y queda en {hp}.', { who: who(player), got, leafCount: leafCountStr, hp: hpOf(state, player) }))
-      : (voice(player).you
-          ? tr('Vos ya estás entero ({leafCount}).', { leafCount: leafCountStr })
-          : tr('{who} ya está entero ({leafCount}).', { who: who(player), leafCount: leafCountStr }));
-    log(`${powerIcon('leaf', 'sm')} ${tr('Hoja (Leaf):')} ${body}${leftMsg}`, player);
+    powerLog('leaf', got > 0
+      ? tr('Spring Leaf: cura {got} a {who} (queda en {hp}, {left} turnos más).', { got, who: whom(player), hp: hpOf(state, player), left: st.leaf })
+      : tr('Spring Leaf: no cura nada ({left} turnos más).', { left: st.leaf }), player);
+    return got;
+  }
+
+  /** El capullo del Cocoon Whistle, al empezar el turno: escudo fijo y se gasta un turno. */
+  function tickCocoon(player) {
+    const st = state.status[player];
+    const got = gainShield(player, TUNING.cocoonShield);
+    st.cocoon--;
+    stageFx({ power: 'cocoon', moment: 'tick', by: player, on: player, amount: got });
+    powerLog('cocoon', tr('Cocoon Whistle: +{got} de escudo para {who} ({left} turnos más).', { got, who: whom(player), left: st.cocoon }), player);
     return got;
   }
 
   /**
-   * El veneno se cobra al finalizar el turno de quien lo tiene encima: muerde
-   * por su cuenta entera y recién después se parte al medio. Cuenta como daño de
-   * quien lo puso, así que suma a su total como cualquier golpe.
+   * El veneno se cobra al finalizar el turno de quien lo tiene encima: muerde por su
+   * cuenta entera y después baja 1. Cuenta como daño de quien lo puso, así que suma a
+   * su total como cualquier golpe. Un frasco de 5 saca 5 + 4 + 3 + 2 + 1.
    *
-   * Partirse al medio y no bajar de a dos: un veneno grande pega fuerte dos o tres
-   * rondas y se apaga, en vez de arrastrarse media partida sacando 2. Y como esa
-   * mitad nunca llega sola a cero, `poisonFloor` la corta: con 2 o menos encima el
-   * veneno ya mordió lo que tenía para morder y se va.
-   *
-   * No pasa por el escudo ni por el tope de la máscara: el veneno va directo a la vida.
+   * No pasa por el escudo ni por la almohada: el veneno va directo a la vida. El turno
+   * en que robó los guantes (`antidote`), en vez de morder lo cura lo mismo.
    */
   function tickPoison(player) {
     const st = state.status[player];
     if (st.poison <= 0) return;
     const bite = st.poison;
+    if (st.antidote) {
+      st.poison--;
+      const got = heal(player, bite);
+      stageFx({ power: 'gloves', moment: 'cure', by: player, on: player, amount: got });
+      powerLog('gloves', tr('Gloves of Infection: el veneno cura {got} a {who} (veneno {left}).', { got, who: whom(player), left: st.poison }), player);
+      return;
+    }
     addDamage(other(player), bite);
-    const half = Math.floor(bite / TUNING.poisonHalve);
-    const left = half <= TUNING.poisonFloor ? 0 : half;
-    const poisonEnd = left > 0
-      ? tr(' y le baja a {left}', { left })
-      : tr(' y se le va');
-    const poisonMsg = voice(player).you
-      ? tr('El veneno le saca {bite} a vos: quedás en {hp}{poisonEnd}.', { bite, hp: hpOf(state, player), poisonEnd })
-      : tr('El veneno le saca {bite} {target}: queda en {hp}{poisonEnd}.', { bite, target: toWhom(player), hp: hpOf(state, player), poisonEnd });
-    log(`${powerIcon('poison', 'sm')} ${poisonMsg}`, other(player));
-    st.poison = left;
+    statsOf(other(player)).poison += bite;
+    st.poison--;
+    powerLog('poison', tr('Veneno: −{bite} de vida {target} (queda en {hp}, veneno {left}).', { bite, target: toWhom(player), hp: hpOf(state, player), left: st.poison }), other(player));
     stageFx({ power: 'poison', moment: 'tick', by: other(player), on: player, amount: bite });
   }
 
@@ -1515,7 +2426,7 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // final de la partida, con una promesa por ronda colgando de la anterior.
     const closed = state.round;
     void (async () => {
-      if (!(await tick(1100, era))) return;
+      if (!(await tick(state.tutorial ? TUTORIAL_ROUND_PAUSE : ROUND_PAUSE, era))) return;
       // `nextRound` puede haberlo adelantado mientras tanto: si ya arrancó otra
       // ronda, esta corrutina no tiene nada que hacer.
       if (state.phase !== 'roundEnd' || state.round !== closed) return;
@@ -1547,6 +2458,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (at < 0) return;
     state.market.splice(at, 1);
     state.added[player].push(card);
+    statsOf(player).picks++;
+    // La Red Bubble se va llevándose cartas sin poder, de a una.
+    if (!card.power && state.status[player].noPowers > 0) state.status[player].noPowers--;
     const count = state.status[player].bubbles;
     if (count > 0) {
       state.status[player].bubbles = 0;
@@ -1600,8 +2514,54 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       bonus: 0,
       renewed: { p1: false, p2: false },
     };
+    // El Trickster se cobra antes que el centro: primero se apaga, después se elige.
+    const st = state.status[player];
+    if (st.tricks > 0) {
+      if (trickTargetsFor(state, player).length) state.draft.step = 'trick';
+      else {
+        st.tricks = 0;
+        powerLog('trickster', tr("Trickster's Card: el rival no tiene cartas con poder para robar."), 'muted');
+      }
+    }
     state.phase = 'draft';
     await runDraft(era);
+  }
+
+  /**
+   * `player` le roba `card` al rival: sale de su mazo (o de su burbuja) y pasa al mazo
+   * de `player` para el resto de la partida. Un Limpiador del rival lo cancela, y el
+   * trickster se gasta igual.
+   */
+  function steal(player, card) {
+    const foe = other(player);
+    state.status[player].tricks--;
+    if (resist(foe, 1) <= 0) return;
+    const deck = state.decks[foe];
+    const at = deck.indexOf(card);
+    if (at >= 0) deck.splice(at, 1);
+    else if (state.bubbleCard[foe]?.card === card) state.bubbleCard[foe] = null;
+    else return;
+    state.decks[player].push(card);
+    // Y en las listas del panel del mazo (ver `start` y `added`): deja de ser del rival.
+    for (const list of [state.start[foe], state.added[foe]]) {
+      const i = list.findIndex((c) => c.uid === card.uid);
+      if (i >= 0) { list.splice(i, 1); break; }
+    }
+    state.added[player].push(card);
+    stageFx({ power: 'trickster', moment: 'pick', by: player, on: foe, amount: 1, card: card.power });
+    powerLog('trickster', tr("Trickster's Card: le roba {power} {to}.", { power: tr(POWERS[card.power].name), to: toWhom(foe) }), player);
+  }
+
+  /** La carta que la CPU le roba al rival: la de más peso (ver `POWER_WORTH`). */
+  function botTrick(player) {
+    const targets = trickTargetsFor(state, player);
+    return targets.reduce((best, c) => ((POWER_WORTH[c.power] ?? 1) > (POWER_WORTH[best.power] ?? 1) ? c : best), targets[0]);
+  }
+
+  /** Cierra la etapa del Trickster y pasa al centro. */
+  function endTricks(player) {
+    state.status[player].tricks = 0;
+    state.draft.step = 'normal';
   }
 
   const drafting = () => draftingSeat(state);
@@ -1616,28 +2576,39 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   }
 
   /**
-   * Termina el reparto normal. Si el jugador tiene pulpos puestos, en vez de pasar el
-   * turno se abre la etapa de las cartas extra: una por pulpo, sin las reglas del
-   * reparto. Devuelve si quedó algo por elegir.
+   * Termina el reparto normal. Si el jugador tiene cartas de regalo —primero las de la
+   * Earth Stamp, después las de los pulpos—, en vez de pasar el turno se abre la etapa
+   * de las cartas extra: una por cada una, sin las reglas del reparto (`bonusBy` dice de
+   * quién son). Devuelve si quedó algo por elegir.
    */
   function openBonus(player) {
     state.draft.mode = null;
     state.draft.remaining = 0;
-    const owed = state.status[player].stacked;
+    const st = state.status[player];
+    const by = st.stamps > 0 ? 'stamp' : 'octopus';
     // Sin acumulación, los pulpos de más se pierden: pagan una carta por reparto.
-    state.draft.bonus = TUNING.octopusStacks ? owed : Math.min(owed, 1);
+    state.draft.bonus = by === 'stamp' ? st.stamps : TUNING.octopusStacks ? st.stacked : Math.min(st.stacked, 1);
+    state.draft.bonusBy = by;
     if (state.draft.bonus === 0) { nextDrafter(); return false; }
-    if (!TUNING.octopusStacks) state.status[player].stacked = state.draft.bonus;
+    if (by === 'octopus' && !TUNING.octopusStacks) st.stacked = state.draft.bonus;
     state.draft.step = 'bonus';
-    stageFx({ power: 'octopus', moment: 'pick', by: player, on: player, amount: state.draft.bonus });
+    stageFx({ power: by, moment: 'pick', by: player, on: player, amount: state.draft.bonus });
     return true;
   }
 
-  /** Se lleva una de las cartas del pulpo y consume la reserva que la pagó. */
+  /** Se lleva una de las cartas de regalo y consume lo que la pagó. */
   function takeBonus(player, card) {
-    state.status[player].stacked--;
+    if (state.draft.bonusBy === 'stamp') state.status[player].stamps--;
+    else state.status[player].stacked--;
     state.draft.bonus--;
     takeFromMarket(player, card, false);
+  }
+
+  /** Deja pasar las cartas de regalo que quedaban: se pierden. */
+  function dropBonus(player) {
+    if (state.draft.bonusBy === 'stamp') state.status[player].stamps = 0;
+    else state.status[player].stacked -= state.draft.bonus;
+    state.draft.bonus = 0;
   }
 
   /**
@@ -1652,9 +2623,35 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     return { mode: 'plain', cards: kind === 'bust' ? [card] : [card, card] };
   }
 
+  /** La CPU se lleva sus cartas de regalo, de a una y a la vista, hasta que no le deban más. */
+  async function botBonus(player, era) {
+    do {
+      while (state.draft.bonus > 0 && state.market.length) {
+        emit();
+        if (!(await tick(700, era))) return;
+        takeBonus(player, pickBonus(draftableFor(state, player), cardsOf(player)));
+      }
+      if (state.draft.bonus > 0) dropBonus(player);
+    } while (openBonus(player));
+  }
+
   async function runDraft(era) {
     while (state.draft.index < state.draft.order.length) {
       const player = drafting();
+      if (state.draft.step === 'trick') {
+        if (!isBot(player)) {
+          armClock(player, 'draft');
+          emit();
+          return;
+        }
+        while (state.status[player].tricks > 0 && trickTargetsFor(state, player).length) {
+          emit();
+          if (!(await tick(700, era))) return;
+          steal(player, botTrick(player));
+        }
+        endTricks(player);
+        continue;
+      }
       if (state.market.length === 0) {
         state.draft.index++;
         continue;
@@ -1664,6 +2661,15 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       // El tutorial esconde el centro hasta la ronda en que lo enseña.
       if (state.tutorial && state.tutorialSkipDraft) {
         nextDrafter();
+        continue;
+      }
+
+      // Pegada con la Scotch Tape no hay reparto: solo las cartas de regalo, si hay.
+      if (kind === 'taped' && state.draft.step === 'normal' && !openBonus(player)) continue;
+
+      if (isBot(player) && state.draft.step === 'bonus') {
+        await botBonus(player, era);
+        if (era !== epoch) return;
         continue;
       }
 
@@ -1685,25 +2691,23 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
         //
         // "Fácil" a veces no piensa: agarra cualquier carta que pueda (ver `sloppyDraft`).
         const careless = sloppyDraft(state.difficulty) > 0 && sloppyDraft(state.difficulty) > rng();
-        const plan = careless ? carelessPlan(player, kind) : planDraft(state.market, cardsOf(player), { kind });
+        const plan = careless ? carelessPlan(player, kind) : planDraft(draftableFor(state, player), cardsOf(player), { kind });
         state.draft.mode = plan.mode;
+        let took = 0;
         if (plan.mode === 'power') {
           takeFromMarket(player, plan.cards[0]);
+          took++;
         } else {
           for (let n = 0; n < plan.cards.length && plainCards().length; n++) {
             const plain = plainCards();
             takeFromMarket(player, careless ? plain[Math.floor(rng() * plain.length)] : pickBest(plain, cardsOf(player)));
+            took++;
           }
         }
-        // Y las cartas que le deben los pulpos, de a una y a la vista.
+        // Y las cartas de regalo (Earth Stamp, pulpos), de a una y a la vista.
         if (openBonus(player)) {
-          state.draft.step = 'bonus';
-          while (state.draft.bonus > 0 && state.market.length) {
-            emit();
-            if (!(await tick(700, era))) return;
-            takeBonus(player, pickBonus(state.market, cardsOf(player)));
-          }
-          nextDrafter();
+          await botBonus(player, era);
+          if (era !== epoch) return;
         }
         continue;
       }
@@ -1792,7 +2796,13 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (state.draft.step === 'bonus') {
       takeBonus(player, card);
       if (state.draft.bonus > 0 && state.market.length > 0) { emit(); return; }
-      nextDrafter();
+      if (state.draft.bonus > 0) dropBonus(player);
+      // Después de las de la Earth Stamp pueden venir las de los pulpos.
+      if (openBonus(player) && state.market.length > 0) {
+        armClock(player, 'draft');
+        emit();
+        return;
+      }
       await runDraft(era);
       return;
     }
@@ -1828,19 +2838,39 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     // así que no tomarla es una decisión rara; pero si no se gastara, un pulpo sin usar
     // se arrastraría de ronda en ronda para siempre.
     if (state.draft.step === 'bonus') {
-      log(`${who(player)} ${verb(player, 'dejás', 'deja')} pasar ` +
-        `${state.draft.bonus === 1 ? 'la carta' : `las ${state.draft.bonus} cartas`} ` +
-        `del ${powerIcon('octopus', 'sm')}.`, 'muted');
-      state.status[player].stacked -= state.draft.bonus;
-      nextDrafter();
+      const n = state.draft.bonus;
+      const by = state.draft.bonusBy;
+      const passMsg = by === 'stamp'
+        ? (voice(player).you ? tr('Dejás pasar la carta de la Earth Stamp.') : tr('{who} deja pasar la carta de la Earth Stamp.', { who: who(player) }))
+        : voice(player).you
+          ? (n === 1 ? tr('Dejás pasar la carta del pulpo.') : tr('Dejás pasar las {n} cartas del pulpo.', { n }))
+          : (n === 1
+            ? tr('{who} deja pasar la carta del pulpo.', { who: who(player) })
+            : tr('{who} deja pasar las {n} cartas del pulpo.', { who: who(player), n }));
+      log(`${powerIcon(by, 'sm')} ${passMsg}`, 'muted');
+      dropBonus(player);
+      if (openBonus(player) && state.market.length > 0) {
+        armClock(player, 'draft');
+        emit();
+        return;
+      }
       await runDraft(era);
       return;
     }
 
+    // Sin robar nada: el Trickster se pierde y se pasa al centro.
+    if (state.draft.step === 'trick') {
+      powerLog('trickster', tr("Trickster's Card: no roba nada."), 'muted');
+      endTricks(player);
+      await runDraft(era);
+      return;
+    }
+
+    const you = voice(player).you;
     log(
       state.draft.took
-        ? `${who(player)} ${verb(player, 'te quedás', 'se queda')} con lo que ya agarró.`
-        : `${who(player)} no ${verb(player, 'te llevás', 'se lleva')} nada del centro.`,
+        ? (you ? tr('Te quedás con lo que ya agarraste.') : tr('{who} se queda con lo que ya agarró.', { who: who(player) }))
+        : (you ? tr('No te llevás nada del centro.') : tr('{who} no se lleva nada del centro.', { who: who(player) })),
       'muted',
     );
     if (openBonus(player) && state.market.length > 0) {
@@ -1849,6 +2879,28 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
       return;
     }
     await runDraft(era);
+  }
+
+  /** Le roba una carta con poder al rival (Trickster's Card). */
+  async function stealCard(uid, as) {
+    const player = drafter();
+    if (!allowed(player, as) || state.draft?.step !== 'trick') return;
+    const card = trickTargetsFor(state, player).find((c) => c.uid === uid);
+    if (!card) return;
+    steal(player, card);
+    if (state.status[player].tricks > 0 && trickTargetsFor(state, player).length) {
+      armClock(player, 'draft');
+      emit();
+      return;
+    }
+    endTricks(player);
+    await runDraft(epoch);
+  }
+
+  /** Las cartas del rival que el que elige puede robar ahora mismo. */
+  function trickTargets() {
+    const player = drafter();
+    return player && state.draft?.step === 'trick' ? trickTargetsFor(state, player) : [];
   }
 
   // ---- acciones del jugador ----
@@ -1871,33 +2923,62 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
   async function hit(as, targetCol = null) {
     const player = canAct();
     if (!allowed(player, as)) return;
+    // Con el Rocket esperando, robar lo pone: en la columna pedida o donde más suma.
     if (state.pendingStack) {
-      if (state.pendingStack.player === player) {
-        await chooseStackTarget(targetCol ?? 0, as);
+      const pending = state.pendingStack;
+      if (pending.player === player) {
+        await chooseStackTarget(targetCol ?? bestStack(state.chains[player], pending.card), as);
       }
       return;
     }
     if (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'hit' && state.tutorialAllowed !== 'any') return;
     const era = epoch;
     state.busy = true;
+    // Una Novice Spell sin elegir sale como golpe antes de la carta que sigue.
+    settleSpell(player);
+    // La carta que sigue puede ser el K.O.: primero la pregunta (ver `oneMoreOf`).
+    const gamble = oneMoreOf(state, player);
+    if (gamble && !(await askOneMore(player, era))) return;
     emit();
     const card = draw(player);
-    applyFeathers(player, card);
-    applyStrength(player, card);
+    onDraw(player, card);
 
-    // Con Free Game activo la carta no se encadena: se monta sobre una columna. Si no
-    // vino una elegida, queda esperando a que el jugador la elija.
+    // El Rocket Stamp no se encadena ni corta: es gratis y se monta sobre la columna
+    // que elija el jugador. Si no vino una elegida, queda esperando a que la elija. En
+    // "¿una más?" no espera: va donde más suma, y ahí se ve si alcanzó.
     const chain = state.chains[player];
-    if (state.freeGame[player] && chain.cards.length > 0) {
-      if (targetCol !== null && targetCol >= 0 && targetCol < chain.cards.length) {
+    if (isFreeStack(card) && chain.cards.length > 0) {
+      if (Number.isInteger(targetCol) && targetCol >= 0 && targetCol < chain.cards.length) {
         stackCard(player, targetCol, card);
+      } else if (gamble) {
+        stackCard(player, bestStack(chain, card), card);
       } else {
         state.pendingStack = { player, card };
-        log(`${powerIcon('freegame', 'sm')} Free Game: ${who(player)} ${verb(player, 'sacás', 'saca')} ` +
-          `${cardLabel(card)}. Elegí sobre qué carta montarla.`, player);
+        const drewMsg = voice(player).you
+          ? tr('Rocket Stamp gratis: elegí sobre qué carta ponerlo.')
+          : tr('Rocket Stamp gratis: {who} elige sobre qué carta ponerlo.', { who: who(player) });
+        log(`${powerIcon('freegame', 'sm')} ${drewMsg}`, player);
       }
-    } else if (!(await extend(player, card, 700, era))) return;
+    } else {
+      const played = await extend(player, mirrored(player, card), 700, era);
+      if (!played) return;
+      if (played === 'saved') {
+        state.busy = false;
+        emit();
+        return;
+      }
+    }
+    if (gamble && (await settleOneMore(player, era))) return;
     state.busy = false;
+    emit();
+  }
+
+  /** El dueño de la Novice Spell elige qué hace: `'heal'`, `'shield'` o `'hit'`. */
+  function chooseSpell(kind, as) {
+    const pending = state?.pendingSpell;
+    if (!pending || !allowed(pending.player, as) || !['heal', 'shield', 'hit'].includes(kind)) return;
+    state.pendingSpell = null;
+    castSpell(pending.player, kind, pending.count);
     emit();
   }
 
@@ -1905,7 +2986,8 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     if (!state || !state.pendingStack) return;
     const { player, card } = state.pendingStack;
     if (!allowed(player, as)) return;
-    if (colIndex < 0 || colIndex >= state.chains[player].cards.length) return;
+    // Viene del cable en una sala: `NaN` pasaba las dos comparaciones y la carta se perdía.
+    if (!Number.isInteger(colIndex) || colIndex < 0 || colIndex >= state.chains[player].cards.length) return;
     if (state.tutorial && state.tutorialAllowedCol != null && colIndex !== state.tutorialAllowedCol) return;
     state.pendingStack = null;
     stackCard(player, colIndex, card);
@@ -1916,17 +2998,20 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     const player = canAct();
     if (!allowed(player, as)) return;
     if (state.tutorial && state.tutorialAllowed && state.tutorialAllowed !== 'stand' && state.tutorialAllowed !== 'any') return;
-    // Una carta de Free Game sin columna elegida se monta sobre la primera.
-    if (state.pendingStack?.player === player) {
-      state.chains[player] = stackOnCard(state.chains[player], 0, state.pendingStack.card);
+    // Un Rocket Stamp sin columna elegida (el jugador atacó o se le acabó el reloj) se
+    // monta donde más suma: es gratis, no se pierde.
+    const pending = state.pendingStack;
+    if (pending?.player === player) {
+      state.pendingStack = null;
+      stackCard(player, bestStack(state.chains[player], pending.card), pending.card);
     }
-    state.freeGame[player] = false;
     state.pendingStack = null;
     const era = epoch;
     state.busy = true;
     const points = scoreChain(state.chains[player]).total;
-    log(`${who(player)} ${verb(player, 'soltás', 'suelta')} el ataque con ${points}.`,
-      player);
+    log(voice(player).you
+      ? tr('Soltás el ataque con {points}.', { points })
+      : tr('{who} suelta el ataque con {points}.', { who: who(player), points }), player);
     await finishTurn(player, points, era);
   }
 
@@ -1959,8 +3044,9 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     state.turn = null;
     state.draft = null;
     state.busy = false;
-    log(`${who(player)} ${verb(player, 'abandonás', 'abandona')} la partida. ` +
-      `Gana ${whom(winner)}.`, 'round');
+    log(voice(player).you
+      ? tr('Abandonás la partida. Gana {winner}.', { winner: whom(winner) })
+      : tr('{who} abandona la partida. Gana {winner}.', { who: who(player), winner: whom(winner) }), 'round');
     emit();
   }
 
@@ -2004,10 +3090,13 @@ export function createGame({ pace = 1, seed, clock = pace > 0 ? CLOCK : null } =
     hit,
     stand,
     chooseStackTarget,
+    chooseSpell,
     nextRound,
     takeCard,
     skipDraft,
     renewMarket,
+    stealCard,
+    trickTargets,
     forfeit,
     abortMatch,
   };

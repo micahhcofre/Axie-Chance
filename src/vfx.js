@@ -23,7 +23,9 @@ function loadAtlas(clip) {
       new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
+        // Decodificado antes de dibujarlo: si no, el primer cuadro lo decodifica en el
+        // hilo principal y la página se traba medio segundo justo en el impacto.
+        img.onload = () => (img.decode ? img.decode().then(() => resolve(img), () => resolve(img)) : resolve(img));
         img.onerror = () => resolve(null);
         img.src = atlasUrl(clip);
       }),
@@ -39,10 +41,48 @@ function loadAtlas(clip) {
  */
 export const hitDelay = (key) => Math.min((CLIPS[key]?.hitAt ?? 0) * 1000, 700);
 
-/** Precarga el efecto de una clase, para que el primer golpe no llegue tarde. */
-export function preloadVfx(key) {
+/**
+ * Precarga el efecto de una clase, para que el primer golpe no llegue tarde.
+ *
+ * Con `later` el atlas va a una fila que se baja de a uno y recién cuando la página no
+ * tiene nada mejor que hacer. Es para los de los poderes: son los más pesados del kit
+ * —el veneno solo pesa 3 MB— y los seis juntos pasan los 10 MB. Pedidos al arrancar
+ * la partida, todos a la vez, le peleaban el ancho de banda a lo que la mesa necesita
+ * en ese momento: los dibujos de los Axies, los marcos y el golpe de cada clase. Uno
+ * que se necesite antes de que le toque en la fila se baja igual en el acto (ver
+ * `play`), y con el ahorro de datos prendido no se precarga ninguno.
+ */
+export function preloadVfx(key, { later = false } = {}) {
   const clip = CLIPS[key];
-  if (clip) loadAtlas(clip);
+  if (!clip) return Promise.resolve(null);
+  // Sin `later`, devuelve cuándo está bajado: la pantalla de carga lo espera.
+  if (!later) return loadAtlas(clip);
+  if (savesData()) return undefined;
+  atlasQueue.push(clip);
+  if (atlasQueue.length === 1) whenIdle(drainAtlases);
+  return undefined;
+}
+
+const atlasQueue = [];
+
+function drainAtlases() {
+  const clip = atlasQueue[0];
+  if (!clip) return;
+  loadAtlas(clip).then(() => {
+    atlasQueue.shift();
+    if (atlasQueue.length) whenIdle(drainAtlases);
+  });
+}
+
+function whenIdle(fn) {
+  if (typeof globalThis.requestIdleCallback === 'function') globalThis.requestIdleCallback(fn, { timeout: 4000 });
+  else setTimeout(fn, 1500)?.unref?.();
+}
+
+/** El que pidió ahorrar datos, o una red 2G, se baja cada efecto recién cuando lo ve. */
+function savesData() {
+  const net = globalThis.navigator?.connection;
+  return Boolean(net?.saveData) || /(^|-)2g$/.test(net?.effectiveType ?? '');
 }
 
 /**
@@ -121,8 +161,11 @@ export function createVfx(canvas) {
      * atacante a la derecha, así que un golpe que sale de la izquierda va espejado —
      * que es justo lo que hace falta ahora que los dos Axies están enfrentados.
      * `width` es el ancho del efecto en anchos del Axie que lo recibe.
+     * `skip` son los segundos del clip que se saltean: un lanzamiento del kit trae su
+     * propio vuelo antes del impacto, y cuando lo que viaja es otra cosa (el amuleto de
+     * un poder) se larga ya llegando.
      */
-    play(key, target, { from = 'right', width = 2.4 } = {}) {
+    play(key, target, { from = 'right', width = 2.4, skip = 0 } = {}) {
       const clip = CLIPS[key];
       if (!clip || !target?.getBoundingClientRect) return;
       loadAtlas(clip).then((img) => {
@@ -147,7 +190,7 @@ export function createVfx(canvas) {
             clip.anchor.y * scale, (clip.frameH - clip.anchor.y) * scale, field.height),
           scale,
           flip,
-          started: performance.now(),
+          started: performance.now() - skip * 1000,
         });
         if (!raf) raf = requestAnimationFrame(frame);
       });

@@ -200,8 +200,8 @@ assert.equal(nodes['net-invite'].hidden, true, 'un envío más viejo que el últ
 // ---- con qué Axie entra cada uno --------------------------------------------
 const acts = (action) => ws.sent.filter((b) => b.a === 'act' && b.action === action);
 assert.equal(acts('loadout').length, 1, 'el Axie elegido se manda al sentarse');
-assert.deepEqual(acts('loadout')[0].arg, { axie: 'beast', boosts: { 'beast+beast': 'beast' } },
-  'y va con sus mejoras: lo que elegís es el mazo, no el dibujo');
+assert.deepEqual(acts('loadout')[0].arg, { axie: 'beast', boosts: { 'beast+beast': 'beast' }, extras: [], evolved: [] },
+  'y va con sus mejoras, las cartas de la mochila y sus evoluciones: lo que elegís es el mazo, no el dibujo');
 assert.match(nodes['net-seats'].innerHTML, /Colmillo/, 'la sala muestra con qué Axie entra cada uno');
 assert.match(nodes['net-seats'].innerHTML, /class="seat-art"><span class="axie"/,
   'el asiento ocupado dibuja su Axie');
@@ -212,7 +212,7 @@ assert.equal(elegidas, 1, 'tocarlo abre la elección de la portada');
 
 localStorage.setItem('axie-chance:axie', JSON.stringify({ axie: 'plant', boosts: {} }));
 sala.axieChanged();
-assert.deepEqual(acts('loadout').at(-1).arg, { axie: 'plant', boosts: {} }, 'el cambio se manda a la sala');
+assert.deepEqual(acts('loadout').at(-1).arg, { axie: 'plant', boosts: {}, extras: [], evolved: [] }, 'el cambio se manda a la sala');
 assert.match(nodes['net-axie-now'].innerHTML, /Brote/, 'y el botón dice con cuál entrás ahora');
 assert.equal(nodes['net-ready'].hidden, false, 'con asiento, hay botón de listo');
 assert.equal(nodes['net-ready'].textContent, 'Estoy listo');
@@ -262,7 +262,6 @@ assert.equal(turnOfP2.chains.p2.cards.length, cardsBefore,
 // ---- lo que decide el otro, lo decide el otro --------------------------------
 // El Free Game del rival: la carta que espera se ve, pero las columnas no se tocan.
 const stackOfP1 = wire(turnOfP1);
-stackOfP1.freeGame.p1 = true;
 stackOfP1.pendingStack = { player: 'p1', card: stackOfP1.chains.p1.cards[0] };
 await fromHost(ws, { t: 'state', state: stackOfP1 }, 7);
 assert.match(nodes.field.innerHTML, /tetris-dock/, 'la carta del Free Game del otro se ve');

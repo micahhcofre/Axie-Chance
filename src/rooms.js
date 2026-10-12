@@ -16,6 +16,7 @@
 import { createGame } from './game.js';
 import { shuffle } from './data.js';
 import { cleanLoadout } from './loadout.js';
+import { evolvedId } from './axies.js';
 
 export const ROOM_SEATS = ['p1', 'p2'];
 
@@ -100,6 +101,7 @@ export function createRoom({ code, name, pace, seed, grace = SEAT_GRACE, onInfo 
     for (const c of streams) c.send(msg);
   }
 
+  const seated = (mine) => (mine?.axie ? evolvedId(mine.axie, mine.evolved) : null);
   const info = () => ({
     code,
     name,
@@ -108,7 +110,8 @@ export function createRoom({ code, name, pace, seed, grace = SEAT_GRACE, onInfo 
     // Con qué bicho entra cada uno. Va en la sala y no solo en la partida para que se
     // vea **antes** de empezar: es la mitad de lo que se está esperando cuando se
     // espera al otro.
-    axies: { p1: loadout.p1?.axie ?? null, p2: loadout.p2?.axie ?? null },
+    // Con sus partes evolucionadas, que se ven en el dibujo (ver `evolvedId`).
+    axies: { p1: seated(loadout.p1), p2: seated(loadout.p2) },
     playing: Boolean(game.state),
     round: game.state?.round ?? 0,
   });
@@ -131,6 +134,10 @@ export function createRoom({ code, name, pace, seed, grace = SEAT_GRACE, onInfo 
     axie2: loadout.p2?.axie,
     boosts: loadout.p1?.boosts,
     boosts2: loadout.p2?.boosts,
+    extras: loadout.p1?.extras,
+    extras2: loadout.p2?.extras,
+    evolved: loadout.p1?.evolved,
+    evolved2: loadout.p2?.evolved,
   });
 
   /** Con los dos asientos listos, empieza. Es el único camino a la primera partida. */
@@ -190,7 +197,7 @@ export function createRoom({ code, name, pace, seed, grace = SEAT_GRACE, onInfo 
   }
 
   /**
-   * Lo que puede pedir un cliente. Las seis primeras son del turno o del reparto y
+   * Lo que puede pedir un cliente. Las ocho primeras son del turno o del reparto y
    * llevan el asiento al juego, que es quien comprueba que le toque (ver `allowed`).
    * Las tres últimas no son de nadie en particular: cualquiera de los dos puede decir
    * con qué Axie entra, que está listo, o empezar de nuevo.
@@ -202,6 +209,8 @@ export function createRoom({ code, name, pace, seed, grace = SEAT_GRACE, onInfo 
     renewMarket: (seat) => game.renewMarket(seat),
     takeCard: (seat, arg) => game.takeCard(Number(arg), seat),
     chooseStackTarget: (seat, arg) => game.chooseStackTarget(Number(arg), seat),
+    chooseSpell: (seat, arg) => game.chooseSpell(String(arg), seat),
+    stealCard: (seat, arg) => game.stealCard(Number(arg), seat),
     // Con qué bicho entrás. Lo manda la pantalla al sentarse y cada vez que lo cambiás
     // ahí mismo, y de acá lo saca la mesa cuando arranca. Con la partida ya repartida no
     // cambia nada: el mazo está barajado y el Axie en la mesa. Se ve en la próxima.
@@ -214,8 +223,11 @@ export function createRoom({ code, name, pace, seed, grace = SEAT_GRACE, onInfo 
       announce();
     },
     // Otra partida necesita a los dos sentados: después de un abandono el asiento de
-    // enfrente está vacío, y repartir sería jugar contra nadie.
-    newMatch: () => { if (ROOM_SEATS.every(taken)) game.newMatch(setup()); },
+    // enfrente está vacío, y repartir sería jugar contra nadie. Y solo con la partida
+    // terminada: si no, el que va perdiendo la reinicia con un mensaje desde la consola.
+    newMatch: () => {
+      if (game.state?.phase === 'matchEnd' && ROOM_SEATS.every(taken)) game.newMatch(setup());
+    },
     ready: (seat) => {
       ready[seat] = !ready[seat];
       announce();

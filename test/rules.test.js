@@ -5,7 +5,7 @@ import {
   getTriadForClass, getCounterSuppressionCards,
 } from '../src/data.js';
 import {
-  emptyChain, playCard, scoreChain, activeSymbols, isScoringCell, survivalOdds, stackOnCard,
+  emptyChain, playCard, scoreChain, activeSymbols, isScoringCell, survivalOdds, stackOnCard, bestStack, isFreeStack,
 } from '../src/rules.js';
 import { decideDraw } from '../src/ai.js';
 
@@ -76,7 +76,7 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 // --- el mazo mejorado --------------------------------------------------------
 // `boosts` va de la clave de la carta sin mejorar al símbolo que se le suma. Solo se
 // aplica lo que la carta admite: el tuyo en las seis propias, uno de sus dos en las
-// cuatro no favorables.
+// dos no favorables.
 {
   const mazo = (boosts) => buildPersonalDeck('beast', boosts).map((c) => c.symbols.join('+'));
   assert.ok(mazo({ 'beast+bird': 'beast' }).includes('beast+beast+bird'), 'la propia admite el tuyo');
@@ -92,11 +92,11 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   assert.deepEqual(boostOptions({ symbols: ['plant', 'reptile'] }, 'beast'), ['plant', 'reptile']);
   assert.deepEqual(boostOptions({ symbols: ['beast'] }, 'beast'), ['beast'],
     'la carta de un símbolo solo también se puede mejorar');
-  // Diecinueve símbolos en diez cartas; cada mejora suma uno.
+  // Quince símbolos en ocho cartas; cada mejora suma uno.
   const cuenta = (boosts) => buildPersonalDeck('beast', boosts)
     .reduce((n, c) => n + c.symbols.length, 0);
-  assert.equal(cuenta({}), 19);
-  assert.equal(cuenta({ 'beast+bird': 'beast', 'plant+reptile': 'reptile' }), 21);
+  assert.equal(cuenta({}), 15);
+  assert.equal(cuenta({ 'beast+bird': 'beast', 'plant+reptile': 'reptile' }), 17);
 }
 
 // --- inmutabilidad (la IA simula sobre copias) -------------------------------
@@ -190,8 +190,8 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   for (let i = 0; i < CANONICAL_CLASSES.length; i++) {
     const cls = CANONICAL_CLASSES[i];
     const deck = buildPersonalDeck(cls);
-    assert.equal(deck.length, 10, `${cls}: mazo de 10`);
-    assert.equal(new Set(deck.map((c) => c.key)).size, 10, `${cls}: sin repetidas`);
+    assert.equal(deck.length, 8, `${cls}: mazo de 8`);
+    assert.equal(new Set(deck.map((c) => c.key)).size, 8, `${cls}: sin repetidas`);
 
     // 6 cartas anatómicas favorables
     const favorable = deck.filter((c) => c.isFavorable);
@@ -215,28 +215,33 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
     const back = favorable.find((c) => c.associatedPart === 'back');
     assert.ok(back.symbols.includes(cls) && back.symbols.includes(CANONICAL_CLASSES[(i + 5) % 6]));
 
-    // 4 cartas desfavorables (Counter Suppression Formula)
+    // 2 cartas desfavorables (Counter Suppression Formula)
     const foreign = deck.filter((c) => !c.isFavorable);
-    assert.equal(foreign.length, 4, `${cls}: 4 cartas no favorables`);
+    assert.equal(foreign.length, 2, `${cls}: 2 cartas no favorables`);
     assert.ok(foreign.every((c) => !c.symbols.includes(cls)), `${cls}: ninguna desfavorable contiene la clase base`);
 
-    // Verificación matemática canónica:
-    // En las cartas desfavorables, las Presas y el Aliado aparecen 2 veces cada una,
-    // mientras que los Counters aparecen exactamente 1 vez.
+    // Verificación matemática canónica: una carta por tríada rival —la doble presa y
+    // el confinamiento—, el Aliado afuera, y ningún símbolo en las dos a la vez.
     const triad = getTriadForClass(cls);
     const ally = TRIADS[triad].find((c) => c !== cls);
     const preys = TRIADS[TRIAD_BEATS[triad]];
     const counters = TRIADS[TRIAD_LOSES_TO[triad]];
+    const same = (card, pair) => [...card.symbols].sort().join() === [...pair].sort().join();
+
+    assert.ok(foreign.some((c) => same(c, preys)), `${cls}: Doble Presa [${preys}]`);
+    assert.ok(foreign.some((c) => same(c, counters)), `${cls}: Confinamiento [${counters}]`);
+    assert.ok(foreign.every((c) => !c.symbols.includes(ally)), `${cls}: el Aliado (${ally}) no es desfavorable`);
 
     const foreignSyms = foreign.flatMap((c) => c.symbols);
-    const countSym = (s) => foreignSyms.filter((sym) => sym === s).length;
+    assert.equal(new Set(foreignSyms).size, foreignSyms.length,
+      `${cls}: ningún símbolo en las dos desfavorables (no hay cadena asegurada)`);
+    assert.equal(foreignSyms.length, 4, `${cls}: 4 símbolos en las 2 cartas desfavorables`);
 
-    assert.equal(countSym(ally), 2, `${cls}: el Aliado (${ally}) aparece 2 veces`);
-    assert.equal(countSym(preys[0]), 2, `${cls}: Presa 1 (${preys[0]}) aparece 2 veces`);
-    assert.equal(countSym(preys[1]), 2, `${cls}: Presa 2 (${preys[1]}) aparece 2 veces`);
-    assert.equal(countSym(counters[0]), 1, `${cls}: Counter 1 (${counters[0]}) aparece 1 vez`);
-    assert.equal(countSym(counters[1]), 1, `${cls}: Counter 2 (${counters[1]}) aparece 1 vez`);
-    assert.equal(foreignSyms.length, 8, `${cls}: 8 símbolos en las 4 cartas desfavorables`);
+    // Aunque un mismo símbolo ajeno se le sume a las seis favorables, queda una
+    // desfavorable que no lo lleva: siempre hay una carta que corta.
+    for (const x of CANONICAL_CLASSES.filter((c) => c !== cls)) {
+      assert.ok(foreign.some((c) => !c.symbols.includes(x)), `${cls}: con ${x} en todo, algo corta`);
+    }
   }
 
   // Axie Core - Part Evolution (Mutación a 3 símbolos / 2 en cola)
@@ -254,7 +259,7 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   };
 
   const evolvedDeck = buildAxieDeck(nftState);
-  assert.equal(evolvedDeck.length, 10);
+  assert.equal(evolvedDeck.length, 8);
   const evoTail = evolvedDeck.find((c) => c.associatedPart === 'tail');
   assert.deepEqual(evoTail.symbols, ['beast', 'beast'], 'cola evolucionada tiene 2 símbolos');
 
@@ -272,8 +277,8 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 
   const deck = buildPersonalDeck('aquatic');
   const odds = survivalOdds(chainOf(card('aquatic')), deck);
-  assert.equal(odds.ok, 6, 'de 10 cartas, 6 llevan el símbolo propio');
-  assert.equal(odds.total, 10);
+  assert.equal(odds.ok, 6, 'de 8 cartas, 6 llevan el símbolo propio');
+  assert.equal(odds.total, 8);
 }
 
 // --- IA ----------------------------------------------------------------------
@@ -314,11 +319,13 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 // --- IA "duro": el ataque contra la partida ----------------------------------
 {
   const view = (over = {}) => ({
-    strength: 0, weak: false, myHp: 100, myShield: 0, myCap: 0, myPoison: 0,
-    foeHp: 100, foeShield: 0, foeThorns: 0, foeCap: 0, foeStrength: 0, foeWeak: false,
-    lastChance: false, ...over,
+    feathers: 0, weak: 0, claws: 0, myHp: 100, maxHp: 100, myShield: 0, myCap: 0, myPoison: 0, myBleed: 0,
+    foeHp: 100, foeShield: 0, foeSpikes: 0, foeGloves: 0, foeCap: 0, lastChance: false, saves: 0, ...over,
   });
-  const deck = buildPool();
+  // Poderes fijos: con el pool sorteado, un Secret Egg y los Rocket Stamp —que no cortan
+  // nunca— dejan robar apenas por encima de plantarse con el golpe que ya lo tumba, y
+  // el test pasaba o fallaba según el sorteo.
+  const deck = buildPool(['strength', 'octopus', 'feather', 'pot', 'snail', 'poison']);
   const fresh = chainOf(card('bird', 'plant', 'bug'));
 
   // Si plantarse ya lo deja sin vida, se planta: "normal" seguiría robando por puntos.
@@ -350,20 +357,22 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
 
 // --- el roster --------------------------------------------------------------
 {
-  const { AXIES, AXIE_IDS, STARTERS, axie, deckFor, axieArt } = await import('../src/axies.js');
+  const { AXIES, AXIE_IDS, STARTERS, RIVALS, PART_TYPES, axie, deckFor, axieArt, partClass } = await import('../src/axies.js');
   const { AVATARS, PART_CATALOG } = await import('../src/axie-avatars.js');
+  const { ADVENTURE_LEVELS } = await import('../src/adventure.js');
 
-  assert.equal(AXIE_IDS.length, 6, 'seis Axies');
-  assert.deepEqual(
-    AXIE_IDS.map((id) => AXIES[id].class).sort(),
-    SYMBOL_IDS.slice().sort(),
-    'uno por clase, sin repetir',
-  );
+  // El roster: los seis starters de Origins y seis del mixer, uno de cada por clase.
+  assert.equal(AXIE_IDS.length, 12, 'doce Axies');
+  const mixed = AXIE_IDS.filter((id) => AXIES[id].parts);
+  for (const group of [Object.keys(STARTERS), mixed]) {
+    assert.deepEqual(group.map((id) => AXIES[id].class).sort(), SYMBOL_IDS.slice().sort(), 'uno por clase, sin repetir');
+  }
 
   for (const id of AXIE_IDS) {
     const a = AXIES[id];
     assert.equal(a.id, id, `${id}: el id coincide con la clave`);
     assert.ok(a.name, `${id}: sin nombre`);
+    assert.equal(axie(id), a, `${id}: axie() lo conoce`);
 
     // Cada Axie arranca con el mazo de su clase.
     assert.deepEqual(
@@ -371,7 +380,16 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
       buildPersonalDeck(a.class).map((c) => c.key).sort(),
       `${id}: el mazo no es el de su clase`,
     );
+    assert.match(axieArt(id), /class="axie/);
+    assert.match(axieArt(id), /axie-fallback/, `${id}: falta el crest de reserva`);
+    assert.ok(AVATARS[id]?.layers.length > 0, `${id}: sin capas — corré npm run axies`);
 
+    if (a.kit) {
+      // Los starters: cuerpos fijos del kit, que viajan con el juego.
+      assert.deepEqual(AVATARS[id].from, { kit: a.kit }, `${id}: el dibujo es de otro starter — corré npm run axies`);
+      assert.match(axieArt(id), /src="Axies\//, `${id}: las capas de un starter viajan con el juego`);
+      continue;
+    }
     // Las partes salen del catálogo que dejó el mixer, así que `npm run axies` las dibuja.
     for (const [type, part] of Object.entries(a.parts)) {
       assert.ok(
@@ -379,39 +397,72 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
         `${id}: ${type} ${part} no está en el catálogo de ${a.class}`,
       );
     }
-
     // Y el manifiesto de capas está al día con el roster.
-    assert.ok(AVATARS[id]?.layers.length > 0, `${id}: sin capas — corré npm run axies`);
     assert.deepEqual(
       AVATARS[id].from,
       { class: a.class, color: a.color, parts: a.parts },
       `${id}: el dibujo es de otras partes — corré npm run axies`,
     );
-    assert.match(axieArt(id), /class="axie/);
-    assert.match(axieArt(id), /axie-fallback/, `${id}: falta el crest de reserva`);
   }
 
   // Un id que no existe no rompe el render: cae en el primero del roster.
   assert.equal(axie('no-existe').id, AXIE_IDS[0]);
+  assert.equal(axie('lobo+9').id, AXIE_IDS[0], 'más evoluciones que partes no existe');
 
-  // Los starters de la Aventura: fuera del roster, pero con dibujo propio y el mazo de
-  // su clase.
-  assert.deepEqual(
-    Object.values(STARTERS).map((s) => s.class).sort(),
-    SYMBOL_IDS.slice().sort(),
-    'un starter por clase',
-  );
-  for (const [id, s] of Object.entries(STARTERS)) {
-    assert.ok(!AXIE_IDS.includes(id), `${id}: un starter no es del roster`);
-    assert.equal(axie(id), s, `${id}: axie() conoce a los starters`);
-    assert.deepEqual(
-      deckFor(id).map((c) => c.key).sort(),
-      buildPersonalDeck(s.class).map((c) => c.key).sort(),
-      `${id}: el mazo no es el de su clase`,
-    );
-    assert.deepEqual(AVATARS[id]?.from, { kit: s.kit }, `${id}: el dibujo es de otro starter — corré npm run axies`);
-    assert.match(axieArt(id), /src="Axies\//, `${id}: las capas de un starter viajan con el juego`);
+  // Los rivales de la Aventura: fuera del roster, del mixer, y con dibujo tal como salen
+  // en su nivel (con las partes evolucionadas en su arte `-lv2`).
+  for (const [id, r] of Object.entries(RIVALS)) {
+    assert.ok(!AXIE_IDS.includes(id), `${id}: un rival no es del roster`);
+    assert.equal(r.id, id);
+    for (const type of PART_TYPES) assert.ok(r.parts[type], `${id}: le falta ${type}`);
+    for (const [type, key] of Object.entries(r.parts)) {
+      const cls = partClass(key, r.class);
+      // Las de evento no están en el catálogo de partes comunes; `npm run axies` las verifica.
+      if (/^[a-z]+-\d\d$/.test(key) && SYMBOL_IDS.includes(key.split('-')[0])) {
+        assert.ok(PART_CATALOG[cls][type].includes(key), `${id}: ${type} ${key} no está en el catálogo de ${cls}`);
+      }
+    }
+    if (r.evolve) assert.deepEqual(r.evolve.slice().sort(), PART_TYPES.slice().sort(), `${id}: evoluciona las seis partes`);
+    for (const part of r.charms ?? []) assert.ok(PART_TYPES.includes(part), `${id}: amuleto en ${part}`);
   }
+  for (const lvl of ADVENTURE_LEVELS) {
+    const r = axie(lvl.rival);
+    assert.equal(r.id, lvl.rival, `nivel ${lvl.id}: axie() arma a ${lvl.rival}`);
+    const from = { class: r.class, color: r.color, parts: r.parts };
+    if (r.body) from.body = r.body;
+    if (r.skin) from.skin = r.skin;
+    if (r.evolved?.length) from.evolved = r.evolved;
+    assert.deepEqual(AVATARS[lvl.rival]?.from, from, `${lvl.rival}: sin dibujo al día — corré npm run axies`);
+    assert.match(axieArt(lvl.rival), /class="axie/);
+  }
+
+  // Evolucionada, la carta de cada parte suma el símbolo de la clase de la parte: el
+  // mismo que ya tiene si la parte es de su clase (y encadena de a dos), o uno nuevo.
+  const base = deckFor('cuervo');
+  const evolved = deckFor('cuervo+1');
+  const partOf = (deck, part) => deck.find((c) => c.associatedPart === part);
+  const horn = RIVALS.cuervo.evolve?.[0] ?? PART_TYPES[0];
+  assert.deepEqual(
+    partOf(evolved, horn).symbols.slice().sort(),
+    [...partOf(base, horn).symbols, partClass(RIVALS.cuervo.parts[horn], 'bird')].sort(),
+    'la parte evolucionada suma el símbolo de su clase',
+  );
+  for (const part of PART_TYPES.filter((p) => p !== horn)) {
+    assert.deepEqual(partOf(evolved, part).symbols, partOf(base, part).symbols, `${part} no evolucionó`);
+  }
+  // Con todas evolucionadas, las seis cartas propias suman un símbolo.
+  const full = deckFor('mantis+6');
+  assert.equal(full.filter((c) => c.isFavorable).reduce((n, c) => n + c.symbols.length, 0),
+    deckFor('mantis').filter((c) => c.isFavorable).reduce((n, c) => n + c.symbols.length, 0) + 6);
+
+  // Los amuletos de un jefe: sus cartas llevan el poder que se les pase, y sin poder nada.
+  const charmed = deckFor('basilisco+6', {}, null, { charm: 'viper' });
+  assert.deepEqual(
+    charmed.filter((c) => c.power).map((c) => c.associatedPart).sort(),
+    RIVALS.basilisco.charms.slice().sort(),
+  );
+  assert.ok(charmed.filter((c) => c.power).every((c) => c.power === 'viper'));
+  assert.equal(deckFor('basilisco+6').filter((c) => c.power).length, 0);
 }
 
 // --- stackOnCard (Free Game) -------------------------------------------------
@@ -426,6 +477,10 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   assert.equal(stacked.cards.length, 1, 'no avanza la cantidad de cartas');
   assert.equal(stacked.cards[0].symbols.length, 4, 'contiene los 4 símbolos');
   assert.equal(stacked.busted, false);
+  // Una columna que no es un entero (llega del cable en una sala) no toca la cadena.
+  for (const bad of [NaN, 0.5, '0', undefined]) {
+    assert.equal(stackOnCard(initial, bad, card('aquatic', 'bird')), initial, `columna ${bad}`);
+  }
 
   // Pez ahora tiene racha de 2 (largo 2 -> 4 pts), Bestia 1 pt, Pájaro 1 pt = 6 pts
   const sc = scoreChain(stacked);
@@ -440,6 +495,26 @@ const chainOf = (...cards) => cards.reduce(playCard, emptyChain());
   const col2Stacked = stackOnCard(col2, 1, card('reptile', 'bug'));
   assert.equal(col2Stacked.busted, false, 'alargar columna no produce bust');
   assert.equal(col2Stacked.cards.length, 2);
+}
+
+// --- Rocket Stamp: la carta gratis ---------------------------------------------
+{
+  const rocket = { ...card('reptile', 'bug'), power: 'freegame' };
+  assert.equal(isFreeStack(rocket), true);
+  assert.equal(isFreeStack(card('reptile', 'bug')), false);
+
+  // En el mazo no corta nunca: la rueda lo cuenta como carta segura aunque no comparta
+  // ningún símbolo vivo.
+  const chain = chainOf(card('aquatic', 'bird'), card('aquatic', 'plant'));
+  assert.deepEqual(survivalOdds(chain, [rocket, card('reptile', 'bug')]), { ok: 1, total: 2, p: 0.5 });
+
+  // La mejor columna: el Rocket de Pez sobre la 2ª alarga la racha viva de Pez a 3 (9 +
+  // 1 de Pájaro = 10); sobre la 1ª también, pero además abre una racha nueva de Bestia
+  // que muere en la 2ª (9 + 1 + 1 = 11).
+  const fish = { ...card('aquatic', 'beast'), power: 'freegame' };
+  assert.equal(scoreChain(stackOnCard(chain, 1, fish)).total, 10);
+  assert.equal(scoreChain(stackOnCard(chain, 0, fish)).total, 11);
+  assert.equal(bestStack(chain, fish), 0);
 }
 
 console.log('✓ todos los tests pasan');

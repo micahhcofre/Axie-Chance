@@ -151,6 +151,27 @@ for (const file of readdirSync(SRC).filter((f) => f.endsWith('.js'))) {
 assert.deepEqual(untranslated, [], `textos sin traducción en EN_STRINGS:\n${untranslated.join('\n')}`);
 console.log('✓ cada tr() literal de src/ tiene su traducción ok');
 
+// ---- el registro de la partida: nada de texto suelto fuera de tr() --------------
+// El test de arriba solo ve lo que ya pasa por `tr()`. Una línea del registro armada
+// con un template (`${who} suelta el ataque…`) se le escapaba, y en inglés salía
+// "You soltás el ataque con 10." en medio de la partida. Acá cada `log(\`…\`)` de
+// `game.js` solo puede pegar piezas (`${…}`), espacios y puntuación.
+const GAME = readFileSync(new URL('game.js', SRC), 'utf8');
+const loose = [];
+for (const [, raw] of GAME.matchAll(/\blog\(\s*`((?:\\.|[^`\\])*)`/g)) {
+  let rest = '';
+  let depth = 0;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '$' && raw[i + 1] === '{') { depth++; i++; continue; }
+    if (depth && raw[i] === '{') depth++;
+    else if (depth && raw[i] === '}') depth--;
+    else if (!depth) rest += raw[i];
+  }
+  if (/\p{L}/u.test(rest)) loose.push(raw);
+}
+assert.deepEqual(loose, [], `líneas del registro con texto fuera de tr():\n${loose.join('\n')}`);
+console.log('✓ el registro de game.js pasa todo su texto por tr() ok');
+
 // Limpieza final: dejar en español para no contaminar tests subsiguientes
 setLang('es');
 assert.equal(currentLang(), 'es', 'debe quedar en español al finalizar');

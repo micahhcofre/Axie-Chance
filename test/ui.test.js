@@ -2,6 +2,7 @@
 // mount() pinte cada fase de la partida sin romperse y con el contenido esperado.
 import assert from 'node:assert/strict';
 import { fakeDom } from './dom.mjs';
+import { isStage } from '../src/stages.js';
 
 const nodes = fakeDom();
 
@@ -31,8 +32,9 @@ const pulses = { p1: recordDataset(nodes['axie-p1']), p2: recordDataset(nodes['a
 const { createGame } = await import('../src/game.js');
 const { mount, whiffed, plateHtml } = await import('../src/ui.js');
 const { scoreChain } = await import('../src/rules.js');
-const { POWERS } = await import('../src/data.js');
-const { hpOf, ownedBy, MARKET_SIZE } = await import('../src/game.js');
+const { POWERS, makeJelly } = await import('../src/data.js');
+const { AVATARS } = await import('../src/axie-avatars.js');
+const { hpOf, ownedBy, MARKET_SIZE, TARGET } = await import('../src/game.js');
 
 const idle = () => new Promise((r) => setTimeout(r, 0));
 const game = createGame({ pace: 0 });
@@ -53,7 +55,7 @@ assert.equal(nodes.clock.dataset.on, 'false', 'el reloj apagado no se ve');
 // La vida vive sobre cada Axie, no en el marcador: al abrir, los dos enteros.
 for (const side of ['p1', 'p2']) {
   assert.match(nodes[`plate-${side}`].innerHTML, /class="hpbar"/, `${side}: falta la barrita`);
-  assert.match(nodes[`plate-${side}`].innerHTML, /<b>100<\/b>/, `${side}: falta la vida`);
+  assert.match(nodes[`plate-${side}`].innerHTML, /<b>150<\/b>/, `${side}: falta la vida`);
   assert.match(nodes[`plate-${side}`].innerHTML, /class="crest crest--sm"/, `${side}: falta la clase`);
 }
 // El centro no está puesto mientras se juega: aparece recién al cerrar un turno.
@@ -73,7 +75,10 @@ for (const side of ['p1', 'p2']) {
   // separado —la cola, las orejas, el parpadeo—.
   const art = nodes[`axie-${side}`].innerHTML;
   assert.match(art, /class="axie-rig"/, `${side}: falta la capa de la postura`);
-  for (const part of ['body', 'tail', 'eyes', 'ear-left']) {
+  // Las orejas, solo si el dibujo las trae: algunos starters del kit (Olek) no tienen.
+  const drawn = AVATARS[game.state.axies[side]].layers.map((l) => l.src).join(' ');
+  const parts = ['body', 'tail', 'eyes', ...(/ear-left/.test(drawn) ? ['ear-left'] : [])];
+  for (const part of parts) {
     assert.match(art, new RegExp(`data-part="${part}"`), `${side}: falta la capa ${part}`);
   }
 }
@@ -109,14 +114,25 @@ assert.doesNotMatch(nodes.field.innerHTML, /cargando el ataque/, 'la mesa tampoc
 // El terreno sale de la clase del Axie que jugás.
 assert.equal(nodes.arena.dataset.arena, game.state.symbols.p1,
   'el arena toma el terreno de tu clase');
+// Y encima, el escenario de la partida (ver `stages.js`), que es el que se ve.
+assert.ok(isStage(game.state.stage), 'la partida tiene escenario');
+assert.equal(nodes.arena.dataset.stage, game.state.stage, 'la mesa se para en el escenario de la partida');
 
 // Se guarda el render de una cadena cortada apenas ocurra, jugando a robar siempre.
 let bustHtml = '';
 let bustSwing = '';
+// Lo que hizo el escenario: la tensión con la cadena armándose y el apagón del corte.
+let heatSeen = 0;
+let bustMood = null;
 game.subscribe(() => {
-  if (game.state.chains.p1.busted && !bustHtml && game.state.chains.p1.bustCard) {
+  const chain = game.state.chains.p1;
+  if (game.state.phase === 'turn' && game.state.turn === 'p1' && !chain.busted && chain.cards.length >= 2) {
+    heatSeen = Math.max(heatSeen, Number(nodes.arena.style.props['--heat'] ?? 0));
+  }
+  if (chain.busted && !bustHtml && chain.bustCard) {
     bustHtml = nodes.field.innerHTML;
     bustSwing = nodes.swing.innerHTML;
+    bustMood = nodes.arena.dataset.mood ?? null;
   }
 });
 
@@ -187,8 +203,9 @@ while (game.state.phase !== 'matchEnd') {
     assert.match(nodes.market.innerHTML, new RegExp(`data-uid="${options[0].uid}"`));
 
     if (!s.draft.mode) {
-      // Sin cadena cortada el centro entero está a mano: con poder o sin poder.
-      if (!s.chains.p1.busted) {
+      // Sin cadena cortada el centro entero está a mano: con poder o sin poder (salvo
+      // con la Red Bubble encima, que deja solo lo sin poder).
+      if (!s.chains.p1.busted && !s.status.p1.noPowers) {
         sawFreePick = true;
         assert.deepEqual(options.map((c) => c.uid).sort(), s.market.map((c) => c.uid).sort(),
           `plantado se puede tocar cualquiera de las ${MARKET_SIZE}`);
@@ -328,8 +345,10 @@ assert.match(nodes.log.innerHTML, /<li data-kind="round">/);
 
 assert.ok(bustHtml, 'robando hasta 20 pts alguna cadena tiene que cortarse');
 assert.match(bustHtml, /card--bust/, 'se muestra la carta que rompió la cadena');
+assert.ok(heatSeen > 0, 'con la cadena armándose el escenario se tensa (--heat)');
+assert.equal(bustMood, 'bust', 'y con el corte se le apagan las luces');
 assert.doesNotMatch(bustHtml, /Cadena cortada/, 'no se muestra texto redundante de cadena cortada');
-assert.match(bustSwing, /class="swing-dmg" data-busted="true"[^>]*>0</,
+assert.match(bustSwing, /class="swing-dmg" data-busted="true"[^>]*>(?:<b>)?0</,
   'una cadena cortada no hace daño');
 
 // El golpe no es inmediato: el que pega sale disparado antes (~100-250 ms) y el que
@@ -374,9 +393,9 @@ assert.equal(nodes['deck-sheet'].innerHTML, '', 'sin abrir, el panel no dibuja n
 for (const seat of ['p1', 'p2']) {
   nodes[`peek-${seat}`].handlers.click();
   assert.equal(nodes['deck-modal'].open, true, `${seat}: tocar el Axie abre su mazo`);
-  assert.match(nodes['deck-sheet'].innerHTML, /Mazo inicial · 10 cartas/,
-    `${seat}: están las diez de fábrica`);
-  assert.match(nodes['deck-sheet'].innerHTML, /Sumadas del centro/,
+  assert.match(nodes['deck-sheet'].innerHTML, /Mazo inicial · 8 cartas/,
+    `${seat}: están las ocho de fábrica`);
+  assert.match(nodes['deck-sheet'].innerHTML, /Sumadas en la partida/,
     `${seat}: y lo que se llevó del centro`);
   assert.ok(!nodes['deck-sheet'].innerHTML.includes('undefined'), `undefined en el mazo de ${seat}`);
   // El panel es de quien se tocó, y lo dice: sin esto los dos mazos se ven iguales y no
@@ -442,12 +461,12 @@ assert.equal(whiffed({ amount: 0, blocked: 4, broke: true }), false,
   'y lo mismo el que rompe el huevo justo con el último punto');
 assert.equal(whiffed({ amount: 0, blocked: 0 }), true,
   'sin nada bloqueado y sin daño sí falló: el caracol se le comió el mordisco');
-// ---- Free Game: visualización de la carta a colocar (Tetris dock) -----------
+// ---- Rocket Stamp: el dock con la carta gratis a colocar ------------------
 game.state.phase = 'turn';
 game.state.turn = 'p1';
 game.state.pendingStack = {
   player: 'p1',
-  card: { uid: 999, symbols: ['aquatic', 'beast'], power: null },
+  card: { uid: 999, symbols: ['aquatic', 'beast'], power: 'freegame' },
 };
 game.refresh();
 await idle();
@@ -501,7 +520,7 @@ assert.match(nodes.field.innerHTML, /power-strength\.png/, 'muestra ícono de st
 // Verifica zoom out dinámico en el dock de colocación (pendingStack)
 game.state.pendingStack = {
   player: 'p1',
-  card: { uid: 999, symbols: ['plant', 'reptile'], power: null },
+  card: { uid: 999, symbols: ['plant', 'reptile'], power: 'freegame' },
 };
 game.refresh();
 await idle();
@@ -509,7 +528,8 @@ assert.match(nodes.field.innerHTML, /class="tetris-dock"[^>]*style="--zoom:/, 'e
 assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'conserva botón de robar durante colocación con dock');
 assert.match(nodes.controls.innerHTML, /data-action="stand"/, 'conserva botón de atacar durante colocación con dock');
 
-// Verifica zoom out en cadenas largas (5+ cartas) igual que versión vertical
+// Una cadena larga no achica de entrada: acostada entra a tamaño entero, y parada la
+// achica `wrapStrip` según cuántas van en el renglón (lo ve el navegador, no este DOM)
 game.state.pendingStack = null;
 game.state.chains.p1 = {
   cards: [
@@ -523,7 +543,7 @@ game.state.chains.p1 = {
 };
 game.refresh();
 await idle();
-assert.match(nodes.field.innerHTML, /--zoom:/, 'aplica zoom out al acumular 5 cartas');
+assert.doesNotMatch(nodes.field.innerHTML, /--zoom:/, 'cinco cartas no achican la mesa de entrada');
 assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'botones disponibles en cadena de 5 cartas');
 assert.match(nodes.controls.innerHTML, /data-action="stand"/, 'botón de atacar disponible en cadena de 5 cartas');
 
@@ -544,47 +564,42 @@ assert.match(nodes.controls.innerHTML, /data-action="hit"/, 'con sus botones pue
 
 console.log('✓ render ok (los dos asientos de una sala)');
 
-// --- verificación del escudo con icono en la vida y el daño en status effects ----
+// --- el escudo al lado de la vida y lo que queda puesto en la chapa ----------------
 {
-  const st = {
+  const withStatus = (over) => ({
     ...game.state,
-    status: {
-      ...game.state.status,
-      p1: { ...game.state.status.p1, egg: 12, eggBreak: 16 },
-    },
-  };
-  const html = plateHtml(st, 'p1');
+    status: { ...game.state.status, p1: { ...game.state.status.p1, ...over } },
+  });
+  const html = plateHtml(withStatus({ egg: 12, bleed: 3 }), 'p1');
   assert.match(html, /class="plate-shield"/, 'el escudo se muestra al lado de la vida');
   assert.match(html, /shield\.png/, 'lleva el icono de escudo');
   assert.match(html, /<b>12<\/b>/, 'muestra el valor del escudo (12)');
-  assert.match(html, /title="Secret Egg: 16 de daño acumulado al romperse/, 'status effect dice el daño acumulado');
-  assert.match(html, /<b>16<\/b>/, 'el chip de status del huevo muestra el daño acumulado (16)');
+  assert.match(html, /data-pip="razor"[^>]*title="Sangrado: sus próximas 3 cartas le sacan 2 de vida cada una/, 'el sangrado dice cuántas cartas cuestan y cuánto');
+  // Los estados llevan el ícono que les dibujó el kit, no el amuleto del poder.
+  assert.match(html, /status-bleed\.png/, 'con el ícono de sangrado del kit');
+  assert.doesNotMatch(html, /power-razor\.png/, 'no con el amuleto de la navaja');
+  assert.match(plateHtml(withStatus({ bleed: 3, wound: true }), 'p1'), /status-wound\.png/,
+    'con la herida abierta, la herida grave del kit');
   assert.doesNotMatch(html, /class="plate-tag"/, 'no hay carteles de resumen de turno al lado del nombre');
 
-  // Con 0 de huevo no hay escudo
-  const stZero = {
-    ...game.state,
-    status: {
-      ...game.state.status,
-      p1: { ...game.state.status.p1, egg: 0, eggBreak: 0 },
-    },
-  };
-  const htmlZero = plateHtml(stZero, 'p1');
-  assert.doesNotMatch(htmlZero, /class="plate-shield"/, 'sin huevo no se muestra la insignia de escudo');
-  console.log('  ✓ escudo en barra de vida y daño acumulado en status effects de huevo');
+  const htmlZero = plateHtml(withStatus({ egg: 0 }), 'p1');
+  assert.doesNotMatch(htmlZero, /class="plate-shield"/, 'sin escudo no se muestra la insignia');
+  console.log('  ✓ escudo en barra de vida y sangrado en la chapa');
 
-  // Steelskin status effect muestra el icono de dureza (status-steelskin.png)
-  const stSkin = {
-    ...game.state,
-    status: {
-      ...game.state.status,
-      p1: { ...game.state.status.p1, steelskin: 1 },
-    },
-  };
-  const htmlSkin = plateHtml(stSkin, 'p1');
-  assert.match(htmlSkin, /status-steelskin\.png/, 'steelskin usa el icono de estado status-steelskin.png');
+  // Las espinas de la Gecko Mask usan el icono de estado (status-steelskin.png).
+  const htmlSkin = plateHtml(withStatus({ spikes: 8 }), 'p1');
+  assert.match(htmlSkin, /status-steelskin\.png/, 'las espinas usan el icono de estado status-steelskin.png');
   assert.doesNotMatch(htmlSkin, /power-steelskin\.png/, 'no usa el icono del amuleto gecko');
-  console.log('  ✓ steelskin usa status-steelskin.png como indicador de estado');
+  // Y los bloqueos dicen quién los puso; las medusas se cuentan en su mazo.
+  const locked = withStatus({ noPowers: 2, healBlock: 1, cleanser: 1 });
+  const htmlLocks = plateHtml({ ...locked, decks: { ...locked.decks, p1: [...locked.decks.p1, makeJelly()] } }, 'p1');
+  for (const id of ['jellyfish', 'redbubble', 'viper', 'guard']) {
+    assert.match(htmlLocks, new RegExp(`data-pip="${id}"`), `la marca de ${id}`);
+  }
+  for (const icon of ['stun', 'silence', 'healblock', 'cleanser']) {
+    assert.match(htmlLocks, new RegExp(`status-${icon}\\.png`), `el ícono del kit ${icon}`);
+  }
+  console.log('  ✓ espinas, bloqueos y Limpiador en la chapa');
 }
 
 // ---- la furia de la última chance -------------------------------------------
@@ -602,8 +617,8 @@ console.log('✓ render ok (los dos asientos de una sala)');
   // Los dos a un punto de morir: el golpe del que abre deja sin vida al otro, que
   // todavía no atacó.
   const [opener, dying] = game.state.order;
-  game.state.totals[opener] = 99;
-  game.state.totals[dying] = 99;
+  game.state.totals[opener] = TARGET - 1;
+  game.state.totals[dying] = TARGET - 1;
   await game.stand(opener);
   await idle();
 
@@ -641,8 +656,8 @@ console.log('✓ render ok (los dos asientos de una sala)');
     id: 1,
     player: 'p1',
     fx: [
-      { power: 'egg', moment: 'apply', on: 'p1', amount: 6 },
-      { power: 'poison', moment: 'apply', on: 'p2', amount: 6 },
+      { power: 'guard', moment: 'apply', on: 'p1', amount: 2 },
+      { power: 'poison', moment: 'apply', on: 'p2', amount: 4 },
     ],
   };
   const beats = event.fx.reduce((ms, fx) => ms + powerBeat(fx), 0);
@@ -654,10 +669,9 @@ console.log('✓ render ok (los dos asientos de una sala)');
 
   // La marca de la chapa trae de qué poder es, que es lo que la animación guarda.
   const marked = structuredClone(game.state);
-  marked.status.p1.egg = 6;
-  marked.status.p1.eggBreak = 8;
+  marked.status.p1.cleanser = 1;
   marked.status.p1.poison = 3;
-  assert.match(plateHtml(marked, 'p1'), /data-pip="egg"/, 'la marca del huevo');
+  assert.match(plateHtml(marked, 'p1'), /data-pip="guard"/, 'la marca de la guardia');
   assert.match(plateHtml(marked, 'p1'), /data-pip="poison"/, 'la del veneno');
 
   // Con el reloj en la mano: la marca se esconde al soltar el ataque y aparece cuando
@@ -684,7 +698,7 @@ console.log('✓ render ok (los dos asientos de una sala)');
     sideOf: () => 'left',
   });
   fx.play(event, 0);
-  assert.equal(plates.p1.dataset.fxWait, 'egg shield', 'el huevo y su escudo se guardan hasta que llegue');
+  assert.equal(plates.p1.dataset.fxWait, 'guard shield', 'la guardia y su escudo se guardan hasta que llegue');
   assert.equal(plates.p2.dataset.fxWait, 'poison', 'el veneno, en la chapa del rival');
   // Se corre el reloj en orden hasta que no quede nada agendado.
   let now = 0;
@@ -698,13 +712,13 @@ console.log('✓ render ok (los dos asientos de una sala)');
   }
   globalThis.setTimeout = realTimeout;
 
-  assert.equal(plates.p1.dataset.fxWait, '', 'el huevo apareció');
+  assert.equal(plates.p1.dataset.fxWait, '', 'la guardia apareció');
   assert.equal(plates.p2.dataset.fxWait, '', 'y el veneno también');
-  assert.deepEqual(played, [['eggShield', 'axie-p1'], ['poison', 'axie-p2']], 'cada efecto del kit sobre su Axie');
-  assert.deepEqual(gestures, [['p1', 'cheer'], ['p2', 'whiff']], 'el propio festeja, el rival acusa');
-  // El huevo no sube sobre el Axie: su "+N" sale del escudo de la chapa (ver `hudTag`).
+  assert.deepEqual(played, [['cleanser', 'axie-p1'], ['poison', 'axie-p2']], 'cada efecto del kit sobre su Axie');
+  assert.deepEqual(gestures, [['p1', 'peek'], ['p2', 'whiff']], 'el propio se asoma, el rival acusa');
+  // La guardia no sube sobre el Axie: su "+N" sale del escudo de la chapa (ver `hudTag`).
   assert.deepEqual(tags, [['axie-p2', 'power-poison-apply']]);
-  assert.deepEqual(sounds.map(([key]) => key), ['egg', 'poison'], 'cada uno con su sonido');
+  assert.deepEqual(sounds.map(([key]) => key), ['cleanser', 'poison'], 'cada uno con su sonido');
   assert.ok(now <= POWER_LEAD + beats, `la animación entera (${now} ms) entra en lo que espera el motor`);
 
   // La pluma cae del cielo: la vida no baja ni suena nada hasta que toca al rival.
@@ -745,7 +759,7 @@ console.log('✓ render ok (los dos asientos de una sala)');
     globalThis.setTimeout = realTimeout2;
     assert.ok(contact > 0, 'la pluma pega');
     assert.deepEqual(held.at(-1), ['release', 'p2', 5], 'y recién al pegar baja la vida');
-    assert.deepEqual(heard.find(([key]) => key === 'thorns'), ['thorns', contact], 'el golpe suena al tocar, sin adelantarse');
+    assert.deepEqual(heard.find(([key]) => key === 'featherHit'), ['featherHit', contact], 'el golpe suena al tocar, sin adelantarse');
     assert.ok(heard.find(([key]) => key === 'feather')[1] < contact, 'y la pluma se oye mientras cae');
   }
 
@@ -842,4 +856,137 @@ console.log('✓ render ok (los dos asientos de una sala)');
   assert.equal(nodes.field.innerHTML, antes, 'la partida de la sala ya no pinta la mesa');
   assert.ok(pintado.length > 0);
   console.log('✓ la misma mesa, otra partida ok');
+}
+
+// El registro que llega de otro navegador no puede correr nada: un anfitrión con malas
+// intenciones manda líneas con HTML propio, y la pantalla tiene que dejarlas como texto.
+// Los íconos que el juego sí pone (`crest`, `powerIcon`) siguen saliendo como íconos.
+{
+  const { logHtml } = await import('../src/ui.js');
+  const { crest, powerIcon } = await import('../src/data.js');
+  const html = logHtml({ log: [
+    { kind: 'p1', text: `${crest('bird', 'sm')} ${powerIcon('egg', 'sm')} pega 5.` },
+    { kind: '"><script>x()</script>', text: '<img src=x onerror="alert(1)"><script>alert(2)</script>' },
+    { kind: 'p2', text: '<img class="crest" src="javascript:alert(3)">' },
+  ] });
+  assert.ok(html.includes('<img class="crest crest--sm" src="Icons/bird-crest.png"'), 'el ícono del símbolo pasa');
+  assert.ok(html.includes('<img class="power power--sm" src="Icons/power-egg.png"'), 'el ícono del poder pasa');
+  const tags = html.match(/<[^>]*>/g).filter((t) => !/^<\/?li\b/.test(t));
+  assert.equal(tags.length, 2, `solo los dos íconos salen como HTML: ${tags.join(' ')}`);
+  assert.ok(html.includes('&#60;script&#62;alert(2)'), 'lo ajeno queda como texto');
+  assert.ok(html.includes('data-kind="info"'), 'un kind desconocido cae en info');
+  console.log('✓ el registro no deja pasar HTML ajeno ok');
+}
+
+// El medidor de compatibilidad del centro: qué parte del mazo entero (las de fábrica y
+// lo que se llevó) comparte al menos un símbolo con la carta marcada.
+{
+  const { fitOf } = await import('../src/ui.js');
+  const { makeCard } = await import('../src/data.js');
+  const c = (...syms) => makeCard(syms);
+  const state = {
+    start: { p1: [c('beast'), c('beast', 'aquatic'), c('bird', 'plant'), c('bug')] },
+    added: { p1: [c('reptile', 'aquatic')] },
+  };
+  const fit = fitOf(state, 'p1', c('aquatic', 'bug'));
+  assert.equal(fit.total, 5, 'cuenta las de fábrica y las que se llevó');
+  assert.equal(fit.links, 3, 'encadena con las que comparten algún símbolo');
+  assert.equal(fit.pct, 60);
+  assert.equal(fit.level, 'mid');
+  assert.deepEqual(fit.per.map((x) => [x.symbol, x.n]), [['aquatic', 2], ['bug', 1]]);
+  assert.equal(fitOf(state, 'p1', c('beast')).level, 'low', '2 de 5 es baja');
+  assert.equal(fitOf(state, 'p1', null), null, 'sin carta marcada no mide');
+  console.log('✓ compatibilidad del centro ok');
+
+  // Las dos que mejor encadenan brillan; la primera, más. Lo que no comparte nada, no.
+  const { fitRanks } = await import('../src/ui.js');
+  const row = [c('bird'), c('beast', 'bug'), c('aquatic', 'bug', 'beast'), c('aquatic', 'bug')];
+  row.forEach((card, i) => { card.uid = 900 + i; });
+  const ranks = fitRanks(state, 'p1', row);
+  assert.equal(ranks.get(902), 'best', 'bestia, pez y bicho: 4 de 5');
+  assert.equal(ranks.get(901), 'good', 'a igual compatibilidad (3 de 5) gana la de antes en la fila');
+  assert.equal(ranks.size, 2, 'solo las dos primeras');
+  assert.equal(fitRanks(state, 'p1', [c('bird', 'bird')]).size, 1, 'una sola que encadena, una sola que brilla');
+  const lone = c('reptile'); lone.uid = 950;
+  assert.equal(fitRanks({ start: { p1: [c('beast')] } }, 'p1', [lone]).size, 0, 'la que no comparte nada no brilla');
+  console.log('✓ el centro señala las que mejor encadenan ok');
+}
+
+// ---- La entrada a los niveles de la Aventura ------------------------------------------
+// Entrar a un nivel pasa por la transición de cartas (ver `loading.js`). Sin navegador que
+// anime —acá no hay `#loading`— la partida arranca en el acto, y se puede probar que cada
+// puerta entra al nivel que corresponde: la del mapa, "Siguiente Nivel" y "Reintentar".
+{
+  const { maxHpOf } = await import('../src/game.js');
+  const tocar = (action) => nodes.result.handlers.click({
+    target: {
+      closest: (sel) => (sel === '[data-action]'
+        ? { dataset: { action }, getBoundingClientRect: () => ({ left: 10, top: 10, width: 80, height: 30 }) }
+        : null),
+    },
+  });
+  const ganar = () => {
+    game.state.totals.p1 = maxHpOf(game.state, 'p2') + game.state.healed.p2;
+    game.state.phase = 'matchEnd';
+    game.refresh();
+  };
+  const { resetAdventureProgress, getAdventureProgress } = await import('../src/adventure.js');
+  const { readWallet, readProgress } = await import('../src/evolution.js');
+  const { MATCH_PAY } = await import('../src/payout.js');
+  resetAdventureProgress();
+  const before = { shards: readWallet().moonshards, axp: readProgress().buba?.axp ?? 0 };
+  // Las misiones de hoy, conocidas: la partida tiene que contar una sola vez.
+  const { writeMissions, readMissions, dayIndex, weekIndex, seasonIndex } = await import('../src/missions.js');
+  const today = dayIndex();
+  const task = (id) => ({ id, n: 0 });
+  writeMissions({
+    day: today, daily: ['d-play', 'd-win2', 'd-win3'].map(task),
+    week: weekIndex(today), weekly: ['w-play', 'w-win', 'k-win-beast', 'w-advko', 'c-streak'].map(task),
+    pass: { season: seasonIndex(today), points: 0, claimed: [], bonus: 0 },
+  });
+  assert.equal(await screen.enter({ adventureLevel: 3, axie: 'buba' }), true, 'entra al nivel');
+  assert.equal(game.state.mode, 'adventure');
+  assert.equal(game.state.adventure.level, 3, 'al nivel pedido');
+  assert.equal(game.state.axies.p1, 'buba', 'con tu Axie');
+  ganar();
+  assert.match(nodes.result.innerHTML, /data-action="adv-next"/, 'ganado, la puerta al siguiente');
+  // La primera victoria del nivel, por K.O.: cobra al terminar, antes de anotar el nivel.
+  assert.ok(getAdventureProgress().completedLevels.includes(3), 'el nivel queda ganado');
+  assert.equal(readProgress().buba.axp, before.axp + MATCH_PAY.ko, 'la AXP va a tu Axie');
+  const shards = readWallet().moonshards;
+  assert.ok(shards >= before.shards + MATCH_PAY.ko, 'y los Moonshards a la bolsa');
+  assert.match(nodes.result.innerHTML, /class="result-pay o-panel"/, 'la pantalla del final lo cuenta');
+  game.refresh();
+  screen.swap(game);
+  game.refresh();
+  assert.equal(readWallet().moonshards, shards, 'la misma partida no paga dos veces, aunque se vuelva a pintar');
+  assert.deepEqual(readMissions().daily.map((t) => t.n), [1, 1, 1], 'ni cuenta dos veces para las misiones');
+  assert.equal(readMissions().weekly[2].n, 1, 'ganó con Buba, de Bestia');
+  assert.equal(readProgress().buba.axp, before.axp + MATCH_PAY.ko);
+  assert.match(nodes.result.innerHTML, /class="result-pay o-panel"/, 'y vuelve a mostrar lo que cobró');
+  tocar('adv-next');
+  await idle();
+  assert.equal(game.state.adventure.level, 4, '"Siguiente Nivel" entra al 4');
+  assert.notEqual(game.state.phase, 'matchEnd', 'y la partida arranca');
+  tocar('restart');
+  await idle();
+  assert.equal(game.state.adventure.level, 4, '"Reintentar" vuelve a entrar al mismo');
+  console.log('✓ la entrada a los niveles de la Aventura ok');
+}
+
+{
+  // La enciclopedia se arma de POWERS: los tres grupos, cada poder una vez y en el suyo.
+  const { symbolsGridHtml } = await import('../src/ui.js');
+  const { POWERS, MOMENT_IDS } = await import('../src/data.js');
+  const html = symbolsGridHtml();
+  const groups = html.split('<section class="moment-group"').slice(1);
+  assert.deepEqual(groups.map((g) => g.match(/data-moment="(\w+)"/)[1]), MOMENT_IDS, 'un grupo por categoría, en orden');
+  for (const p of Object.values(POWERS)) {
+    const where = groups.filter((g) => g.includes(`>${p.name}</h3>`));
+    assert.equal(where.length, 1, `${p.id} sale una vez`);
+    assert.ok(where[0].includes(`data-moment="${p.moment}"`), `${p.id} está en su categoría`);
+    const card = where[0].split('<article').find((c) => c.includes(`>${p.name}</h3>`));
+    assert.ok(card.includes(`class="moment-tag" data-moment="${p.moment}"`), `${p.id} lleva su etiqueta`);
+  }
+  console.log('✓ la enciclopedia agrupa los poderes por categoría');
 }

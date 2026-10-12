@@ -73,10 +73,10 @@ function regla(sel) {
 // el aro no se ve — que es exactamente lo que tiene que pasar.)
 //
 // Los botones son casi toda esta lista: sin el color de abajo, un CDN caído deja la
-// pantalla sin nada que apretar. Los que solo cambian el dibujo —el verde, el rojo, el
-// de tu Axie— heredan la forma de su base y declaran su propio `background-color`.
-for (const sel of ['.hpbar', '.btn', '.lobby-play', '.lobby-pick',
-  '.room-no', '.room-go', '.netbox-mine-cta', '.adv-tile-no']) {
+// pantalla sin nada que apretar. Los que solo cambian el dibujo —el verde y el rojo—
+// heredan la forma de su base y declaran su propio `background-color`.
+for (const sel of ['.hpbar', '.btn', '.lobby-play', '.lobby-rod', '.difficulty-shelf',
+  '.room-no', '.room-go', '.netbox-mine-cta', '.adv-spot-no']) {
   assert.match(
     regla(sel),
     /background:\s*(#[0-9a-fA-F]{3,8}|rgba?\()/,
@@ -84,7 +84,7 @@ for (const sel of ['.hpbar', '.btn', '.lobby-play', '.lobby-pick',
     'no conteste se queda en nada en vez de verse peor',
   );
 }
-for (const sel of ['.btn-primary', '.btn-danger', '.lobby-play--alt']) {
+for (const sel of ['.btn-primary', '.btn-danger']) {
   const cuerpo = regla(sel);
   assert.match(cuerpo, /background-image:\s*url\(/, `\`${sel}\` dejó de pedir su dibujo del kit`);
   assert.match(
@@ -186,7 +186,7 @@ assert.ok(botones === zocalos,
 // fijos se terminaba antes en las ventanas angostas y altas —ahí la línea de las patas
 // sube—, y debajo de los botones quedaba una franja del color pelado del terreno con un
 // corte recto de lado a lado. Desde afuera parecía un fondo mal recortado.
-assert.match(regla('.arena::after'), /--under: max\(\d+px, 100vh\)/,
+assert.match(regla('.arena-floor'), /--under: max\(\d+px, 100vh\)/,
   '`--under` volvió a ser una medida fija: el suelo se corta antes de llegar al borde ' +
   'de abajo en las ventanas donde las patas quedan altas');
 
@@ -195,22 +195,45 @@ assert.match(regla('.arena::after'), /--under: max\(\d+px, 100vh\)/,
 // sin estilo, apilado contra la esquina, y la suite sigue en verde — el peor tipo de
 // falla que tiene este proyecto. Estas son las que dibujan pantallas enteras, y salen
 // mitad del HTML y mitad de los módulos que arman su contenido.
-const marcado = ['index.html', 'src/lobby.js', 'src/ui.js', 'src/net.js', 'src/result.js']
+const marcado = ['index.html', 'src/lobby.js', 'src/adventure-map.js', 'src/map-world.js', 'src/ui.js', 'src/net.js', 'src/result.js', 'src/loading.js',
+  'src/workshop.js', 'src/evolve-view.js', 'src/evolution.js', 'src/card-scene.js']
   .map((f) => read(...f.split('/'))).join('\n');
 for (const cls of [
   'topbar-cfg-btn', 'hud-menu', 'hud-row', 'hud-vol', 'hud-item',
   // La caja de los botones: hace que los dos midan lo mismo.
   'controls-acts',
-  'lobby-aside', 'lobby-play--alt', 'loadout-cta', 'loadout-now',
   'lobby-foot', 'lobby-help',
-  'lobby-choose', 'choose-bar', 'choose-sheet', 'choose-head', 'choose-info', 'choose-cards',
-  'choose-deck', 'choose-tally', 'choose-go', 'card--deck', 'tally',
-  // La colección de Axies: los filtros, el buscador, la grilla y cada naipe.
-  'choose-roster', 'choose-tools', 'choose-filters', 'choose-chip', 'choose-search',
+  // La barra de pestañas de la portada.
+  'lobby-nav', 'nav-tab', 'nav-tab--main', 'nav-ico', 'nav-count',
+  'nav-sprite', 'nav-axie',
+  // El Taller: la forja de cartas (ver `workshop.js`).
+  'lobby-craft', 'moon-purse', 'moon-ico', 'forge-hero', 'forge-stack', 'forge-head', 'forge-title', 'forge-lead',
+  'forge-pity', 'forge-pity-fill', 'forge-pity-text', 'forge-acts', 'forge-go', 'forge-why', 'forge-cards',
+  'forge-odds', 'forge-odd', 'forge-mini', 'forge-mini-power', 'forge-odd-name', 'forge-odd-pct', 'forge-rule', 'gem',
+  // Fusionar y crear, en grande (ver `card-scene.js`).
+  'card-scene', 'cs', 'cs-sky', 'cs-glow', 'cs-rays', 'cs-vfx', 'cs-stage', 'cs-altar', 'cs-ring', 'cs-copy', 'cs-ghost',
+  'cs-sheet', 'cs-orbit', 'cs-orbit-spin', 'cs-tok', 'cs-tok-face', 'cs-orbit-mark', 'cs-fly', 'cs-fusion', 'cs-done', 'cs-detail', 'cs-motes', 'cs-mote', 'cs-card', 'cs-back', 'cs-face', 'cs-info', 'cs-to', 'cs-rule', 'cs-word',
+  'cs-sub', 'cs-acts', 'cs-go', 'cs-back-btn', 'cs-flash', 'cs-chest', 'cs-chest-box', 'cs-chest-lid', 'cs-chest-base',
+  'cs-chest-light', 'cs-chest-leak', 'cs-chest-halo', 'cs-chest-beam', 'cs-burst', 'cs-bit', 'cs-pulls', 'cs-pull',
+  'cs-pull-tier', 'cs-pull-power', 'sym--blank', 'card-power--blank',
+  // La evolución de un Axie, desde su vista previa (ver `evolve-view.js`).
+  'lobby-evolve', 'evolve-btn', 'evolve-ico', 'evolve-ready', 'evolve-hero', 'evolve-art', 'evolve-xp', 'evolve-track',
+  'evolve-next', 'evolve-mix', 'evolve-cards', 'evolve-deck', 'evolve-slot', 'evolve-pick', 'evolve-pick-share',
+  'evolve-gain', 'evolve-go', 'mix-delta', 'evolve-scene',
+  'lobby-choose', 'choose-bar', 'choose-sheet', 'choose-art', 'choose-id', 'choose-name',
+  'choose-lvl', 'choose-class', 'choose-deckline', 'choose-actions', 'choose-go',
+  'choose-deck', 'choose-tally', 'card--deck', 'tally',
+  // La colección de Axies: el buscador, la grilla y cada naipe.
+  'choose-roster', 'choose-tools', 'choose-search',
   'choose-grid', 'choose-empty', 'choose-tags', 'choose-on',
-  'roster-tile', 'roster-art', 'roster-crest', 'roster-name', 'roster-mark',
-  // El (+) de cada carta: la mejora del Axie.
-  'deck-slot', 'card-boost', 'boost-btn',
+  'roster-tile', 'roster-art', 'roster-name', 'roster-mark',
+  // El inventario de un Axie y la mochila (ver `backpack.js`).
+  'lobby-inv', 'inv-hero', 'inv-art', 'inv-cards', 'inv-slots', 'inv-btn', 'inv-ico',
+  'deck-slot', 'bag-slot', 'bag-slot-plus', 'bag-slot-out',
+  'lobby-bag', 'bag-panel', 'bag-hint', 'bag-grid', 'bag-tools', 'bag-tabs', 'bag-tab', 'bag-bulk',
+  'bag-stack', 'bag-qty', 'bag-worn', 'bag-ready', 'bag-new', 'bag-up',
+  'bag-detail', 'bag-sheet', 'bag-close', 'bag-detail-card', 'bag-detail-info', 'bag-detail-name', 'bag-detail-tier',
+  'bag-detail-power', 'bag-detail-worn', 'bag-fusion', 'bag-copies', 'bag-next', 'bag-detail-acts', 'bag-fuse', 'bag-scrap', 'bag-cancel',
   // La sala en red, que es la única pantalla a la que se entra sin pasar por la
   // portada: el terreno, las dos tablas —lo que se elige y tu ficha—, el naipe de
   // cada sala y los dos asientos frente a frente.
@@ -221,15 +244,24 @@ for (const cls of [
   'seat-state', 'seat-vs', 'netbox-you', 'netbox-axie',
   'netbox-mine', 'netbox-mine-art', 'netbox-mine-info', 'netbox-mine-cta',
   'netbox-invite', 'netbox-qr', 'netbox-urls', 'netbox-label',
-  // El Modo Aventura: el mapa de naipes y la ficha del nivel.
-  'lobby-adventure', 'adv-progress', 'adventure-map', 'adventure-levels', 'adv-tile',
-  'adv-tile-no', 'adv-mark', 'adventure-card', 'adv-head', 'adv-rival-stage', 'adv-info',
-  'adv-kicker', 'adv-card-title', 'adv-diff', 'adv-body', 'adv-powers', 'adv-power',
+  // El Modo Aventura: el mundo (un mapa dibujado en código, lo que cambia con el
+  // progreso y las tierras), los niveles, tu Axie, la barra de arriba y el panel del nivel.
+  'lobby-adventure', 'adv-world', 'adv-map', 'adv-art', 'adv-state', 'adv-zone', 'adv-weather', 'adv-board',
+  'adv-trail-glow', 'adv-trail-walked', 'adv-fog', 'adv-cloud', 'adv-spot', 'adv-spot-rival', 'adv-spot-icon', 'adv-spot-no', 'adv-spot-star',
+  'adv-spot-pointer', 'adv-hero', 'adv-sign', 'adv-sign-board', 'adv-sign-lock', 'adv-bar',
+  'adv-progress', 'adventure-card', 'adv-panel-more', 'adv-no', 'adv-head',
+  'adv-meta', 'adv-pips', 'adv-heart', 'adv-news', 'adv-news-tag', 'adv-news-more', 'adv-new',
+  'adv-star', 'adv-pool', 'adv-card-title', 'adv-diff', 'adv-powers', 'adv-power',
+  // La entrada a un nivel de la Aventura (ver `loading.js`): el muro de cartas y la
+  // previa con el cara a cara y la cadena que carga.
+  'loading', 'loading-wall', 'loading-card', 'loading-scene', 'loading-logo', 'loading-duel',
+  'loading-fighter', 'loading-axie', 'loading-vs', 'loading-chain', 'loading-link', 'loading-note',
   // La pantalla del final (ver `result.js`): la escena, la tela, el escenario, las
   // marcas, el botín y las puertas.
   'result-scene', 'result-sky', 'result-vfx', 'result-box', 'result-banner', 'result-cloth',
-  'result-title', 'result-stage', 'result-fighter', 'result-stats', 'result-stat',
-  'result-loot', 'result-item', 'result-acts', 'result-peek', 'result-back',
+  'result-title', 'result-star', 'result-stage', 'result-fighter', 'result-stats', 'result-stat',
+  'result-sum', 'result-loot', 'result-pay', 'result-gain', 'result-xp', 'result-up', 'result-pay-note',
+  'result-item', 'result-acts', 'result-peek', 'result-back',
 ]) {
   assert.match(marcado, new RegExp(`class="[^"]*${cls}`), `nadie usa \`.${cls}\``);
   assert.match(css, new RegExp(`\\.${cls}[\\s,{:.\\[]`), `\`.${cls}\` no está dibujada en el CSS`);
@@ -277,7 +309,11 @@ assert.ok(Number.isFinite(brillo) && brillo <= colchon, `el brillo del centro ($
         assert.match(css, new RegExp(`\\.card\\[data-fx="${power}"\\]\\s*\\{[^}]*animation`),
           `${power}: la carta no tiene su gesto`);
       }
-      for (const pip of [].concat(spec.pip ?? [])) {
+      // Una marca que depende de la partida (la Novice Spell, los osos): todas las que puede dar.
+      const pips = typeof spec.pip === 'function'
+        ? ['hit', 'heal', 'shield'].flatMap((kind) => [].concat(spec.pip({ kind })))
+        : [].concat(spec.pip ?? []);
+      for (const pip of new Set(pips)) {
         const mark = pip === 'shield' ? '.plate-shield' : '.pip-status';
         has(`.plate[data-fx-wait~="${pip}"] ${mark}[data-pip="${pip}"]`,
           `${power}: la marca ${pip} no se esconde mientras viaja el amuleto`);
@@ -314,3 +350,17 @@ assert.deepEqual(
 // `markScroll` en `ui.js`).
 assert.doesNotMatch(sinComentarios(regla('.strip')), /overflow/, 'la fila no recorta sombras ni halos');
 assert.match(css, /\.strip\[data-scroll="true"\]\s*\{\s*overflow-x:\s*auto/, 'una cadena que no entra se desplaza');
+
+// Parada la pantalla, la cadena no se desplaza: se parte en renglones con el ancho
+// entero (`--snake`, ver `wrapStrip` en `ui.js`) y el daño y el aro bajan a su renglón,
+// encima de los botones. Al costado de las cartas le comían un cuarto del ancho y una
+// cadena de siete u ocho había que arrastrarla.
+{
+  const i = css.indexOf('@media (max-width: 940px) and (orientation: portrait)');
+  assert.ok(i >= 0, 'hay un bloque para la pantalla parada');
+  const bloque = css.slice(i, css.indexOf('\n}\n', i));
+  assert.match(bloque, /\.arena\s*\{\s*grid-template-rows:\s*var\(--escena\) 1fr auto auto var\(--pie\)/, 'un renglón más, para el daño');
+  assert.match(bloque, /\.gauge\s*\{[^}]*grid-area:\s*4 \/ 1 \/ 5 \/ -1/, 'el daño y el aro, encima de los botones');
+  assert.match(bloque, /\.controls\s*\{\s*grid-area:\s*5 \/ 1 \/ 6 \/ -1/, 'los botones, al pie');
+  assert.match(bloque, /\.field\s*\{[^}]*padding-right:\s*0[^}]*--snake:\s*1/, 'la mesa con el ancho entero y en renglones');
+}

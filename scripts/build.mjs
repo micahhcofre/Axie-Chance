@@ -7,15 +7,21 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 
+// Las poses de los rivales de cada capítulo de la Aventura (ver `src/rival-poses.js`): el
+// sitio las pide cuando hacen falta, y en el archivo suelto van todas y se registran al
+// cargar, después del módulo que las registra.
+const CHAPTER_POSES = readdirSync(join(root, 'src', 'poses'))
+  .filter((f) => f.endsWith('.js')).sort().map((f) => `poses/${f.slice(0, -3)}`);
+
 const MODULES = [
   'i18n-en', 'i18n',
-  'data', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'rules', 'ai', 'adventure-levels', 'adventure', 'game',
-  'vfx-clips', 'vfx', 'camera', 'power-fx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'result', 'ui', 'rooms', 'link', 'qr', 'net',
-  'tutorial', 'lobby', 'main',
+  'data', 'stages', 'axie-avatars', 'axie-poses', 'axies', 'loadout', 'backpack', 'evolution', 'crafting', 'rules', 'ai', 'adventure-levels', 'adventure', 'rival-poses', ...CHAPTER_POSES, 'game', 'payout', 'missions', 'missions-view',
+  'vfx-clips', 'vfx', 'stage-kit', 'stage', 'table-fx', 'camera', 'scenery', 'power-fx', 'axie-motion', 'audio-clips', 'audio', 'audio-cues', 'result', 'loading', 'ui', 'rooms', 'link', 'qr', 'net',
+  'tutorial', 'map-art', 'map-world', 'adventure-map', 'profile', 'evolve-scene', 'evolve-view', 'card-scene', 'workshop', 'lobby', 'main',
 ];
 const FONTS =
-  'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800' +
-  '&family=Lilita+One&display=swap';
+  'https://fonts.googleapis.com/css2?family=Caesar+Dressing&family=Lilita+One' +
+  '&family=Work+Sans:wght@400..600&display=swap';
 
 // Todos los PNG de Icons/ —crests, poderes, estados y las dos versiones del logo— en
 // un solo mapa por nombre de archivo. `data.js` los pide con `iconUrl()`, y el HTML

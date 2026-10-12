@@ -132,7 +132,7 @@ Cada Axie ingresa a la arena con un mazo predeterminado por su código genético
 Lo planeado para esta fase ya está jugable de punta a punta, y el alcance terminó siendo mayor al previsto originalmente:
 * Core loop 1v1 operativo: Push (robar), Cash Out (plantarse) y Bust (fallar), con daño cuadrático ($L^2$) y rachas múltiples en paralelo.
 * Sistema de barras de HP, Última Chance y empate.
-* Mazo base anatómico de 10 cartas por clase, con mejoras (+) como sustituto local de la Part Evolution on-chain.
+* Mazo base anatómico de 8 cartas por clase, con mejoras (+) como sustituto local de la Part Evolution on-chain.
 * Mercado central interactivo con cartas sin poder, cartas de poder y el comodín apilable Free Game.
 * **12 poderes de clase** (2 por clase, uno activo por partida) en vez de los 6 previstos originalmente: Charm of Power, Energy Drink M, Sticky Octopus, Bubble Paste, Secret Egg, Feather Earring, Leafy Pot, Spring Leaf, Lazy Snail, Mantis Dagger, Poison Vial, Gecko Mask.
 * **Modo Aventura**: campaña de 6 niveles contra los starters de Origins, con dificultad y pool de cartas escalonados.

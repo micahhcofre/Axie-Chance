@@ -353,6 +353,126 @@ async function cached(kit, ext) {
   return readFileSync(file);
 }
 
+/** Lo mismo, o `null` si el kit no lo trae (los despiertos vienen en JSON o en `.skel`). */
+async function cachedOrNull(kit, ext) {
+  try {
+    return await cached(kit, ext);
+  } catch {
+    return null;
+  }
+}
+
+// ---------- el cuerpo despierto ----------
+
+/**
+ * De qué parte del Axie es cada slot del esqueleto. Las orejas son dos slots; el resto,
+ * uno. Lo que no está acá —el cuerpo, las patas— no evoluciona.
+ */
+export const PART_OF_SLOT = {
+  eyes: 'eyes',
+  mouth: 'mouth',
+  'ear-left': 'ears',
+  'ear-right': 'ears',
+  horn: 'horn',
+  back: 'back',
+  tail: 'tail',
+};
+
+/** Cómo se llaman los PNG de los dibujos despiertos: `horn-lv2.png`, como el arte `-lv2` del mixer. */
+export const AWAKE_SUFFIX = '-lv2';
+
+/** Los números de un dibujo de región que importan para ubicarlo. */
+const placeOf = (att) => [att.rotation ?? 0, att.x ?? 0, att.y ?? 0, att.width ?? 0, att.height ?? 0];
+
+/**
+ * Busca un dibujo de región en un esqueleto binario de Spine 3.8 (`.skel`). Cada uno se
+ * guarda como siete floats big-endian seguidos: giro, x, y, escala x, escala y, ancho y
+ * alto. Devuelve los que tienen ese giro, escala 1 y —si se pide— ese tamaño.
+ */
+function scanSkel(buf, rotation, size = null, tol = 0.01) {
+  const out = [];
+  for (let o = 0; o + 28 <= buf.length; o++) {
+    if (Math.abs(buf.readFloatBE(o) - rotation) > 0.01) continue;
+    if (Math.abs(buf.readFloatBE(o + 12) - 1) > 1e-4 || Math.abs(buf.readFloatBE(o + 16) - 1) > 1e-4) continue;
+    const width = buf.readFloatBE(o + 20);
+    const height = buf.readFloatBE(o + 24);
+    if (size && (Math.abs(width - size[0]) > tol || Math.abs(height - size[1]) > tol)) continue;
+    out.push({ x: buf.readFloatBE(o + 4), y: buf.readFloatBE(o + 8), width, height });
+  }
+  return out;
+}
+
+/**
+ * El esqueleto del cuerpo despierto de un starter: `PvE/Starters/N-1/`, que el kit
+ * llama "body stage 1 (awakened)". Es el mismo esqueleto —mismos huesos, slots y
+ * animaciones— con **una** parte dibujada de nuevo: la firma de cada uno. Lo único que
+ * cambia de esa parte es dónde se dibuja y de qué tamaño (`x`, `y`, `width`, `height`).
+ *
+ * Tres de los seis vienen en JSON y tres solo en binario (`.skel`). El binario no se
+ * lee entero: se busca cada dibujo del base con sus números, y los que no aparecen son
+ * los que cambiaron. Su versión nueva es la única con el mismo giro y el tamaño de su
+ * región en el atlas despierto, a la misma escala que el base. Si algún dibujo no se
+ * encuentra o aparece dos veces, falla: mejor eso que una parte corrida.
+ *
+ * Devuelve el esqueleto (una copia del base con los dibujos nuevos) y qué slots cambiaron.
+ */
+async function awakenedSkeleton(axie, base) {
+  const kit = `${axie.kit}-1`;
+  const skeleton = structuredClone(base);
+  const bag = skeleton.skins[0].attachments;
+  const changed = new Set();
+  const json = await cachedOrNull(kit, 'json');
+  if (json) {
+    const awake = JSON.parse(json);
+    for (const key of ['bones', 'slots', 'animations']) {
+      if (JSON.stringify(awake[key]) !== JSON.stringify(base[key])) {
+        throw new Error(`${axie.id}: el despierto (${kit}) tiene otros ${key}, no solo otra parte`);
+      }
+    }
+    const next = awake.skins[0].attachments;
+    for (const [slot, drawings] of Object.entries(bag)) {
+      for (const [name, att] of Object.entries(drawings)) {
+        const now = next[slot]?.[name];
+        if (!now) throw new Error(`${axie.id}: al despierto le falta ${slot}/${name}`);
+        if (JSON.stringify(placeOf(now)) !== JSON.stringify(placeOf(att))) {
+          drawings[name] = { ...att, ...now };
+          changed.add(slot);
+        }
+      }
+    }
+  } else {
+    const skel = await cached(kit, 'skel');
+    const regions = parseAtlas((await cached(kit, 'atlas')).toString('utf8'));
+    const baseRegions = parseAtlas((await cached(axie.kit, 'atlas')).toString('utf8'));
+    for (const [slot, drawings] of Object.entries(bag)) {
+      for (const [name, att] of Object.entries(drawings)) {
+        if (att.type && att.type !== 'region') continue;
+        const [rot, x, y, w, h] = placeOf(att);
+        const same = scanSkel(skel, rot, [w, h]).filter((c) => Math.abs(c.x - x) < 0.01 && Math.abs(c.y - y) < 0.01);
+        if (same.length) continue;
+        // Cambió: el nuevo tiene el tamaño de su región despierta, a la escala del base.
+        const region = att.path ?? name;
+        const scale = w / baseRegions[region].orig[0];
+        const want = regions[region].orig.map((n) => n * scale);
+        const found = scanSkel(skel, rot, want, 1.5);
+        if (found.length !== 1) {
+          throw new Error(`${axie.id}: ${slot}/${name} despierto aparece ${found.length} veces en ${kit}.skel`);
+        }
+        drawings[name] = { ...att, ...found[0] };
+        changed.add(slot);
+      }
+    }
+  }
+  const parts = [...new Set([...changed].map((s) => PART_OF_SLOT[s]))];
+  if (!parts.length || parts.some((p) => !p)) {
+    throw new Error(`${axie.id}: el despierto cambia ${[...changed].join(', ') || 'nada'}`);
+  }
+  if (axie.awake && JSON.stringify(parts.sort()) !== JSON.stringify([...axie.awake].sort())) {
+    throw new Error(`${axie.id}: el despierto cambia ${parts.join(', ')} y \`awake\` en axies.js dice ${axie.awake.join(', ')}`);
+  }
+  return { skeleton, changed };
+}
+
 /**
  * El esqueleto de un starter, con sus dibujos cortados y escritos en `Axies/<id>/`.
  *
@@ -364,21 +484,36 @@ async function cached(kit, ext) {
  * Devuelve el esqueleto con cada dibujo apuntando a su PNG (`path`) y con la caja de
  * ese PNG (`width`, `height`, en unidades del esqueleto): el resto de las cuentas no
  * tiene que saber que viene de otro lado.
+ *
+ * Con `awake` es el cuerpo despierto (ver `awakenedSkeleton`): solo se cortan los
+ * dibujos de los slots que cambiaron, con el sufijo `-lv2` y del atlas despierto; los
+ * demás apuntan a los PNG del base, que son idénticos. Va **después** del base, que es
+ * el que limpia la carpeta. `skeleton.awakened` dice qué slots cambiaron.
  */
-export async function loadStarter(axie) {
-  const skeleton = JSON.parse(await cached(axie.kit, 'json'));
-  const regions = parseAtlas((await cached(axie.kit, 'atlas')).toString('utf8'));
-  const page = decodePng(await cached(axie.kit, 'png'));
+export async function loadStarter(axie, { awake = false } = {}) {
+  let skeleton = JSON.parse(await cached(axie.kit, 'json'));
+  let kit = axie.kit;
+  let changed = null;
+  if (awake) {
+    ({ skeleton, changed } = await awakenedSkeleton(axie, skeleton));
+    kit = `${axie.kit}-1`;
+  }
+  const regions = parseAtlas((await cached(kit, 'atlas')).toString('utf8'));
+  const page = decodePng(await cached(kit, 'png'));
   const world = restWorld(skeleton);
   for (const slot of drawn(skeleton)) if (slot.attachment !== slot.name) nameRestAfterSlot(skeleton, slot);
   const bag = skeleton.skins[0].attachments;
 
   const dir = join(root, STARTER_DIR, axie.id);
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
+  if (!awake) {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+  }
   for (const slot of drawn(skeleton)) {
     const m = world.get(slot.bone);
     const boneRot = Math.atan2(m.c, m.a) / RAD;
+    // En el despierto, lo que no cambió es el mismo dibujo del base: no se vuelve a cortar.
+    const fresh = !awake || changed.has(slot.name);
     for (const [name, att] of Object.entries(bag[slot.name])) {
       if (att.type && att.type !== 'region') throw new Error(`${axie.id}/${name}: dibujo de tipo ${att.type}`);
       const region = regions[att.path ?? name];
@@ -387,12 +522,16 @@ export async function loadStarter(axie) {
       if (tilt > 180) tilt -= 360;
       if (tilt <= -180) tilt += 360;
       if (Math.abs(tilt) < TILT) tilt = 0;
-      const img = regionImage(page, region);
-      writeFileSync(join(dir, `${name}.png`), encodePng(tilt ? rotateImage(img, tilt) : img));
+      const file = `${name}${awake && fresh ? AWAKE_SUFFIX : ''}.png`;
+      if (fresh) {
+        const img = regionImage(page, region);
+        writeFileSync(join(dir, file), encodePng(tilt ? rotateImage(img, tilt) : img));
+      }
       [att.width, att.height] = turned(att.width, att.height, tilt);
-      att.path = `${STARTER_DIR}/${axie.id}/${name}.png`;
+      att.path = `${STARTER_DIR}/${axie.id}/${file}`;
     }
   }
+  if (awake) skeleton.awakened = changed;
   return skeleton;
 }
 

@@ -1,0 +1,464 @@
+/* El spot de 30 segundos. Es la contracara del tráiler de `trailer.css`: aquel actúa una
+   partida con los Axies y sus gestos, éste es diseño en movimiento —cartas, símbolos,
+   números y tipografía— cortado contra un pulso de 120 golpes por minuto.
+
+   La regla del archivo es una sola y es rara a propósito:
+
+       ADENTRO DEL CUADRO NO HAY NI UNA ANIMACIÓN NI UNA TRANSICIÓN DE CSS.
+
+   Todo lo que se mueve lo escribe `src/spot.js` cuadro a cuadro, porque el spot no es una
+   página que se anima: es una **película con línea de tiempo**. Cada propiedad es una
+   función pura del segundo en el que está (`seek(t)`), y eso es lo que hace que se pueda
+   frenar en cualquier instante, rebobinar con la barra y —lo que de verdad importa—
+   sacarle los 900 cuadros de punta a punta a un navegador sin cabeza para exportarlo como
+   video. Una `animation` de CSS acá adentro rompería las tres cosas de una: el reloj de
+   las animaciones no es el de la película.
+
+   Lo de abajo, entonces, es solo cómo se ve algo quieto: el cuadro, la letra, el color,
+   el revelado. El cuándo está en el otro archivo. */
+
+/* ---------- la composición ----------
+
+   Adentro del cuadro se trabaja en una comp de 1920x1080 píxeles de película, como en una
+   mesa de montaje, y todo se escala con un solo `transform`. Las medidas del guion son
+   números redondos y absolutos (`x: 960`), no porcentajes ni `cqi`: una coreografía se
+   escribe en un lienzo fijo o no se escribe. */
+:root {
+  --sp-ink: #f2f5ff;
+  --sp-void: #05060c;
+}
+
+.spot {
+  margin: 0;
+  min-height: 100dvh;
+  background: #000;
+  color: var(--sp-ink);
+  overflow: hidden;
+  font-family: var(--text);
+}
+
+.sp-frame {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: #000;
+  overflow: hidden;
+  cursor: default;
+}
+
+.sp-comp {
+  position: absolute; left: 50%; top: 50%;
+  width: 1920px; height: 1080px;
+  margin: -540px 0 0 -960px;
+  transform: scale(var(--fit, 1));
+  transform-origin: 50% 50%;
+  overflow: hidden;
+  background: var(--sp-void);
+  /* La carta del juego, medida para cine. */
+  --carta: 186px;
+  --zoom: 1;
+  /* La cámara del spot: una sola capa que mueve y escala todo lo de adentro. */
+  contain: paint;
+}
+
+/* El acercamiento de la cámara y el temblor viven acá, en dos capas separadas: si
+   compartieran elemento, cada sacudón le pisaría el `transform` al acercamiento. */
+.sp-stage,
+.sp-cv,
+.sp-floor { transform-origin: 50% 50%; }
+
+/* ---------- nada se anima solo ----------
+
+   `styles.css` trae la carta con su reparto (`deal`), el símbolo con su transición y el
+   amuleto con su brillo. Todo eso está bien en la mesa y es veneno acá: son relojes
+   sueltos que no saben en qué segundo de la película estamos. Se apagan de raíz. */
+.sp-comp *,
+.sp-comp *::before,
+.sp-comp *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* ---------- el fondo ---------- */
+
+/* Dos manchas de color que el guion mueve de acto en acto. El negro de abajo nunca se
+   va: lo que cambia es cuánto color le entra encima. */
+.sp-sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(1200px 820px at var(--sky-x, 30%) var(--sky-y, 18%),
+      color-mix(in srgb, var(--sky-a, #2a3a8c) calc(var(--sky-i, 1) * 100%), transparent) 0%, transparent 62%),
+    radial-gradient(1100px 760px at calc(100% - var(--sky-x, 30%)) calc(100% - var(--sky-y, 18%)),
+      color-mix(in srgb, var(--sky-b, #6a1f5c) calc(var(--sky-i, 1) * 100%), transparent) 0%, transparent 58%),
+    var(--sp-void);
+}
+
+/* El abanico de rayos: un cónico con dientes que gira. Es lo que le da rotación a un
+   fondo plano sin dibujar nada. */
+.sp-rays {
+  position: absolute; left: 50%; top: 50%;
+  width: 3000px; height: 3000px; margin: -1500px 0 0 -1500px;
+  opacity: var(--rays-o, 0);
+  transform: rotate(var(--rays-r, 0deg));
+  background: repeating-conic-gradient(from 0deg,
+    color-mix(in srgb, var(--rays-c, #fff) 12%, transparent) 0deg 5deg,
+    transparent 5deg 15deg);
+  mask-image: radial-gradient(closest-side, transparent 8%, #000 34%, transparent 72%);
+}
+
+/* El piso: una grilla en fuga que corre hacia el fondo. Le pone suelo y velocidad a una
+   escena que si no flota en el vacío. */
+.sp-floor {
+  position: absolute; left: -50%; right: -50%; bottom: -8%; height: 62%;
+  opacity: var(--floor-o, 0);
+  background:
+    repeating-linear-gradient(90deg,
+      color-mix(in srgb, var(--floor-c, #7c8bff) 42%, transparent) 0 2px, transparent 2px 84px),
+    repeating-linear-gradient(0deg,
+      color-mix(in srgb, var(--floor-c, #7c8bff) 42%, transparent) 0 2px, transparent 2px 84px);
+  background-position: 0 var(--floor-y, 0px);
+  transform: perspective(620px) rotateX(74deg) scale(1.6);
+  transform-origin: 50% 100%;
+  mask-image: linear-gradient(#000 0%, transparent 74%);
+}
+
+/* ---------- las capas de dibujo ---------- */
+
+/* El mundo: una sola capa que la cámara mueve y escala. Adentro va todo lo que tiene
+   lugar en la mesa; afuera, lo que se lee. */
+.sp-world {
+  position: absolute; inset: 0;
+  transform: translate(var(--cam-x, 0px), var(--cam-y, 0px)) scale(var(--cam-s, 1));
+  transform-origin: 50% 52%;
+  filter: saturate(var(--cam-sat, 1)) blur(var(--cam-blur, 0px));
+  will-change: transform, filter;
+}
+
+.sp-cv { position: absolute; inset: 0; width: 1920px; height: 1080px; pointer-events: none; }
+#sp-under { z-index: 2; }
+#sp-over { z-index: 6; }
+
+.sp-stage { position: absolute; inset: 0; z-index: 4; }
+
+/* ---------- las cartas ---------- */
+
+/* La fila vive en el centro y crece a los dos lados. El guion la escala sola a medida que
+   se hace larga: es la avaricia dibujada —cuanto más te llevás, más lejos te tenés que
+   parar para verlo—. */
+.sp-chain {
+  position: absolute; left: 960px; top: 560px;
+  display: flex; gap: 20px; align-items: flex-start;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
+}
+.sp-chain .card { flex: none; will-change: transform, opacity; }
+
+/* El anillo de crests: seis piezas colgadas del centro, cada una con su ángulo y su
+   radio puestos por el guion. */
+.sp-ring { position: absolute; left: 960px; top: 540px; width: 0; height: 0; }
+.sp-ring .sp-crest {
+  position: absolute; left: 0; top: 0;
+  width: 120px; height: 120px; margin: -60px 0 0 -60px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--c) 55%, transparent), transparent 74%);
+  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--c) 70%, transparent));
+  will-change: transform, opacity;
+}
+.sp-ring .sp-crest img { width: 76px; height: 76px; object-fit: contain; }
+
+/* ---------- las barras del cuadrado ----------
+
+   Seis barras, 1 4 9 16 25 36. Es la única parte del spot que explica en vez de mostrar,
+   y por eso dura un compás y medio y se va. */
+.sp-bars { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.sp-bars .sp-bar {
+  position: absolute; bottom: 300px;
+  width: 116px; margin-left: -58px;
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+}
+.sp-bars .sp-bar i {
+  display: block; width: 100%; height: 100%;
+  border-radius: 10px 10px 2px 2px;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--c) 96%, #fff),
+    color-mix(in srgb, var(--c) 62%, #000));
+  box-shadow: 0 0 34px -6px var(--c), inset 0 2px 0 rgba(255, 255, 255, .5);
+}
+.sp-bars .sp-bar b {
+  position: absolute; left: 50%; top: -74px;
+  transform: translateX(-50%);
+  font-family: var(--game); font-size: 56px; line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: .1em rgba(6, 8, 20, .9); paint-order: stroke fill;
+}
+
+/* ---------- el montaje del arsenal ----------
+
+   Trece armas en cuatro segundos y medio. Cada una es una placa entera del color de su
+   clase: no entra, corta. El corte duro a este ritmo es la única manera de que trece
+   cosas se lean como una sola idea —«estás armado»— y no como una lista. */
+.sp-reel { position: absolute; inset: 0; z-index: 5; }
+.sp-reel .sp-card {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  will-change: transform, opacity;
+}
+.sp-reel .sp-card-bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(760px 620px at 50% 44%,
+      color-mix(in srgb, var(--c) 78%, transparent), transparent 70%),
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--c) 26%, #05060c),
+      color-mix(in srgb, var(--c) 6%, #05060c));
+}
+.sp-reel .sp-card-ico {
+  position: absolute; left: 50%; top: 452px;
+  width: 300px; height: 300px; margin: -150px 0 0 -150px;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 40px rgba(0, 0, 0, .6))
+          drop-shadow(0 0 30px color-mix(in srgb, var(--c) 80%, transparent));
+}
+.sp-reel .sp-card-name {
+  position: absolute; left: 0; right: 0; top: 660px;
+  text-align: center;
+  font: 600 76px/1 var(--text);
+  text-transform: uppercase; letter-spacing: -.02em;
+  color: #fff;
+  text-shadow: 0 6px 0 rgba(6, 8, 20, .55);
+}
+.sp-reel .sp-card-kind {
+  position: absolute; left: 0; right: 0; top: 762px;
+  text-align: center;
+  font: 600 30px/1 var(--text);
+  text-transform: uppercase; letter-spacing: .42em; text-indent: .42em;
+  color: color-mix(in srgb, var(--c) 45%, #fff);
+}
+
+/* ---------- el número ----------
+
+   Es la voz del juego: el marcador de la cadena. Va en la letra gorda del Origins, con
+   contorno, y es lo único que nunca se va de pantalla entre el primer acto y el corte. */
+.sp-score {
+  position: absolute; left: 960px; top: var(--score-y, 268px);
+  transform: translate(-50%, -50%) scale(var(--score-s, 1));
+  z-index: 7;
+  text-align: center;
+  opacity: var(--score-o, 0);
+  will-change: transform, opacity;
+}
+.sp-num {
+  display: block;
+  font-family: var(--game); font-variant-numeric: tabular-nums;
+  font-size: 200px; line-height: .86;
+  color: #fff;
+  -webkit-text-stroke: .085em rgba(6, 8, 20, .92); paint-order: stroke fill;
+  text-shadow: 0 0 var(--num-glow, 0px) var(--num-c, #f5c542);
+}
+/* La cuenta que arma el número: `4² + 1² = 17`. Va debajo y chiquita porque es la letra
+   chica del contrato —pero está, y es la de verdad: la escribe `scoreChain()`. */
+.sp-math {
+  display: block; margin-top: 10px;
+  font: 600 44px/1 var(--text);
+  letter-spacing: .04em;
+  color: #cfd6ff;
+  opacity: var(--math-o, 0);
+  text-shadow: 0 2px 0 rgba(6, 8, 20, .6);
+}
+
+/* ---------- la rueda de chances ----------
+
+   La misma lectura que la mesa: qué porcentaje tenés de que la próxima entre. Verde,
+   ámbar, rojo. Es el reloj de la tensión y por eso entra recién cuando la cadena ya es
+   larga: antes no da miedo. */
+.sp-dial {
+  position: absolute; left: var(--dial-x, 1560px); top: var(--dial-y, 300px);
+  width: 260px; height: 260px; margin: -130px 0 0 -130px;
+  z-index: 7;
+  opacity: var(--dial-o, 0);
+  transform: scale(var(--dial-s, 1));
+  will-change: transform, opacity;
+}
+.sp-dial svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.sp-dial circle { fill: none; stroke-width: 11; stroke-linecap: round; }
+.sp-dial-bed { stroke: rgba(255, 255, 255, .13); }
+.sp-dial-arc {
+  stroke: var(--dial-c, #54cf8b);
+  stroke-dasharray: 326.7;
+  stroke-dashoffset: var(--dial-off, 0);
+  filter: drop-shadow(0 0 14px var(--dial-c, #54cf8b));
+}
+.sp-dial b {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-family: var(--game); font-size: 74px;
+  color: var(--dial-c, #54cf8b);
+  -webkit-text-stroke: .09em rgba(6, 8, 20, .9); paint-order: stroke fill;
+}
+.sp-dial b::after { content: "%"; font-size: .42em; margin-left: .06em; align-self: flex-start; margin-top: .5em; }
+
+/* ---------- la tipografía ----------
+
+   Tres tonos de voz y nada más: la etiqueta (chica, espaciada, para nombrar), la placa
+   (enorme, para el golpe) y el pie (la bajada del final).
+
+   Cada renglón se revela por debajo de una máscara —`overflow: hidden` en el renglón, y
+   la letra subiendo dentro— porque una palabra que aparece es un `opacity` y una palabra
+   que **entra** es esto. */
+.sp-type { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+
+.sp-line {
+  position: absolute; left: 960px; top: 0;
+  transform: translate(-50%, -50%) scale(var(--ls, 1));
+  transform-origin: 50% 50%;
+  white-space: nowrap;
+  display: flex; justify-content: center; align-items: baseline;
+  gap: .3em;
+  opacity: var(--lo, 0);
+  will-change: transform, opacity;
+}
+/* La máscara tiene que ser un poco más alta que la letra: recortada al milímetro
+   le come la cola de la «g» y el gancho de la «¿». */
+.sp-line .sp-mask { overflow: hidden; display: block; padding: .12em 0 .18em; margin: -.12em 0 -.18em; }
+.sp-line .sp-mask > span { display: block; will-change: transform; }
+
+.sp-line[data-tone="label"] {
+  font: 600 34px/1.5 var(--text);
+  text-transform: uppercase; letter-spacing: .52em; text-indent: .52em;
+  color: color-mix(in srgb, var(--t-c, #8fa0ff) 70%, #fff);
+}
+.sp-line[data-tone="plate"] {
+  font: 600 164px/1.06 var(--text);
+  text-transform: uppercase; letter-spacing: -.035em;
+  color: #fff;
+  text-shadow: 0 10px 0 rgba(6, 8, 20, .35);
+}
+.sp-line[data-tone="tag"] {
+  font: 600 62px/1.28 var(--text);
+  text-transform: uppercase; letter-spacing: -.01em;
+  color: #eaefff;
+}
+.sp-line[data-tone="url"] {
+  font: 600 40px/1.4 var(--text);
+  letter-spacing: .3em; text-indent: .3em;
+  color: #9fb0ff;
+}
+/* La palabra que lleva el peso de la frase se pinta, y se pinta con el color del juego
+   que corresponda: el ámbar del daño, el rojo del corte. */
+.sp-line em { font-style: normal; color: var(--t-hi, #f5c542); }
+
+/* El «L²» del acto de la regla: es un número, así que va en la letra de los números. */
+.sp-line[data-tone="rule"] {
+  font-family: var(--game); font-size: 380px; line-height: .9;
+  color: #fff;
+  -webkit-text-stroke: .04em rgba(6, 8, 20, .85); paint-order: stroke fill;
+}
+.sp-line[data-tone="rule"] sup { font-size: .52em; vertical-align: super; }
+
+/* ---------- el logo ---------- */
+
+.sp-logo {
+  position: absolute; z-index: 5; left: 960px; top: var(--logo-y, 470px);
+  transform: translate(-50%, -50%) scale(var(--logo-s, 1));
+  opacity: var(--logo-o, 0);
+  will-change: transform, opacity;
+  filter: drop-shadow(0 26px 46px rgba(0, 0, 0, .65));
+}
+.sp-logo img { display: block; width: 720px; height: auto; }
+
+/* ---------- el revelado ---------- */
+
+/* El grano. Es ruido de verdad —turbulencia de SVG— y no un PNG: pesa nada y no se
+   repite a la vista. El guion lo corre de lugar cada cuadro para que hierva. */
+.sp-grain {
+  position: absolute; inset: -60px;
+  z-index: 20; pointer-events: none;
+  opacity: var(--grain-o, .07);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/>\
+<feColorMatrix type='saturate' values='0'/></filter>\
+<rect width='180' height='180' filter='url(%23n)' opacity='.55'/></svg>");
+  background-position: var(--grain-x, 0px) var(--grain-y, 0px);
+}
+
+.sp-vig {
+  position: absolute; inset: 0;
+  z-index: 21; pointer-events: none;
+  background: radial-gradient(closest-side at 50% 50%,
+    transparent var(--vig-in, 46%), rgba(3, 4, 10, var(--vig-a, .78)) 118%);
+}
+
+/* El fogonazo: la capa que hace los cortes. Blanca en el impacto, del color de la clase
+   en el arsenal, negra en los apagones. */
+.sp-flash {
+  position: absolute; inset: 0;
+  z-index: 22; pointer-events: none;
+  background: var(--flash-c, #fff);
+  opacity: var(--flash-o, 0);
+}
+
+/* El apagón. Es la otra mitad del fogonazo y va aparte: los dos se pisan en el corte
+   —blanco a fondo y negro a fondo separados por dos cuadros— y una sola capa no puede
+   estar de los dos colores a la vez. */
+.sp-dark {
+  position: absolute; inset: 0;
+  z-index: 22; pointer-events: none;
+  background: #04050a;
+  opacity: var(--dark-o, 0);
+}
+
+/* Las barras negras. Se abren en el primer golpe y se cierran en el último: es el
+   paréntesis que convierte una página en una proyección. */
+.sp-lb { position: absolute; inset: 0; z-index: 23; pointer-events: none; }
+.sp-lb i {
+  position: absolute; left: 0; right: 0;
+  height: var(--lb, 140px);
+  background: #000;
+}
+.sp-lb i:first-child { top: 0; }
+.sp-lb i:last-child { bottom: 0; }
+
+/* ---------- la tapa y los controles ----------
+
+   Esto no es la película: es el reproductor. Vive fuera de la comp y no se escala con
+   ella, porque un botón tiene que medir lo que mide un botón. */
+.sp-start {
+  position: absolute; inset: 0; z-index: 40;
+  display: grid; place-content: center; justify-items: center; gap: 18px;
+  background: radial-gradient(900px 600px at 50% 40%, #131a38 0%, #05060c 68%);
+  opacity: 1;
+}
+.sp-start[data-gone="true"] { opacity: 0; pointer-events: none; transition: opacity .45s ease; }
+.sp-start-logo { width: min(46vw, 420px); height: auto; }
+.sp-play { font-size: 20px; padding: 14px 34px; }
+.sp-start-note { margin: 0; color: #8b95c4; font-size: 14px; }
+
+.sp-hud {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 41;
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px 18px;
+  background: linear-gradient(0deg, rgba(3, 4, 10, .78), transparent);
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s ease;
+}
+.sp-frame[data-hover="true"] .sp-hud { opacity: 1; pointer-events: auto; }
+.sp-hud-btn { font-size: 13px; padding: 7px 14px; }
+.sp-track {
+  flex: 1; height: 4px; border-radius: 999px;
+  background: rgba(255, 255, 255, .16);
+  overflow: hidden;
+}
+.sp-track i { display: block; height: 100%; width: 0%; background: #56e0c0; }
+
+/* ---------- menos movimiento ----------
+
+   Alguien que pidió menos movimiento no quiere un corte cada medio segundo. El guion se
+   entera solo y se queda en las placas; acá se apaga lo que igual temblaría. */
+@media (prefers-reduced-motion: reduce) {
+  .sp-grain { display: none; }
+  .sp-rays { display: none; }
+}

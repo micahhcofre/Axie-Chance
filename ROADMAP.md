@@ -74,16 +74,16 @@ conversado, no para empezar ya.
       necesita un stack pago por uso; el relay no tiene autenticación y `list` es un
       Scan de DynamoDB.
 - [ ] **Arreglos baratos de la evaluación de trampas** (se conservan en la Fase 1):
-  - [ ] `newMatch` solo con `phase === 'matchEnd'` ([src/rooms.js](src/rooms.js),
+  - [x] `newMatch` solo con `phase === 'matchEnd'` ([src/rooms.js](src/rooms.js),
         acción `newMatch`). Hoy un invitado que va perdiendo reinicia la partida con un
         mensaje desde la consola.
-  - [ ] `chooseStackTarget`: rechazar `colIndex` que no sea entero
+  - [x] `chooseStackTarget`: rechazar `colIndex` que no sea entero
         (`Number.isInteger`) en [src/game.js](src/game.js) y [src/rules.js](src/rules.js).
         Con `NaN` pasa las dos comparaciones y la carta Rocket desaparece.
-  - [ ] Sanear el `{t:'state'}` que llega del anfitrión en `receive` de
+  - [x] Sanear el `{t:'state'}` que llega del anfitrión en `receive` de
         [src/net.js](src/net.js), o pasar `state.log` a tokens estructurados que se
-        dibujen sin `innerHTML` ([src/ui.js](src/ui.js), `logHtml`). Hoy un anfitrión
-        malicioso ejecuta JavaScript en el navegador de las otras pantallas.
+        dibujen sin `innerHTML` ([src/ui.js](src/ui.js), `logHtml`). Hecho el 2026-09-27:
+        `logHtml` deja pasar solo los `<img>` de íconos (`safeLogText`) y escapa el resto.
 - [ ] Opcional: sala privada (contraseña en el link/QR que el relay exige en `join`) o
       bandera "privada" que la saque de `list`. Hoy cualquiera puede entrar primero y
       quedarse con el asiento, o mirar.

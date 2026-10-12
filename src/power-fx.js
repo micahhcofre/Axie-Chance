@@ -5,11 +5,11 @@
 // en la mesa, su amuleto viaja hasta el Axie sobre el que cae —el propio o el rival— y,
 // al llegar, revienta el efecto del kit, el Axie reacciona y la chapa muestra lo que le
 // quedó puesto. Lo que cambia de un poder a otro es el carácter de cada tiempo, y no se
-// repite ninguno: el huevo se tira y rebota, el veneno se revolea, la pluma cae del
-// cielo, el amuleto de fuerza se clava de un envión, la bebida se vuelca sobre el número
-// de daño, el pulpo salta,
-// la burbuja sube, la maceta brota del piso, la hoja vuela en remolino, el caracol se
-// arrastra, la daga se clava y vuelve con la vida, y la máscara salta y cae puesta.
+// repite ninguno: el huevo se rompe y da la segunda chance, el veneno se revolea, la
+// pluma cae del cielo, el amuleto de fuerza se clava de un envión, la navaja y la daga
+// dejan sangrando, el pulpo salta, la burbuja sube, la maceta brota del piso, la hoja
+// vuela en remolino, el caracol se arrastra, la daga de Mantis se clava y vuelve con la
+// vida, y la máscara salta y cae puesta con sus espinas.
 //
 // El motor dice qué poderes actuaron (`state.powerFx`, y la pluma en `lastHit`) y
 // cuánto espera a que se vean (`POWER_BEAT`); acá se decide cómo. Como el golpe, todo
@@ -19,6 +19,7 @@ import { POWERS, iconUrl, powerIcon } from './data.js';
 import { POWER_LEAD, powerBeat } from './game.js';
 import { tr } from './i18n.js';
 import { preloadVfx } from './vfx.js';
+import { CLIPS } from './vfx-clips.js';
 
 /**
  * Del instante del golpe al primer poder, en ms. Con el golpe que más tarda en
@@ -47,36 +48,108 @@ const fxLabel = (id) => `<span class="dmg-label">${fxIcon(id)} ${tr(POWERS[id].n
  *   `pip`     la marca de la chapa que deja (una o varias): se guarda hasta que el
  *             amuleto llega
  *   `clip`    el efecto del kit que revienta al llegar (`vfx-clips.js`), `width` su
- *             ancho en anchos de Axie
+ *             ancho en anchos de Axie. Con `clipHit` el clip arranca ya en su impacto:
+ *             es para los lanzamientos del kit, que traen su vuelo, y para los que
+ *             tardan en crecer (ver `HIT_LEAD`)
  *   `motion`  el gesto del Axie que lo recibe; `react` el pulso del CSS encima
  *   `sfx`     el sonido, que se larga antes para que su pico caiga al llegar; con
  *             `contact` arranca justo al tocar. `flySfx` suena mientras viaja
  *   `hp`      la vida que ya cambió en el estado pero la chapa no muestra hasta que
  *             el poder llega: `[asiento, cuánto]`, positivo si es daño
  *   `swing`   el daño que suma al número grande: se retiene y, al llegar, sube contando
+ *   `at`      sin viaje, dónde revienta el efecto en vez del Axie: `egg` es la carta
+ *             del huevo en la cadena (`fx.col`), que se enciende; con `crack` se parte
  *   `back`    un segundo viaje de vuelta, del que recibió al que lo jugó; su `sfx`
  *             arranca cuando salen los orbes
  *   `tag`     el cartel que sube sobre el Axie (vacío, no sube nada)
  *   `hud`     el cartel que sube de la chapa: `at` es de dónde (`hp`, la vida, o
  *             `shield`, el escudo) y `html` lo que dice
  */
+/**
+ * Lo que un clip con `clipHit` se adelanta a su impacto, en segundos: lo justo para que
+ * se vea venir el golpe y no aparezca de la nada.
+ */
+const HIT_LEAD = 0.12;
+
+// El sangrado que cae sobre el rival: la navaja, la garra y la bebida lo ponen igual,
+// con el sangrado del kit, y cada uno le cambia el viaje.
+const bleedOn = (flight) => ({
+  flight,
+  pip: 'razor', clip: 'bleed', width: 1.7,
+  motion: 'hurt', react: 'hit', sfx: 'bleed',
+  tag: (fx) => `${fxStatus('bleed')} +${fx.amount}`,
+});
+// Lo que se le pone al centro del rival (medusa, Red Bubble): el amuleto se revolea
+// hasta él y le queda la marca en la chapa.
+const marketLock = (id) => ({
+  flight: { path: 'hurl', ms: 720, arc: 120, spin: 360 },
+  pip: id, width: 1.8,
+  motion: 'whiff',
+  tag: () => fxIcon(id),
+});
+
 export const POWER_FX = {
   strength: {
     // El amuleto de fuerza no se tira: sale de un envión derecho al Axie y se le mete.
+    // Deja una garra más.
     draw: {
       flight: { path: 'surge', ms: 520 },
       pip: 'strength', clip: 'strength', width: 1.9,
       motion: 'snarl', sfx: 'strength',
       tag: (fx) => `${fxStatus('strength')} +${fx.amount}`,
     },
+    // Y cada golpe que conecta, las garras dejan sangrando al rival.
+    apply: bleedOn({ path: 'surge', ms: 480 }),
   },
   brutal: {
-    // Al plantarse, justo antes del golpe: la bebida sube de la carta, se frena arriba y
-    // se vuelca de cabeza sobre el número de daño, que sube contando lo que suma.
-    stand: {
-      flight: { path: 'pour', ms: 900, lift: 110, to: 'swing' },
-      clip: 'brutal', width: 1.6, swing: true,
-      motion: 'stomp', sfx: 'brutal', contact: true,
+    // La bebida se vuelca sobre el rival y le abre la herida: el debuff del kit.
+    apply: {
+      ...bleedOn({ path: 'pour', ms: 760, lift: 70 }),
+      clip: 'debuff', sfx: 'brutal',
+    },
+    // Y lo que sangra por la herida le vuelve como vida al que la abrió.
+    drain: {
+      clip: 'wound', width: 1.3,
+      motion: 'snap', sfx: 'leech', sfxRate: 1.2,
+      hp: (fx) => [[fx.on, -fx.amount]],
+      hud: { at: 'hp', kind: 'heal', html: (fx) => (fx.amount > 0 ? `${fxIcon('brutal')} +${fx.amount} HP` : '') },
+    },
+  },
+  rage: {
+    // La máscara sale temblando de furia, cada vez más grande, y se le pone al Axie, que ruge.
+    draw: {
+      flight: { path: 'quake', ms: 620 },
+      pip: 'rage', clip: 'rage', width: 1.8,
+      motion: 'snarl', sfx: 'rage',
+      tag: (fx) => `${fxStatus('rage')} +${fx.amount}`,
+    },
+    // Y la Furia se descarga sobre el rival con el golpe.
+    fury: {
+      clip: 'fury', width: 2.4,
+      motion: 'hurt', react: 'hit', sfx: 'fury',
+      tag: (fx) => `${fxLabel('rage')}+${fx.amount}`,
+    },
+  },
+  razor: {
+    // La navaja sale escondida, se clava con el desgarro de Bestia del kit y deja sangrando.
+    apply: {
+      ...bleedOn({ path: 'slice', ms: 480, bend: 60 }),
+      clip: 'razor', clipHit: true, width: 2, sfx: 'razor',
+    },
+    // Cada carta que roba el que sangra: el corte sale de su propio Axie.
+    bleed: {
+      clip: 'bleed', width: 1.2,
+      motion: 'hurt', react: 'hit', sfx: 'bleed', sfxRate: 1.2,
+      hp: (fx) => [[fx.on, fx.amount]],
+      tag: (fx) => `${fxStatus('bleed')} −${fx.amount}`,
+    },
+  },
+  dagger: {
+    // La daga se revolea dando vueltas y se clava con el lanzamiento de Bestia del kit.
+    draw: {
+      ...bleedOn({ path: 'hurl', ms: 620, arc: 110, spin: 720 }),
+      clip: 'dagger', clipHit: true, width: 2,
+      flySfx: 'daggerFly', sfx: 'daggerHit',
     },
   },
   octopus: {
@@ -113,12 +186,55 @@ export const POWER_FX = {
       motion: 'cheer', sfx: 'bubblePop', contact: true,
     },
   },
-  egg: {
+  maker: {
+    // Cada burbuja sube meciéndose hasta el Axie que la juntó.
+    draw: {
+      flight: { path: 'rise', ms: 800, wobble: 16 },
+      pip: 'maker', clip: 'maker', width: 1.6,
+      motion: 'peek', sfx: 'maker',
+      tag: (fx) => `${fxStatus('bubblemaker')} ${fx.amount}`,
+    },
+    // Y con cuatro, la bomba: baja sobre el rival y revienta.
+    bomb: {
+      flight: { path: 'pop', ms: 760 },
+      clip: 'bubbleBomb', clipHit: true, width: 2.6,
+      motion: 'hurt', react: 'hit', sfx: 'bubblePop', contact: true,
+      hp: (fx) => [[fx.on, fx.amount]],
+      tag: (fx) => `${fxLabel('maker')}−${fx.amount}`,
+    },
+  },
+  // La medusa se le mete en el mazo (el mareo del kit), y cuando sale lo deja paralizado;
+  // la burbuja roja, sin poderes (el silencio del kit).
+  jellyfish: {
     apply: {
-      flight: { path: 'lob', ms: 680, arc: 90 },
-      pip: ['egg', 'shield'], clip: 'eggShield', width: 2,
+      ...marketLock('jellyfish'),
+      // La medusa nada a pulsos, contrayéndose como una campana.
+      flight: { path: 'drift', ms: 900, pulses: 3, arc: 60 },
+      clip: 'jellyfish', clipHit: true, width: 2, flySfx: 'jellyFly', sfx: 'jellyfish',
+      tag: (fx) => `${fxIcon('jellyfish')} +${fx.amount}`,
+    },
+    sting: {
+      clip: 'stun', width: 1.6,
+      motion: 'hurt', react: 'hit', sfx: 'stun', sfxRate: 1.15,
+      tag: () => fxIcon('jellyfish'),
+    },
+  },
+  redbubble: {
+    apply: {
+      ...marketLock('redbubble'),
+      flight: { path: 'rise', ms: 900, wobble: 14 },
+      clip: 'silence', sfx: 'silence',
+    },
+  },
+  egg: {
+    // La segunda chance: la carta del huevo tiembla en la cadena y el huevo se rompe
+    // encima de ella; el Axie festeja. La carta que cortaba la mueve la mesa (ver
+    // `eggSaveFx` en `ui.js`).
+    save: {
+      at: 'egg', crack: true,
+      clip: 'eggBreak', width: 2.2,
       motion: 'cheer', sfx: 'egg',
-      hud: { at: 'shield', kind: 'shield', html: (fx) => `${fxShield()} +${fx.amount}` },
+      tag: () => `${fxIcon('egg')} ${tr('¡Segunda chance!')}`,
     },
   },
   // La pluma pega apenas sale del mazo, así que llega como golpe (`lastHit`) y no como
@@ -128,9 +244,38 @@ export const POWER_FX = {
       flight: { path: 'fall', ms: 1250, height: 300, sway: 34, swings: 2.5 },
       clip: 'feather', width: 1.8,
       motion: 'hurt', react: 'hit',
-      flySfx: 'feather', sfx: 'thorns', contact: true,
+      flySfx: 'feather', sfx: 'featherHit', contact: true,
       hp: (fx) => [[fx.on, fx.amount]],
       tag: (fx) => `${fxLabel('feather')}−${fx.amount}`,
+    },
+  },
+  shuriken: {
+    // La cadena se rompe y el shuriken sale igual, rasante y girando a toda velocidad, y
+    // se clava con el lanzamiento de Pájaro del kit.
+    apply: {
+      flight: { path: 'zip', ms: 520, curve: 40, spin: 1440 },
+      clip: 'shuriken', clipHit: true, width: 2,
+      motion: 'hurt', react: 'hit', flySfx: 'shurikenFly', sfx: 'shurikenHit',
+      hp: (fx) => [[fx.on, fx.amount]],
+      tag: (fx) => `${fxLabel('shuriken')}−${fx.amount}`,
+    },
+  },
+  fan: {
+    draw: {
+      flight: { path: 'fan', ms: 820, spread: 70 },
+      pip: 'fan', clip: 'fan', width: 1.6,
+      motion: 'cheer', sfx: 'fan',
+      tag: (fx) => `${fxStatus('plume')} +${fx.amount}`,
+    },
+  },
+  hammer: {
+    // La cadena se rompe y el martillo sube igual sobre el rival, se echa para atrás y
+    // baja de un mazazo con el golpe de Pájaro del kit: le rompe todo el escudo.
+    apply: {
+      flight: { path: 'slam', ms: 760, height: 150 },
+      clip: 'hammer', clipHit: true, width: 2.1,
+      motion: 'hurt', react: 'hit', sfx: 'hammer',
+      tag: (fx) => `${fxShield()} −${fx.amount}`,
     },
   },
   pot: {
@@ -149,7 +294,7 @@ export const POWER_FX = {
       flight: { path: 'spiral', ms: 950, radius: 46, turns: 1.5 },
       pip: 'leaf', clip: 'leaf', width: 1.9,
       motion: 'scratch', sfx: 'leaf',
-      tag: (fx) => `${fxIcon('leaf')} +${fx.amount}`,
+      tag: (fx) => `${fxStatus('leaf')} +${fx.amount}`,
     },
     tick: {
       pip: 'leaf', clip: 'leaf', width: 1.3,
@@ -158,18 +303,58 @@ export const POWER_FX = {
       hud: { at: 'hp', kind: 'heal', html: (fx) => (fx.amount > 0 ? `${fxIcon('leaf')} +${fx.amount} HP` : '') },
     },
   },
+  guard: {
+    // La guardia llega dormida, cabeceando, y lo deja con escudo y el Limpiador.
+    apply: {
+      flight: { path: 'doze', ms: 950, arc: 70 },
+      pip: ['guard', 'shield'], clip: 'cleanser', width: 1.9,
+      motion: 'peek', sfx: 'cleanser',
+      hud: { at: 'shield', kind: 'shield', html: (fx) => (fx.amount > 0 ? `${fxShield()} +${fx.amount}` : '') },
+    },
+    // El Limpiador que cancela lo que le tiraron.
+    cleanse: {
+      pip: 'guard', clip: 'cleanser', width: 1.4,
+      motion: 'cheer', sfx: 'cleanser', sfxRate: 1.2,
+      tag: () => `${fxIcon('guard')} ✕`,
+    },
+  },
+  sage: {
+    // La salvia no brota: baja como humo sahumándolo de arriba y lo limpia entero.
+    apply: {
+      flight: { path: 'smudge', ms: 900, height: 130, from: 'self' },
+      clip: 'cleanse', width: 2,
+      motion: 'cheer', sfx: 'cleanse',
+      hp: (fx) => [[fx.on, -fx.amount]],
+      hud: { at: 'hp', kind: 'heal', html: (fx) => (fx.amount > 0 ? `${fxIcon('sage')} +${fx.amount} HP` : '') },
+    },
+  },
+  pillow: {
+    // La almohada cae mullida y el Axie se acomoda a dormir encima.
+    apply: {
+      flight: { path: 'lob', ms: 680, arc: 90 },
+      pip: 'pillow', clip: 'sleep', width: 1.9,
+      motion: 'peek', sfx: 'sleep',
+      tag: (fx) => `${fxStatus('pillow')} −${fx.amount}`,
+    },
+    // Y le resta lo suyo a cada golpe rival.
+    block: {
+      clip: 'pillow', width: 1.7,
+      motion: 'snarl', sfx: 'block', sfxRate: 0.85,
+      tag: (fx) => `${fxIcon('pillow')} −${fx.amount}`,
+    },
+  },
   snail: {
     // El caracol se arrastra hasta el rival, a paso de caracol.
     apply: {
       flight: { path: 'crawl', ms: 1300 },
       pip: 'weak', clip: 'snail', width: 1.9,
       motion: 'whiff', sfx: 'snail',
-      tag: () => `${fxIcon('snail')} ½`,
+      tag: (fx) => `${fxStatus('weak')} −${fx.amount}`,
     },
-    // Y le parte el ataque al medio cuando lo suelta.
+    // Y le apaga las mejores rachas cuando suelta el ataque.
     slow: {
       pip: 'weak', motion: 'whiff', sfx: 'snail', sfxRate: 1.3,
-      tag: () => `${fxIcon('snail')} ×½`,
+      tag: (fx) => `${fxIcon('snail')} −${fx.amount}`,
     },
   },
   leech: {
@@ -189,12 +374,50 @@ export const POWER_FX = {
       },
     },
   },
+  cocoon: {
+    // El capullo baja colgado de su hilo y se hamaca hasta quedarse quieto.
+    apply: {
+      flight: { path: 'dangle', ms: 950, height: 160, swing: 30 },
+      pip: 'cocoon', clip: 'cocoon', width: 1.7,
+      motion: 'peek', sfx: 'cocoon',
+      tag: (fx) => `${fxStatus('cocoon')} +${fx.amount}`,
+    },
+    tick: {
+      pip: ['cocoon', 'shield'], clip: 'eggShield', width: 1.5,
+      motion: 'cheer', sfx: 'cocoonShield',
+      hud: { at: 'shield', kind: 'shield', html: (fx) => (fx.amount > 0 ? `${fxShield()} +${fx.amount}` : '') },
+    },
+  },
+  scanner: {
+    // El escáner barre de un lado al otro, como buscando, y se trae el escudo del rival.
+    draw: {
+      flight: { path: 'sweep', ms: 760, width: 40 },
+      pip: 'shield', clip: 'scanner', width: 1.8,
+      motion: 'snap', sfx: 'scanner',
+      hud: { at: 'shield', kind: 'shield', html: (fx) => (fx.amount > 0 ? `${fxShield()} +${fx.amount}` : '') },
+    },
+  },
+  trickster: {
+    // El naipe vuela en zigzag dándose vuelta, como en un truco de manos.
+    apply: {
+      flight: { path: 'flip', ms: 760, zig: 30, arc: 100, flips: 3 },
+      clip: 'hex', width: 1.7,
+      motion: 'whiff', sfx: 'hex',
+      tag: () => fxIcon('trickster'),
+    },
+    // La carta robada: el naipe le saca la carta al rival, que se queda mirando.
+    pick: {
+      clip: 'doubt', width: 1.5,
+      motion: 'whiff', sfx: 'disarm',
+      tag: (fx) => `${fx.card ? fxIcon(fx.card) : ''} ↩`,
+    },
+  },
   poison: {
     apply: {
       flight: { path: 'hurl', ms: 700, arc: 150, spin: 720 },
       pip: 'poison', clip: 'poison', width: 2.1,
       motion: 'whiff', sfx: 'poison',
-      tag: (fx) => `${fxIcon('poison')} ${fx.amount}`,
+      tag: (fx) => `${fxStatus('poison')} ${fx.amount}`,
     },
     // El veneno que muerde no sale de ninguna carta: brota del Axie que lo tiene. El
     // mordisco va primero y la nube después: la nube del kit se pone espesa pasado el
@@ -207,42 +430,257 @@ export const POWER_FX = {
     },
   },
   steelskin: {
-    // La máscara salta alto dando vueltas de moneda y cae puesta de un golpe.
+    // La máscara salta alto dando vueltas de moneda y cae puesta con sus espinas.
     apply: {
       flight: { path: 'mask', ms: 980, height: 170 },
-      pip: ['steelskin', 'shield'], clip: 'steelskin', width: 1.9,
-      motion: 'stomp', sfx: 'block', sfxRate: 0.75, contact: true,
-      tag: (fx) => `${fxIcon('steelskin')} ≤${fx.amount}`,
-      // Y el escudo que suma, desde la chapa, como el del huevo.
-      hud: { at: 'shield', kind: 'shield', html: (fx) => (fx.shield > 0 ? `${fxShield()} +${fx.shield}` : '') },
+      pip: 'steelskin', clip: 'steelskin', width: 1.9,
+      motion: 'stomp', sfx: 'steelskin', contact: true,
+      tag: (fx) => `${fxStatus('steelskin')} +${fx.amount}`,
     },
-    // Y frena el golpe que se pasaba del tope.
+  },
+  edge: {
+    // El filo cae de punta, se clava en el piso al lado del Axie y le estallan las púas
+    // del golpe de Reptil del kit.
+    draw: {
+      flight: { path: 'plunge', ms: 700, height: 220 },
+      pip: 'steelskin', clip: 'edge', clipHit: true, width: 1.8,
+      motion: 'stomp', sfx: 'edge',
+      tag: (fx) => `${fxStatus('steelskin')} +${fx.amount}`,
+    },
+  },
+  viper: {
+    // La víbora serpentea en el aire y, de cerca, se tira a morder.
+    apply: {
+      flight: { path: 'strike', ms: 760, wave: 34 },
+      pip: 'viper', clip: 'healBlock', width: 1.8,
+      motion: 'whiff', sfx: 'healBlock',
+      tag: () => fxIcon('viper'),
+    },
+    // La cura que no entró.
     block: {
-      clip: 'eggShield', width: 1.7,
-      motion: 'snarl', sfx: 'block', sfxRate: 0.85,
-      tag: (fx) => `${fxIcon('steelskin')} ≤${fx.amount}`,
+      pip: 'viper', clip: 'healBlock', width: 1.3,
+      motion: 'whiff', sfx: 'healBlock', sfxRate: 1.25,
+      tag: () => `${fxIcon('viper')} ✕`,
+    },
+  },
+  gloves: {
+    // Los guantes infectan a los dos: el veneno se revolea sobre el rival…
+    draw: {
+      flight: { path: 'jab', ms: 620 },
+      pip: 'poison', clip: 'gloves', clipHit: true, width: 1.9,
+      motion: 'hurt', react: 'hit', sfx: 'gloves',
+      tag: (fx) => `${fxIcon('gloves')} ${fx.amount}`,
+    },
+    // …y le salpica también al que los robó: la misma mordida, más chica,
+    self: {
+      pip: 'poison', clip: 'gloves', clipHit: true, width: 1.3,
+      motion: 'snarl', sfx: 'debuff',
+      tag: (fx) => `${fxIcon('gloves')} ${fx.amount}`,
+    },
+    // que al terminar el turno lo cura en vez de morderlo.
+    cure: {
+      pip: 'poison', clip: 'cure', width: 1.5,
+      motion: 'cheer', sfx: 'cleanse',
+      hp: (fx) => [[fx.on, -fx.amount]],
+      hud: { at: 'hp', kind: 'heal', html: (fx) => (fx.amount > 0 ? `${fxIcon('gloves')} +${fx.amount} HP` : '') },
     },
   },
 };
 
+// Los amuletos neutrales de la Aventura, cada uno con su recorrido, su efecto (de las
+// clases escondidas del kit) y su sonido.
+Object.assign(POWER_FX, {
+  focus: {
+    draw: {
+      flight: { path: 'orbit', ms: 820, radius: 60, turns: 1 },
+      pip: 'focus', clip: 'focus', width: 1.8,
+      motion: 'snarl', sfx: 'focus',
+      tag: (fx) => `${fxIcon('focus')} +${fx.amount}`,
+    },
+  },
+  lens: {
+    draw: {
+      flight: { path: 'peer', ms: 900, lift: 60, from: 'card', to: 'self' },
+      clip: 'lens', width: 1.6,
+      motion: 'peek', sfx: 'lens',
+      tag: (fx) => `${fxIcon('lens')} ${fx.amount}`,
+    },
+  },
+  spell: {
+    // Llega parpadeando sobre quien la recibe: el rival si eligió pegar, el propio si no.
+    cast: {
+      flight: { path: 'blink', ms: 700 },
+      clip: 'spell', clipHit: true, width: 2,
+      motion: (fx) => (fx.kind === 'hit' ? 'hurt' : 'cheer'), react: (fx) => (fx.kind === 'hit' ? 'hit' : ''), sfx: 'spell',
+      hp: (fx) => (fx.kind === 'hit' ? [[fx.on, fx.amount]] : fx.kind === 'heal' ? [[fx.on, -fx.amount]] : []),
+      pip: (fx) => (fx.kind === 'shield' ? 'shield' : []),
+      tag: (fx) => (fx.kind === 'hit' ? `${fxLabel('spell')}−${fx.amount}` : ''),
+      hud: {
+        at: (fx) => (fx.kind === 'shield' ? 'shield' : 'hp'),
+        kind: (fx) => (fx.kind === 'shield' ? 'shield' : 'heal'),
+        html: (fx) => (fx.kind === 'heal' && fx.amount > 0 ? `${fxIcon('spell')} +${fx.amount} HP`
+          : fx.kind === 'shield' && fx.amount > 0 ? `${fxShield()} +${fx.amount}` : ''),
+      },
+    },
+  },
+  mirror: {
+    draw: {
+      flight: { path: 'reflect', ms: 700, flips: 2, to: 'self' },
+      clip: 'mirror', clipHit: true, width: 1.6,
+      motion: 'peek', sfx: 'mirror',
+      tag: () => fxIcon('mirror'),
+    },
+  },
+  energy: {
+    apply: {
+      flight: { path: 'gulp', ms: 820, lift: 70, to: 'self' },
+      clip: 'energy', width: 1.8,
+      motion: 'snarl', sfx: 'energy',
+      tag: (fx) => `${fxIcon('energy')} ×${fx.amount}`,
+    },
+  },
+  papa: {
+    apply: {
+      flight: { path: 'lumber', ms: 860, height: 70 },
+      clip: 'papa', clipHit: true, width: 2,
+      motion: (fx) => (fx.kind === 'hit' ? 'hurt' : 'cheer'), react: (fx) => (fx.kind === 'hit' ? 'hit' : ''), sfx: 'papa',
+      pip: (fx) => (fx.kind === 'shield' ? 'shield' : []),
+      tag: (fx) => (fx.kind === 'hit' ? `${fxLabel('papa')}+${fx.amount}` : ''),
+      hud: { at: 'shield', kind: 'shield', html: (fx) => (fx.kind === 'shield' && fx.amount > 0 ? `${fxShield()} +${fx.amount}` : '') },
+    },
+  },
+  mama: {
+    // En ronda impar cura; en par, el sangrado lo pone `addBleed` con su `bleed`.
+    apply: {
+      flight: { path: 'cradle', ms: 900, arc: 70 },
+      clip: 'mama', width: 1.9,
+      motion: (fx) => (fx.kind === 'heal' ? 'cheer' : 'hurt'), sfx: 'mama',
+      pip: (fx) => (fx.kind === 'heal' ? [] : 'razor'),
+      hp: (fx) => (fx.kind === 'heal' ? [[fx.on, -fx.amount]] : []),
+      tag: (fx) => (fx.kind === 'heal' ? '' : `${fxStatus('bleed')} +${fx.amount}`),
+      hud: { at: 'hp', kind: 'heal', html: (fx) => (fx.kind === 'heal' && fx.amount > 0 ? `${fxIcon('mama')} +${fx.amount} HP` : '') },
+    },
+  },
+  blood: {
+    apply: {
+      flight: { path: 'oath', ms: 860, radius: 70, turns: 1.2, from: 'self' },
+      pip: 'razor', clip: 'blood', clipHit: true, width: 1.8,
+      motion: 'snarl', sfx: 'blood',
+      tag: (fx) => `${fxStatus('bleed')} +${fx.amount}`,
+    },
+  },
+  dispel: {
+    apply: {
+      flight: { path: 'exorcise', ms: 780, zig: 40 },
+      clip: 'dispel', clipHit: true, width: 2,
+      motion: 'whiff', react: 'hit', sfx: 'dispel',
+      tag: (fx) => (fx.amount > 0 ? `${fxShield()} −${fx.amount}` : fxIcon('dispel')),
+    },
+  },
+  stamp: {
+    apply: {
+      flight: { path: 'stampdown', ms: 760, height: 120, to: 'self' },
+      pip: 'stamp', clip: 'stamp', clipHit: true, width: 1.8,
+      motion: 'stomp', sfx: 'stamp', contact: true,
+      tag: (fx) => `${fxIcon('stamp')} +${fx.amount}`,
+    },
+    // Cuando se abre la carta de regalo, el sello baja del Axie al centro.
+    pick: {
+      flight: { path: 'stampdown', ms: 700, height: 90, from: 'self', to: 'market' },
+      marketFx: 'stamp', sfx: 'stamp', sfxRate: 1.2,
+    },
+  },
+  tape: {
+    // La cinta se desenrolla sobre la cadena y la pega: el Axie se queda con lo que tenía.
+    save: {
+      flight: { path: 'unroll', ms: 700, from: 'card0', to: 'self' },
+      clip: 'tape', width: 1.9,
+      motion: 'cheer', sfx: 'tape',
+      tag: () => `${fxIcon('tape')} ${tr('¡Pegada!')}`,
+    },
+  },
+  gift: {
+    apply: {
+      flight: { path: 'float', ms: 1000, sway: 24, depth: 120, from: 'self' },
+      pip: 'gift', clip: 'gift', width: 1.9,
+      motion: 'peek', sfx: 'gift',
+      tag: (fx) => `${fxIcon('gift')} +${fx.amount}`,
+    },
+  },
+});
+
+/**
+ * La receta de un efecto ya armada para `fx`. Los poderes que hacen una cosa u otra según
+ * la partida (la Novice Spell según lo que se eligió, los osos según la ronda) dan como
+ * función el gesto, el pulso, la marca y el cartel de la chapa: acá se resuelven.
+ */
+export function specOf(fx) {
+  const spec = POWER_FX[fx.power]?.[fx.moment];
+  if (!spec) return spec;
+  const pick = (v) => (typeof v === 'function' ? v(fx) : v);
+  const out = { ...spec };
+  for (const key of ['motion', 'react', 'pip']) if (typeof spec[key] === 'function') out[key] = pick(spec[key]);
+  if (spec.hud) out.hud = { ...spec.hud, at: pick(spec.hud.at), kind: pick(spec.hud.kind) };
+  return out;
+}
+
 /** Los efectos del kit que puede pedir cada poder en la partida, para bajarlos antes. */
 const POWER_CLIPS = {
-  strength: ['strength'],
-  brutal: ['brutal'],
+  strength: ['strength', 'bleed'],
+  brutal: ['debuff', 'bleed', 'wound'],
+  razor: ['razor', 'bleed'],
+  dagger: ['dagger', 'bleed'],
+  rage: ['rage', 'fury'],
   octopus: ['octopus'],
   bubble: ['bubble'],
-  egg: ['eggShield', 'eggBreak', 'eggThorns'],
+  maker: ['maker', 'bubbleBomb'],
+  jellyfish: ['jellyfish', 'stun'],
+  redbubble: ['silence'],
+  egg: ['eggBreak'],
   feather: ['feather'],
+  shuriken: ['shuriken'],
+  fan: ['fan'],
+  hammer: ['hammer'],
   pot: ['pot'],
   leaf: ['leaf'],
+  guard: ['cleanser'],
+  sage: ['cleanse'],
+  pillow: ['sleep', 'pillow'],
   snail: ['snail'],
   leech: ['leech'],
+  cocoon: ['cocoon', 'eggShield'],
+  scanner: ['scanner'],
+  trickster: ['hex', 'doubt'],
   poison: ['poison'],
-  steelskin: ['steelskin', 'eggShield'],
+  steelskin: ['steelskin', 'eggThorns'],
+  edge: ['edge', 'eggThorns'],
+  viper: ['healBlock'],
+  gloves: ['gloves', 'cure'],
+  focus: ['focus'],
+  lens: ['lens'],
+  spell: ['spell'],
+  mirror: ['mirror'],
+  energy: ['energy'],
+  papa: ['papa'],
+  mama: ['mama', 'bleed'],
+  blood: ['blood'],
+  dispel: ['dispel'],
+  stamp: ['stamp'],
+  tape: ['tape'],
+  gift: ['gift'],
 };
 
 /** Precarga los efectos de los poderes en juego: el primero no tiene que llegar tarde. */
 export function preloadPowers(powers = []) {
+  for (const power of powers) for (const key of POWER_CLIPS[power] ?? []) preloadVfx(key, { later: true });
+}
+
+/**
+ * Los efectos de los poderes que ya están en la mesa, ya: la fila de `preloadPowers` va
+ * de a uno y con la página libre, y el de una carta que acaba de salir puede estar
+ * último. Bajado recién al llegar el amuleto, el efecto caía cuando ya había pasado todo.
+ */
+export function warmPowers(powers = []) {
   for (const power of powers) for (const key of POWER_CLIPS[power] ?? []) preloadVfx(key);
 }
 
@@ -313,6 +751,168 @@ const FLIGHT_PATHS = {
       rotate: 0,
       scale: t < 0.85 ? 0.8 + 0.4 * k : 1.2 + ((t - 0.85) / 0.15) * 0.9,
     };
+  },
+  // Las plumas del abanico: sube abanicándose de un lado al otro y planea hasta el Axie.
+  fan(t, a, b, f) {
+    const k = fxSmooth(t);
+    return {
+      x: fxLerp(a.x, b.x, k),
+      y: fxLerp(a.y, b.y, k) - f.spread * Math.sin(k * Math.PI),
+      rotate: 40 * Math.sin(t * Math.PI * 4) * (1 - t),
+      scale: 1 + 0.2 * Math.sin(t * Math.PI),
+    };
+  },
+  // La salvia: el sahumerio baja despacio sobre el Axie, ondeando como humo.
+  smudge(t, a, b, f) {
+    const k = fxSmooth(t);
+    return {
+      x: b.x + 18 * Math.sin(t * Math.PI * 3) * (1 - t * 0.5),
+      y: b.y - f.height * (1 - k),
+      rotate: -12 + 24 * t,
+      scale: 0.7 + 0.5 * k,
+    };
+  },
+  // El filo: sube dando vueltas hasta quedar de punta arriba del Axie y cae a clavarse
+  // en el piso, a sus pies.
+  plunge(t, a, b, f, box) {
+    if (t < 0.4) {
+      const u = fxSmooth(t / 0.4);
+      return { x: fxLerp(a.x, b.x, u), y: fxLerp(a.y, b.y - f.height, u), rotate: 495 * u, scale: 1.1 };
+    }
+    const v = ((t - 0.4) / 0.6) ** 2.4;
+    return {
+      x: b.x,
+      y: fxLerp(b.y - f.height, b.y + box.height * 0.3, v),
+      rotate: 135,
+      scale: 1.1,
+      sy: v > 0.95 ? 0.8 : 1,
+    };
+  },
+  // Los guantes: se echan para atrás cargando el puño y salen de una piña derecha.
+  jab(t, a, b) {
+    if (t < 0.28) {
+      const u = fxSmooth(t / 0.28);
+      return { x: a.x, y: a.y - 12 * u, rotate: -22 * u, scale: 1 - 0.22 * u };
+    }
+    const v = ((t - 0.28) / 0.72) ** 2;
+    return { x: fxLerp(a.x, b.x, v), y: fxLerp(a.y - 12, b.y, v), rotate: -22 + 22 * v, scale: 0.78 + 0.9 * v };
+  },
+  // El shuriken: rasante, casi derecho, girando a toda velocidad.
+  zip(t, a, b, f) {
+    const k = t ** 1.4;
+    return {
+      x: fxLerp(a.x, b.x, k),
+      y: fxLerp(a.y, b.y, k) - f.curve * Math.sin(k * Math.PI),
+      rotate: f.spin * t,
+      scale: 1,
+    };
+  },
+  // El martillo: sube hasta arriba del rival echándose para atrás y baja de un mazazo.
+  slam(t, a, b, f) {
+    if (t < 0.55) {
+      const u = fxSmooth(t / 0.55);
+      return {
+        x: fxLerp(a.x, b.x, u),
+        y: fxLerp(a.y, b.y - f.height, u) - 30 * Math.sin(u * Math.PI),
+        rotate: -60 * u,
+        scale: 1 + 0.3 * u,
+      };
+    }
+    const v = ((t - 0.55) / 0.45) ** 3;
+    return { x: b.x, y: fxLerp(b.y - f.height, b.y, v), rotate: -60 + 150 * v, scale: 1.3 };
+  },
+  // El naipe del tramposo: en zigzag, dándose vuelta como en un truco de manos.
+  flip(t, a, b, f) {
+    const k = fxSmooth(t);
+    return {
+      x: fxLerp(a.x, b.x, k) + f.zig * Math.sin(t * Math.PI * 3) * (1 - t),
+      y: fxLerp(a.y, b.y, k) - f.arc * 4 * k * (1 - k),
+      rotate: 15 * Math.sin(t * Math.PI * 2),
+      scale: 1.1,
+      sx: Math.cos(t * Math.PI * f.flips * 2),
+    };
+  },
+  // La víbora: serpentea de costado mientras se acerca y al final se tira derecho.
+  strike(t, a, b, f) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const k = t < 0.7 ? fxSmooth(t / 0.7) * 0.7 : 0.7 + 0.3 * ((t - 0.7) / 0.3) ** 2;
+    const wave = t < 0.7 ? f.wave * Math.sin((t / 0.7) * Math.PI * 3) * (1 - t / 0.7) : 0;
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    return {
+      x: fxLerp(a.x, b.x, k) - (dy / len) * wave,
+      y: fxLerp(a.y, b.y, k) + (dx / len) * wave,
+      rotate: t < 0.7 ? 25 * Math.cos((t / 0.7) * Math.PI * 3) : angle * 0.3,
+      scale: t < 0.7 ? 1 : 1 + 0.4 * ((t - 0.7) / 0.3),
+    };
+  },
+  // La medusa: nada a pulsos, contrayéndose como una campana en cada empujón.
+  drift(t, a, b, f) {
+    const n = f.pulses;
+    const k = t - Math.sin(t * Math.PI * 2 * n) / (Math.PI * 2 * n);
+    const p = Math.sin(t * Math.PI * 2 * n);
+    return {
+      x: fxLerp(a.x, b.x, k),
+      y: fxLerp(a.y, b.y, k) - f.arc * Math.sin(k * Math.PI),
+      rotate: 0,
+      scale: 1,
+      sx: 1 + 0.15 * p,
+      sy: 1 - 0.18 * p,
+    };
+  },
+  // La guardia dormida: flota de a cabezazos, bamboleándose como quien se duerme.
+  doze(t, a, b, f) {
+    const k = fxSmooth(t);
+    return {
+      x: fxLerp(a.x, b.x, k),
+      y: fxLerp(a.y, b.y, k) - f.arc * Math.sin(k * Math.PI) + 10 * Math.sin(t * Math.PI * 5) * (1 - t),
+      rotate: 18 * Math.sin(t * Math.PI * 2.5) * (1 - t),
+      scale: 1,
+    };
+  },
+  // El escáner: barre de lado a lado, cada vez más angosto, hasta dar con el blanco.
+  sweep(t, a, b, f) {
+    const k = fxSmooth(t);
+    const beat = Math.sin(t * Math.PI * 5);
+    return {
+      x: fxLerp(a.x, b.x, k) + f.width * beat * (1 - t),
+      y: fxLerp(a.y, b.y, k),
+      rotate: 0,
+      scale: 1 + 0.15 * Math.abs(beat) * (1 - t),
+    };
+  },
+  // La máscara de la furia: avanza temblando, cada vez más grande.
+  quake(t, a, b) {
+    const k = t ** 2;
+    const j = 8 * (1 - t * 0.5);
+    return {
+      x: fxLerp(a.x, b.x, k) + j * Math.sin(t * 90),
+      y: fxLerp(a.y, b.y, k) + j * Math.cos(t * 77),
+      rotate: 10 * Math.sin(t * 60),
+      scale: 0.9 + 0.6 * k,
+    };
+  },
+  // La navaja: un tajo en curva, rápido, que entra de costado.
+  slice(t, a, b, f) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const k = t ** 1.6;
+    const bulge = f.bend * Math.sin(k * Math.PI);
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    return {
+      x: fxLerp(a.x, b.x, k) - (dy / len) * bulge,
+      y: fxLerp(a.y, b.y, k) + (dx / len) * bulge,
+      rotate: angle + 45 + 70 * (0.5 - k),
+      scale: 1.1,
+    };
+  },
+  // El capullo: baja colgado de su hilo sobre el Axie y se hamaca hasta quedarse quieto.
+  dangle(t, a, b, f) {
+    const drop = 1 - (1 - Math.min(t / 0.5, 1)) ** 3;
+    const swing = f.swing * Math.sin(t * Math.PI * 4) * (1 - t);
+    return { x: b.x + swing, y: b.y - f.height * (1 - drop), rotate: -swing * 0.6, scale: 1 };
   },
   // La bebida: sube derecho de la carta, se frena arriba agitándose y se tira de cabeza
   // sobre el número, dándose vuelta como quien la vuelca entera.
@@ -427,6 +1027,108 @@ const FLIGHT_PATHS = {
       scale: 0.8 + 0.4 * Math.sin(t * Math.PI),
     };
   },
+  // Charm of Focus: da una vuelta entera alrededor del Axie, apuntando, y se le mete.
+  orbit(t, a, b, f) {
+    const k = fxSmooth(t);
+    const r = f.radius * (1 - k);
+    const ang = k * Math.PI * 2 * f.turns;
+    return {
+      x: fxLerp(a.x, b.x, k) + r * Math.cos(ang),
+      y: fxLerp(a.y, b.y, k) + r * Math.sin(ang) * 0.5,
+      rotate: (ang * 180) / Math.PI,
+      scale: 1 + 0.25 * (1 - k),
+    };
+  },
+  // La lente: sube a la altura de los ojos y se acerca y se aleja, como quien mira.
+  peer(t, a, b, f) {
+    const k = fxSmooth(Math.min(t / 0.6, 1));
+    const look = t < 0.6 ? 0 : Math.sin(((t - 0.6) / 0.4) * Math.PI * 2);
+    return {
+      x: fxLerp(a.x, b.x, k),
+      y: fxLerp(a.y, b.y - f.lift, k),
+      rotate: -12 * look,
+      scale: 1 + 0.35 * Math.abs(look),
+    };
+  },
+  // La Novice Spell: desaparece a mitad de camino y reaparece encima, de un parpadeo.
+  blink(t, a, b) {
+    const k = fxSmooth(t);
+    const flicker = Math.abs(Math.cos(t * Math.PI));
+    return { x: fxLerp(a.x, b.x, k), y: fxLerp(a.y, b.y, k) - 30 * Math.sin(k * Math.PI), rotate: 0, scale: 0.2 + 0.9 * flicker };
+  },
+  // El espejo: viaja derecho dándose vuelta, como si reflejara lo que tiene enfrente.
+  reflect(t, a, b, f) {
+    const k = fxSmooth(t);
+    return { x: fxLerp(a.x, b.x, k), y: fxLerp(a.y, b.y, k) - 20 * Math.sin(k * Math.PI), rotate: 0, scale: 1.1, sx: Math.cos(k * Math.PI * 2 * f.flips) };
+  },
+  // La bebida: sube, se inclina sobre el Axie para volcarse y tiembla al quebrarse.
+  gulp(t, a, b, f) {
+    const k = fxSmooth(Math.min(t / 0.7, 1));
+    const shake = t < 0.7 ? 0 : Math.sin(((t - 0.7) / 0.3) * Math.PI * 8) * 6;
+    return { x: fxLerp(a.x, b.x, k) + shake, y: fxLerp(a.y, b.y - f.lift, k), rotate: 120 * k, scale: 1.1 };
+  },
+  // Papa Bear: dos pisotones pesados, uno más alto que el otro.
+  lumber(t, a, b, f) {
+    const step = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+    const h = t < 0.5 ? f.height : f.height * 0.6;
+    return {
+      x: fxLerp(a.x, b.x, t),
+      y: fxLerp(a.y, b.y, t) - h * 4 * step * (1 - step),
+      rotate: 10 * Math.sin(t * Math.PI * 2),
+      scale: 1.1, sy: step > 0.92 ? 0.82 : 1,
+    };
+  },
+  // Mama Bear: llega meciéndose, como quien acuna.
+  cradle(t, a, b, f) {
+    const k = fxSmooth(t);
+    return {
+      x: fxLerp(a.x, b.x, k),
+      y: fxLerp(a.y, b.y, k) - f.arc * Math.sin(k * Math.PI),
+      rotate: 22 * Math.sin(t * Math.PI * 3) * (1 - k),
+      scale: 1 + 0.2 * Math.sin(k * Math.PI),
+    };
+  },
+  // Bloodpact: el pacto se cierra en espiral hacia adentro, sobre el que lo firma.
+  oath(t, a, b, f) {
+    const k = fxSmooth(t);
+    const r = f.radius * (1 - k);
+    const ang = -k * Math.PI * 2 * f.turns;
+    return { x: b.x + r * Math.cos(ang), y: b.y + r * Math.sin(ang) * 0.6, rotate: -k * 360, scale: 0.8 + 0.5 * k };
+  },
+  // La Black Sage: barre de un lado al otro, rápido, y termina girando sobre el rival.
+  exorcise(t, a, b, f) {
+    const k = fxSmooth(t);
+    return {
+      x: fxLerp(a.x, b.x, k) + f.zig * Math.sin(t * Math.PI * 5) * (1 - k),
+      y: fxLerp(a.y, b.y, k) - 40 * Math.sin(k * Math.PI),
+      rotate: t > 0.7 ? ((t - 0.7) / 0.3) * 540 : 0,
+      scale: 1.1,
+    };
+  },
+  // La Earth Stamp: sube por arriba del Axie y baja de un sellazo, aplastándose.
+  stampdown(t, a, b, f) {
+    if (t < 0.6) {
+      const u = fxSmooth(t / 0.6);
+      return { x: fxLerp(a.x, b.x, u), y: fxLerp(a.y, b.y - f.height, u), rotate: -15 * u, scale: 1.2 };
+    }
+    const v = (t - 0.6) / 0.4;
+    return { x: b.x, y: b.y - f.height * (1 - v * v), rotate: -15 * (1 - v), scale: 1.2, sy: v > 0.88 ? 0.7 : 1, sx: v > 0.88 ? 1.25 : 1 };
+  },
+  // La Scotch Tape: se desenrolla a lo ancho sobre la cadena y la pega.
+  unroll(t, a, b) {
+    const k = fxSmooth(t);
+    return { x: fxLerp(a.x, b.x, k), y: fxLerp(a.y, b.y, k), rotate: 0, scale: 1, sx: 0.2 + 1.3 * k, sy: 1 - 0.3 * k };
+  },
+  // Last Gift: sube despacio desde abajo, como un farolito que se suelta.
+  float(t, a, b, f) {
+    const k = 1 - (1 - t) ** 2;
+    return {
+      x: b.x + f.sway * Math.sin(t * Math.PI * 2),
+      y: b.y + f.depth * (1 - k),
+      rotate: 8 * Math.sin(t * Math.PI * 3),
+      scale: 0.6 + 0.5 * k,
+    };
+  },
   // La máscara: salta alto dando vueltas de moneda y cae puesta, derecha y de golpe.
   mask(t, a, b, f) {
     if (t < 0.65) {
@@ -498,6 +1200,7 @@ export function createPowerFx({
     if (where === 'market') return market?.querySelector?.('.overlay-head') ?? market;
     if (where === 'swing') return swing?.querySelector?.('.swing-dmg') ?? swing;
     if (where === 'card0') return field?.querySelector?.('.strip > .card[data-col="0"]') ?? art(fx.on);
+    if (where === 'egg') return field?.querySelector?.(`.strip > .card[data-col="${fx.col}"]`) ?? art(fx.on);
     return art(fx.on);
   }
 
@@ -543,7 +1246,7 @@ export function createPowerFx({
   /** Lo que la pantalla guarda de un efecto al anotarse: la marca y la vida. */
   const pipsOf = (spec) => [].concat(spec.pip ?? []);
   function hold(fx) {
-    const spec = POWER_FX[fx.power]?.[fx.moment];
+    const spec = specOf(fx);
     if (!spec) return;
     if (spec.flight) pipsOf(spec).forEach((pip) => holdPip(fx.on, pip));
     for (const [seat, delta] of spec.hp?.(fx) ?? []) if (delta) holdHp?.(seat, delta);
@@ -609,13 +1312,17 @@ export function createPowerFx({
    * jugó el poder; `fx.on`, sobre el que cae.
    */
   function run(fx, by) {
-    const spec = POWER_FX[fx.power]?.[fx.moment];
+    const spec = specOf(fx);
     if (!spec) return;
     const { land, back } = arrivalOf(spec);
     const flight = spec.flight;
     const cards = ['apply', 'draw', 'stand'].includes(fx.moment) ? cardsWith(fx.card ?? fx.power) : [];
     cards.forEach((card) => lightCard(card, fx.power));
-    const target = flight ? spot(flight.to ?? 'on', fx, by, cards) : art(fx.on);
+    const target = flight ? spot(flight.to ?? 'on', fx, by, cards) : spec.at ? spot(spec.at, fx, by, cards) : art(fx.on);
+    if (spec.at && target?.classList?.contains('card')) {
+      lightCard(target, fx.power);
+      if (spec.crack) pulse(target, 'crack', 'true', 900);
+    }
 
     if (flight) {
       // Sale de la última carta con ese poder, que es la que se ve más cerca del final
@@ -628,7 +1335,10 @@ export function createPowerFx({
     if (spec.sfx) sound(spec.sfx, land, { rate: spec.sfxRate, contact: spec.contact });
 
     later(land, () => {
-      if (spec.clip) vfx.play(spec.clip, target, { from: sideOf(by), width: spec.width });
+      if (spec.clip) {
+        const skip = spec.clipHit ? Math.max((CLIPS[spec.clip]?.hitAt ?? 0) - HIT_LEAD, 0) : 0;
+        vfx.play(spec.clip, target, { from: sideOf(by), width: spec.width, skip });
+      }
       const pips = pipsOf(spec);
       if (flight) pips.forEach((pip) => showPip(fx.on, pip));
       // Aparece de un salto; y la que ya estaba y vuelve a actuar, late.

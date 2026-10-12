@@ -36,6 +36,7 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
 };
 
 // Se inyecta al final del HTML: escucha el canal SSE y recarga cuando el server avisa.
@@ -209,6 +210,27 @@ async function handle(req, res) {
     if (info.isDirectory()) return send(404, 'No encontrado');
     const type = TYPES[extname(file)] ?? 'application/octet-stream';
     const body = await readFile(file);
+    // Safari no reproduce un video que no se pueda pedir por pedazos: primero pide
+    // `bytes=0-1` y, si le llega el archivo entero con un 200, lo da por roto.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+    if (range && !type.startsWith('text/html')) {
+      const size = body.length;
+      const start = range[1] ? Number(range[1]) : Math.max(size - Number(range[2]), 0);
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start > end || start >= size) {
+        res.writeHead(416, { 'content-range': `bytes */${size}` });
+        return res.end();
+      }
+      res.writeHead(206, {
+        'content-type': type,
+        'cache-control': 'no-store',
+        'accept-ranges': 'bytes',
+        'content-range': `bytes ${start}-${end}/${size}`,
+        'content-length': end - start + 1,
+      });
+      return res.end(body.subarray(start, end + 1));
+    }
+    if (!type.startsWith('text/html')) res.setHeader('accept-ranges', 'bytes');
     send(200, type.startsWith('text/html') ? body + LIVE_RELOAD : body, type);
   } catch {
     send(404, `No encontrado: ${req.url}`);

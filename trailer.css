@@ -1,0 +1,719 @@
+/* El tráiler. Lo que hay acá es de cine, no de juego: el cuadro apaisado, las barras
+   negras, los carteles, las vigas que muestran la combinación, el montaje del arsenal
+   y el título del final.
+
+   Las cartas, los símbolos, los Axies y todas sus reacciones son del juego y vienen de
+   `styles.css` tal cual: un tráiler que dibujara sus propias cartas estaría mostrando
+   otro juego. Lo único que se pisa de ahí son las medidas que el juego cuelga de la
+   ventana (`--carta`, `--axie-w`), porque acá la ventana no es la pantalla: es el cuadro. */
+
+/* ---------- el sistema de movimiento ----------
+
+   Un tráiler tiene una sola voz, y la voz de un movimiento son su curva y su duración.
+   Están acá arriba y en un solo lugar para que todo el archivo hable igual: cuando algo
+   entra, entra con `--e-out`; cuando se va, se va con `--e-in`, que es más corta porque
+   irse no se mira; y lo que golpea usa `--e-pop`, que se pasa de largo y vuelve.
+
+   Las duraciones son escalones, no números sueltos: micro es un toque, beat es un
+   compás del tráiler y hero es una escena entera. Poner un valor a mano en una regla de
+   abajo es empezar a hablar con otro acento. */
+:root {
+  --e-out: cubic-bezier(.16, 1, .3, 1);      /* entradas: sale rápido y se asienta */
+  --e-in: cubic-bezier(.7, 0, .84, 0);       /* salidas: arranca lento y se va */
+  --e-pop: cubic-bezier(.34, 1.56, .64, 1);  /* el golpe, solo donde el juego es juguetón */
+  --e-cam: cubic-bezier(.22, .9, .25, 1);    /* la cámara, que nunca chasquea */
+
+  --t-micro: 160ms;
+  --t-ui: 240ms;
+  --t-beat: 420ms;
+  --t-scene: 800ms;
+  --t-hero: 1400ms;
+  --stagger: 60ms;
+}
+
+.trailer {
+  margin: 0; min-height: 100vh;
+  display: grid; place-items: center;
+  background: #05060d;
+  overflow: hidden;
+}
+
+/* ---------- el cuadro ---------- */
+
+/* 16:9 y lo más grande que entre. Todo lo de adentro se mide en `cqi`/`cqh` —el cuadro
+   es el contenedor de consulta— así que el tráiler se ve igual en un monitor y en un
+   teléfono: es la misma toma, más chica. */
+.tr-frame {
+  position: relative;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  container-type: size;
+  overflow: hidden;
+  background: #05060d;
+  /* Las medidas del juego, recalculadas contra el cuadro y no contra la ventana. */
+  --carta: clamp(34px, 8.6cqh, 86px);
+  --axie-w: clamp(90px, 26cqh, 300px);
+  --dial: clamp(48px, 12cqh, 110px);
+  --ink: #eef1ff;
+  font-family: var(--text);
+}
+
+/* Un teléfono parado. Un cuadro de 16:9 ahí mide un quinto de la pantalla —una ranura
+   entre dos mares de negro— y la escena se vuelve ilegible. Se lo deja crecer hasta 4:5,
+   que sigue siendo una toma apaisada con más aire arriba y abajo: la mesa y los dos
+   peleando entran igual, y las medidas de adentro se acomodan solas. */
+@media (max-aspect-ratio: 1 / 1) {
+  .tr-frame { width: 100vw; height: min(100vh, 125vw); }
+}
+
+/* ---------- el mundo y la cámara ---------- */
+
+/* La cámara mueve solo el mundo —terreno y Axies— y nunca destapa el borde, igual que
+   la de la mesa (ver `camera.js`). Lo apoyado sobre la pantalla queda afuera. */
+.tr-world {
+  position: absolute; inset: 0;
+  transform: translate(calc(var(--cam-x, 0) * 1cqi), calc(var(--cam-y, 0) * 1cqh))
+             scale(var(--cam-s, 1));
+  transform-origin: 50% 62%;
+  transition: transform var(--t-scene) var(--e-cam);
+  will-change: transform;
+}
+/* El sacudón del golpe. Va en una capa propia y no en el `transform` de arriba: si
+   compartieran elemento, el temblor se comería el acercamiento. */
+.tr-quake {
+  position: absolute; inset: 0;
+}
+.tr-world[data-shake="soft"] .tr-quake { animation: tr-shake-soft .32s var(--e-in); }
+.tr-world[data-shake="hard"] .tr-quake { animation: tr-shake-hard .5s cubic-bezier(.36, .07, .19, .97); }
+@keyframes tr-shake-soft {
+  25% { transform: translate(-.5cqi, .3cqh); }
+  60% { transform: translate(.7cqi, -.2cqh); }
+}
+@keyframes tr-shake-hard {
+  10%, 90% { transform: translate(-1.3cqi, .5cqh) rotate(-.3deg); }
+  25%, 75% { transform: translate(1.9cqi, -.9cqh) rotate(.4deg); }
+  40%, 60% { transform: translate(-2.4cqi, 1.1cqh) rotate(-.5deg); }
+  50%      { transform: translate(2.1cqi, -.6cqh) rotate(.3deg); }
+}
+
+/* El terreno: los mismos fondos del arena, uno por clase. */
+.tr-sky {
+  position: absolute; inset: -6% -4%;
+  background: #0d1020 center / cover no-repeat;
+  opacity: 0;
+  transition: opacity var(--t-scene) ease, filter var(--t-beat) ease;
+  filter: saturate(.92) brightness(.82);
+}
+.tr-sky[data-on="true"] { opacity: 1; }
+.tr-sky[data-arena="plant"]   { background-image: url("Backgrounds/plant-jungla.avif"); }
+.tr-sky[data-arena="bird"]    { background-image: url("Backgrounds/bird-cielo.avif"); }
+.tr-sky[data-arena="beast"]   { background-image: url("Backgrounds/beast-meseta.avif"); }
+.tr-sky[data-arena="reptile"] { background-image: url("Backgrounds/reptile-caverna.avif"); }
+.tr-sky[data-arena="bug"]     { background-image: url("Backgrounds/bug-canon.avif"); }
+.tr-sky[data-arena="aquatic"] { background-image: url("Backgrounds/aquatic-laguna.avif"); }
+
+/* El polvo del aire: seis motas lentas que dan profundidad al terreno sin pedirle nada
+   al procesador —son seis elementos, no un sistema de partículas—. */
+.tr-dust { position: absolute; inset: 0; overflow: hidden; opacity: 0; transition: opacity var(--t-scene) ease; }
+.tr-dust[data-on="true"] { opacity: .5; }
+.tr-dust i {
+  position: absolute; display: block;
+  width: .7cqh; height: .7cqh; border-radius: 50%;
+  background: rgba(255, 245, 210, .75);
+  filter: blur(.15cqh);
+  animation: tr-float linear infinite;
+}
+@keyframes tr-float {
+  from { transform: translate(0, 12cqh) scale(.6); opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  to   { transform: translate(4cqi, -14cqh) scale(1.1); opacity: 0; }
+}
+
+/* La escena se apaga cuando el chiste no es la pelea sino lo que se dice encima. */
+.tr-world[data-dim="true"] .tr-sky { filter: saturate(.2) brightness(.32); }
+.tr-world[data-dim="true"] .tr-ring { filter: saturate(.25) brightness(.5); transition: filter var(--t-beat) ease; }
+
+/* ---------- los dos peleando ---------- */
+
+.tr-ring {
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 50cqh;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  padding: 0 7cqi;
+}
+/* `.fighter` del juego define sus medidas en el elemento, así que heredarlas del cuadro
+   no alcanza: hay que pisarlas acá. */
+.tr-frame .tr-seat {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  height: 100%; width: 34cqi;
+  --axie-w: clamp(90px, 26cqh, 300px);
+  --axie-h: calc(var(--axie-w) * 0.82);
+  opacity: 0; transform: translateY(4cqh);
+  transition: opacity var(--t-scene) ease, transform var(--t-scene) var(--e-out);
+}
+.tr-seat[data-on="true"] { opacity: 1; transform: none; }
+/* En el prólogo hay uno solo, en el medio, sin rival todavía. */
+.tr-ring[data-solo="true"] { justify-content: center; }
+
+/* ---------- lo que está pensando ----------
+
+   Es la mitad del chiste del juego: el que se está por cortar la cadena **sabe** que se
+   va a cortar, y roba igual. Eso no se puede contar con un cartel abajo —un cartel es la
+   voz del tráiler, no la del bicho— así que va donde va un pensamiento: arriba de la
+   cabeza, en una nube, con la letra gorda del juego.
+
+   Va afuera del mundo y no pegada al Axie. Pegada, la cámara se la lleva: el
+   acercamiento empuja hacia arriba todo lo que está sobre su origen, y la nube —que es
+   lo más alto de la escena— terminaba fuera del cuadro justo en el momento en que hay
+   que leerla. Acá su lugar es fijo y queda siempre entre la chapa y la cabeza.
+
+   La nube se dibuja con el elemento y dos pseudoelementos —el globo y las dos burbujitas
+   que bajan hasta el bicho— y no con una imagen: tiene que poder crecer con el texto. */
+.tr-thinks {
+  position: absolute; left: 0; right: 0; top: 17.5cqh;
+  height: 0; pointer-events: none; z-index: 4;
+}
+.tr-think {
+  position: absolute;
+  max-width: 32cqi;
+  padding: 1cqh 2cqi;
+  /* En fila y no apilada: apilada mide 144 px de alto y no entra entre la chapa y la
+     cabeza. Al lado, lo que se imagina y lo que se dice ocupan lo mismo en la mitad de
+     alto, y de paso se leen como una sola idea. */
+  display: flex; align-items: center; gap: 1.4cqi;
+  border-radius: 2.4cqh;
+  background: #fbf6ec;
+  border: .3cqh solid #3a2413;
+  box-shadow: 0 1cqh 0 -.2cqh rgba(58, 36, 19, .55), 0 2.4cqh 3.6cqh -1cqh rgba(0, 0, 0, .7);
+  color: #2b1809;
+  transform-origin: 50% 130%;
+  animation: tr-think-in var(--t-beat) var(--e-pop) backwards;
+}
+.tr-think[data-side="left"]  { left: 9cqi; }
+.tr-think[data-side="right"] { right: 9cqi; }
+.tr-think[hidden] { display: none; }
+@keyframes tr-think-in {
+  from { opacity: 0; transform: scale(.3) translateY(1.6cqh); }
+}
+.tr-think[data-out="true"] { animation: tr-think-out var(--t-ui) var(--e-in) forwards; }
+@keyframes tr-think-out { to { opacity: 0; transform: scale(.75); } }
+/* Y la que revienta: el que la estaba pensando acaba de comerse el cero. */
+.tr-think[data-pop="true"] { animation: tr-think-pop var(--t-beat) var(--e-in) forwards; }
+@keyframes tr-think-pop {
+  30%  { transform: scale(1.22); }
+  100% { opacity: 0; transform: scale(.1) rotate(8deg); }
+}
+/* Las dos burbujitas que bajan del globo hasta la cabeza. */
+.tr-think::before, .tr-think::after {
+  content: ""; position: absolute;
+  border-radius: 50%; background: #fbf6ec; border: .3cqh solid #3a2413;
+}
+.tr-think::before { width: 2cqh; height: 2cqh; bottom: -2.8cqh; }
+.tr-think::after  { width: 1.1cqh; height: 1.1cqh; bottom: -4.8cqh; }
+.tr-think[data-side="left"]::before  { left: 18%; }
+.tr-think[data-side="left"]::after   { left: 11%; }
+.tr-think[data-side="right"]::before { right: 18%; }
+.tr-think[data-side="right"]::after  { right: 11%; }
+
+.tr-think-text {
+  font-family: var(--game); font-size: min(4cqh, 3.4cqi); line-height: 1;
+  text-align: center; text-wrap: balance;
+}
+/* El pensamiento que insiste: late, porque el que lo piensa no se lo puede sacar. */
+.tr-think[data-itch="true"] .tr-think-text { animation: tr-itch 1.1s ease-in-out infinite; }
+@keyframes tr-itch {
+  50% { transform: scale(1.1) rotate(-2deg); }
+}
+/* Lo que se está imaginando: una carta, un número, tres puntos. */
+.tr-think-art { display: flex; align-items: center; gap: .6cqi; }
+.tr-think-art .card { --zoom: .5; }
+.tr-think-big {
+  font-family: var(--game); font-size: min(6.4cqh, 5.6cqi); line-height: .9;
+  color: #c2410c;
+  -webkit-text-stroke: .04em rgba(58, 36, 19, .9); paint-order: stroke fill;
+}
+.tr-think-drool { font-size: min(3.4cqh, 3cqi); }
+
+/* Con una nube en pantalla el número del golpe se corre atrás: los dos piden la misma
+   atención y el que manda es el que está pensando. */
+.tr-frame[data-thinking="true"] .tr-swing { opacity: .22; }
+
+/* ---------- la vida ----------
+
+   Dos barras finas en los extremos de arriba, y nada escrito. Antes cada una tenía
+   nombre, barra y número: tres cosas para contar una sola, y en un tráiler de setenta
+   segundos nadie lee el nombre de un bicho que ya está en pantalla. La barra que se
+   vacía dice "le pegaron" y la barra vacía dice "está en cero", que es todo lo que el
+   tráiler necesita. */
+.tr-plates {
+  position: absolute; left: 0; right: 0; top: 13cqh;
+  display: flex; justify-content: space-between;
+  padding: 0 7cqi;
+  pointer-events: none; z-index: 3;
+}
+.tr-plate {
+  position: relative;
+  width: 24cqi; height: 1.5cqh;
+  border-radius: 999px;
+  background: rgba(3, 5, 12, .78);
+  box-shadow: inset 0 .2cqh .4cqh rgba(0, 0, 0, .6), 0 .4cqh 1cqh -.2cqh rgba(0, 0, 0, .7);
+  overflow: hidden;
+  opacity: 0; transform: translateY(-1.2cqh);
+  transition: opacity var(--t-beat) ease, transform var(--t-beat) var(--e-out);
+}
+.tr-plates[data-on="true"] .tr-plate { opacity: 1; transform: none; }
+/* El relleno se encoge con su curva y deja atrás una estela clara que lo alcanza
+   después: esa diferencia es lo que se lee como "cuánto te sacaron". */
+.tr-plate i {
+  position: absolute; inset: 0;
+  transform-origin: left center;
+  transform: scaleX(var(--hp, 1));
+  border-radius: 999px;
+  background: linear-gradient(90deg, #56e0c0, #7ce8a0);
+  transition: transform var(--t-beat) var(--e-out), background var(--t-ui) ease;
+}
+.tr-plate::after {
+  content: ""; position: absolute; inset: 0;
+  transform-origin: left center;
+  transform: scaleX(var(--ghost, 1));
+  border-radius: 999px;
+  background: rgba(255, 210, 190, .45);
+  transition: transform 1s var(--e-in) .2s;
+}
+.tr-plate[data-side="right"] i,
+.tr-plate[data-side="right"]::after { transform-origin: right center; }
+.tr-plate[data-low="true"] i { background: linear-gradient(90deg, #ff6a5c, #ff9c6a); }
+
+/* ---------- la mesa ---------- */
+
+.tr-table {
+  position: absolute; left: 0; right: 0; bottom: 21cqh;
+  display: flex; align-items: flex-start; justify-content: center; gap: 3cqi;
+  padding: 0 5cqi;
+  z-index: 2;
+}
+.tr-board { position: relative; }
+.tr-chain { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: .9cqi; min-height: 1px; }
+.tr-chain .card { animation: tr-card-in var(--t-beat) var(--e-pop) backwards; }
+@keyframes tr-card-in {
+  from { opacity: 0; transform: translateY(-6cqh) rotate(-8deg) scale(.78); }
+}
+
+/* La carta que corta llega despacio, girando, y se queda torcida: es la única del
+   tráiler que se mira cuadro por cuadro. */
+.tr-chain .card[data-doom="true"] {
+  animation: tr-card-doom 1.25s cubic-bezier(.3, .6, .2, 1) backwards;
+  transform: rotate(6deg) translateY(.6cqh);
+  border-color: #ff6a5c;
+  box-shadow: 0 0 2.6cqh -.4cqh rgba(255, 106, 92, .9), var(--shadow);
+}
+@keyframes tr-card-doom {
+  from { opacity: 0; transform: translateY(-16cqh) rotate(-200deg) scale(1.6); }
+  70%  { opacity: 1; transform: translateY(0) rotate(15deg) scale(1.1); }
+  to   { transform: rotate(6deg) translateY(.6cqh); }
+}
+/* La cadena cortada: todo se apaga y las cartas se sueltan de la mano. */
+.tr-chain[data-busted="true"] .card {
+  filter: grayscale(1) brightness(.6);
+  transition: filter var(--t-ui) ease, transform var(--t-scene) var(--e-out);
+}
+.tr-chain[data-busted="true"] .card:nth-child(odd)  { transform: translateY(1.6cqh) rotate(-5deg); }
+.tr-chain[data-busted="true"] .card:nth-child(even) { transform: translateY(2.6cqh) rotate(6deg); }
+
+/* ---------- las vigas: dónde se ve la combinación ----------
+
+   Esto es lo que el tráiler tenía que mostrar y no mostraba. La cadena no es una fila de
+   cartas: es una racha por símbolo, y lo que paga es el **largo** de cada racha al
+   cuadrado. Una viga es el tramo de una racha entre dos cartas, del color de su símbolo.
+   Se dibuja debajo de las cartas, entre casillero y casillero, y se abre de izquierda a
+   derecha en el momento en que la carta nueva la alarga.
+
+   Va con `transform: scaleX` desde el borde izquierdo y no con `width`: una es una
+   propiedad que el compositor mueve solo y la otra obliga a rehacer la línea en cada
+   cuadro, y acá pueden estar abriéndose tres a la vez. */
+/* Por encima de las cartas y no por debajo: una carta es de madera opaca, así que una
+   viga dibujada atrás se ve solamente en los 12 píxeles de aire que quedan entre dos —o
+   sea, no se ve—. Cruzando por delante sí se lee lo que tiene que leerse: que este
+   símbolo **es** la continuación de aquel. Los crests son dibujos con contorno negro y
+   mucho contraste, así que aguantan una línea encima sin perderse. */
+.tr-links { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+/* El contenedor lleva el lugar y el ángulo; la barra de adentro se abre. Son dos
+   elementos y no uno porque un solo `transform` no puede girar y abrirse a la vez. */
+.tr-link { position: absolute; height: .85cqh; transform-origin: left center; }
+.tr-link b {
+  display: block; width: 100%; height: 100%;
+  border-radius: 999px;
+  /* Un núcleo claro con halo del color de la racha: así la línea se ve tanto sobre la
+     madera oscura de la carta como sobre el crest, que es la parte brillante. */
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--c) 25%, transparent),
+    color-mix(in srgb, var(--c) 92%, #fff) 45%,
+    var(--c));
+  box-shadow: 0 0 2.2cqh -.3cqh var(--c), 0 0 .5cqh rgba(0, 0, 0, .55);
+  transform-origin: left center;
+  animation: tr-link-open var(--t-ui) var(--e-out) backwards;
+}
+@keyframes tr-link-open { from { transform: scaleX(0); opacity: .2; } }
+/* Apagada: la racha murió, pero el tramo que hizo se queda para poder leerlo. */
+.tr-link[data-dead="true"] b { opacity: .28; box-shadow: none; }
+
+/* El aro de chances es el del juego: mismo markup, mismo semáforo. */
+/* El aro se queda sin el número. Verde, amarillo, rojo: eso ya es la frase entera, y
+   "27%" es pedirle al que mira un tráiler que haga una cuenta. */
+.tr-gauge .odds-pct { display: none; }
+.tr-gauge {
+  opacity: 0; transform: scale(.8);
+  transition: opacity var(--t-beat) ease, transform var(--t-beat) var(--e-out);
+}
+.tr-gauge[data-on="true"] { opacity: 1; transform: none; }
+.tr-gauge[data-panic="true"] { animation: tr-panic .55s ease-in-out infinite; }
+@keyframes tr-panic {
+  50% { transform: translateX(.4cqi) rotate(-2deg) scale(1.04); }
+}
+
+/* ---------- el número del golpe ---------- */
+
+.tr-swing {
+  position: absolute; left: 0; right: 0; top: 17cqh;
+  display: grid; justify-items: center;
+  pointer-events: none; z-index: 2;
+  transition: opacity var(--t-ui) ease;
+}
+.tr-frame[data-slam="true"] .tr-swing { opacity: .2; }
+.tr-swing b {
+  font-family: var(--game); font-size: min(20cqh, 17cqi); line-height: .82;
+  color: #fff; font-variant-numeric: tabular-nums;
+  -webkit-text-stroke: .05em rgba(8, 10, 24, .9); paint-order: stroke fill;
+  text-shadow: 0 0 6cqh rgba(86, 224, 192, .45), 0 1.4cqh 2cqh rgba(0, 0, 0, .7);
+  transition: color var(--t-ui) ease, text-shadow var(--t-ui) ease;
+}
+.tr-swing[data-grow="true"] b { animation: tr-grow var(--t-ui) var(--e-pop); }
+@keyframes tr-grow { 45% { transform: scale(1.18); } }
+
+
+/* El cero. Cae de golpe, en rojo, y el resplandor verde se apaga con él. */
+.tr-swing[data-zero="true"] b {
+  color: #ff6a5c;
+  text-shadow: 0 0 7cqh rgba(255, 106, 92, .5), 0 1.4cqh 2cqh rgba(0, 0, 0, .8);
+  animation: tr-zero .7s cubic-bezier(.3, 1.5, .4, 1);
+}
+@keyframes tr-zero {
+  0%   { transform: translateY(-5cqh) scale(1.8); opacity: .2; }
+  55%  { transform: translateY(1.4cqh) scale(.8); }
+  100% { transform: none; }
+}
+/* La mitad del caracol: el número se desinfla, no se rompe. */
+.tr-swing[data-halved="true"] b {
+  color: #ff9c6a;
+  animation: tr-halve .8s var(--e-out);
+}
+@keyframes tr-halve {
+  0%  { transform: scaleY(1.06) scaleX(1.06); }
+  30% { transform: scaleY(.58) scaleX(1.2) translateY(2.2cqh); }
+  60% { transform: scaleY(1.05) scaleX(.95) translateY(-.5cqh); }
+  100% { transform: none; }
+}
+
+/* ---------- el caracol ---------- */
+
+.tr-snail {
+  position: absolute; top: 24cqh; right: 0;
+  width: 14cqh; height: 14cqh;
+  transform: translateX(14cqh);
+  z-index: 4;
+}
+.tr-snail img {
+  position: relative; z-index: 1;
+  width: 100%; height: 100%; object-fit: contain;
+  filter: drop-shadow(0 .6cqh .8cqh rgba(0, 0, 0, .6));
+  animation: tr-snail-bob 1.1s ease-in-out infinite;
+}
+@keyframes tr-snail-bob { 50% { transform: translateY(-.7cqh) rotate(-3deg); } }
+.tr-snail .tr-slime {
+  position: absolute; top: 58%; left: 55%;
+  height: 2.2cqh; width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 106, 92, 0), rgba(255, 190, 170, .5));
+  filter: blur(.4cqh);
+}
+.tr-snail[data-crawl="true"] { animation: tr-crawl 2.6s linear forwards; }
+.tr-snail[data-crawl="true"] .tr-slime { animation: tr-slime 2.6s linear forwards; }
+@keyframes tr-crawl { to { transform: translateX(-52cqi); } }
+@keyframes tr-slime { to { width: 52cqi; } }
+.tr-snail[data-leave="true"] { animation: tr-leave 3.4s linear forwards; }
+@keyframes tr-leave { to { transform: translateX(-120cqi); opacity: .85; } }
+
+/* ---------- efectos ---------- */
+
+/* Dos capas: la del kit (atlas de sprites del Origins) y la propia, que es donde van las
+   chispas, el polvo y los papelitos que el kit no trae. Las dos son canvas y las dos se
+   apagan solas cuando no queda nada vivo. */
+.tr-vfx, .tr-bits {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+.tr-vfx { z-index: 5; }
+.tr-bits { z-index: 6; }
+
+/* Las líneas de velocidad del golpe grande: el recurso más viejo del dibujo animado y
+   el que mejor dice "esto pegó". Un solo elemento con un degradé repetido en cono. */
+.tr-speed {
+  position: absolute; inset: -20%;
+  z-index: 5; pointer-events: none; opacity: 0;
+  background: repeating-conic-gradient(from 0deg at 50% 50%,
+    rgba(255, 255, 255, .55) 0deg .35deg, transparent .35deg 3deg);
+  mask-image: radial-gradient(closest-side, transparent 28%, #000 62%);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 28%, #000 62%);
+}
+.tr-speed[data-fire="true"] { animation: tr-speed .42s var(--e-in); }
+@keyframes tr-speed {
+  0%   { opacity: .85; transform: scale(.7); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+/* La viñeta roja de la rueda en rojo: el peligro no se dice, se siente en los bordes. */
+.tr-danger {
+  position: absolute; inset: 0; z-index: 7; pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(100cqi 75cqh at 50% 50%, transparent 40%, rgba(180, 20, 10, .55) 100%);
+  transition: opacity var(--t-scene) ease;
+}
+.tr-danger[data-on="true"] { opacity: 1; animation: tr-danger-beat 1.3s ease-in-out infinite; }
+@keyframes tr-danger-beat { 50% { opacity: .55; } }
+
+/* El fogonazo del corte de escena. El blanco separa dos actos; el rojo es el corte de
+   cadena y arrastra una separación de color, que es lo que hace que se sienta un error
+   y no una transición. */
+.tr-flash {
+  position: absolute; inset: 0; z-index: 8;
+  background: #fff; opacity: 0; pointer-events: none;
+}
+.tr-flash[data-fire="white"] { animation: tr-flash-w .34s var(--e-in); }
+.tr-flash[data-fire="red"]   { animation: tr-flash-r .55s var(--e-in); }
+@keyframes tr-flash-w { 0% { opacity: .95; } 100% { opacity: 0; } }
+@keyframes tr-flash-r {
+  0%   { opacity: .85; background: #ff6a5c; }
+  40%  { opacity: .3;  background: #ff6a5c; }
+  100% { opacity: 0;   background: #ff6a5c; }
+}
+/* La separación de color del corte: el cuadro se parte en rojo y cian por medio
+   segundo. Va sobre el marco entero y solo existe mientras corre. */
+.tr-frame[data-glitch="true"] .tr-world { animation: tr-glitch .45s steps(3) ; }
+@keyframes tr-glitch {
+  0%   { filter: none; }
+  33%  { filter: drop-shadow(1.2cqi 0 0 rgba(255, 0, 60, .8)) drop-shadow(-1.2cqi 0 0 rgba(0, 220, 255, .8)); }
+  66%  { filter: drop-shadow(-.8cqi 0 0 rgba(255, 0, 60, .7)) drop-shadow(.8cqi 0 0 rgba(0, 220, 255, .7)); }
+  100% { filter: none; }
+}
+
+/* ---------- lo que dice el narrador ----------
+
+   Tres tonos y no más. Antes eran cuatro y se usaban veinte veces: el tráiler se leía en
+   vez de mirarse.
+
+     sub     el subtítulo de la voz. Chico, abajo, apagado. Es la red de seguridad para
+             quien tiene el sonido bajo, no el canal principal: el principal es la voz.
+     slam    la placa del tráiler. Dos en todo el minuto —la pregunta y la respuesta— y
+             por eso pegan.
+     banner  el resultado, con la cinta de madera del kit. Una sola.
+*/
+.tr-says {
+  position: absolute; inset: 0;
+  display: grid; grid-template-areas: "say"; place-items: center;
+  padding: 0 8cqi;
+  pointer-events: none; z-index: 9;
+}
+/* Todos en la misma celda: el que se está yendo no puede correr al que entra. */
+.tr-say {
+  grid-area: say;
+  text-align: center; text-wrap: balance;
+  animation: tr-say-in var(--t-beat) var(--e-out) backwards;
+}
+.tr-say[data-out="true"] { animation: tr-say-out var(--t-ui) var(--e-in) forwards; }
+@keyframes tr-say-in  { from { opacity: 0; transform: translateY(1.2cqh); } }
+@keyframes tr-say-out { to   { opacity: 0; transform: translateY(-.8cqh); } }
+
+.tr-say[data-tone="sub"] {
+  align-self: end; margin-bottom: 12.5cqh;
+  font-family: var(--text); font-weight: 600;
+  font-size: min(3.4cqh, 3cqi); line-height: 1.25;
+  color: rgba(238, 241, 255, .82);
+  text-shadow: 0 .4cqh 1.4cqh rgba(0, 0, 0, .95);
+}
+.tr-say[data-tone="slam"] {
+  font-family: var(--game);
+  font-size: min(13cqh, 11cqi); line-height: .92; letter-spacing: .01em;
+  text-transform: uppercase; color: #fff;
+  -webkit-text-stroke: .045em rgba(6, 8, 18, .95); paint-order: stroke fill;
+  text-shadow: 0 .8cqh 2.4cqh rgba(0, 0, 0, .85);
+  animation: tr-slam-in var(--t-beat) var(--e-pop) backwards;
+}
+@keyframes tr-slam-in { from { opacity: 0; transform: scale(1.6); filter: blur(1.4cqh); } }
+.tr-say[data-tone="banner"] {
+  font-family: var(--game);
+  font-size: min(11cqh, 9.5cqi); line-height: 1;
+  padding: 1cqh 5cqi;
+  text-transform: uppercase; color: #fff;
+  -webkit-text-stroke: .045em rgba(6, 8, 18, .95); paint-order: stroke fill;
+  border-radius: 1.4cqh;
+  background: #8e4b33 url("https://cdn.jsdelivr.net/gh/axieinfinity/axie-origins-asset-kit@main/Assets/OriginsKit/Textures/BattleHud/InBattle/player_name_bg.png") center / 100% 100% no-repeat;
+  box-shadow: inset 0 -.4cqh 0 rgba(58, 26, 12, .35), inset 0 .3cqh 0 rgba(255, 196, 150, .22),
+              0 2cqh 4cqh -1cqh rgba(0, 0, 0, .8);
+  animation: tr-banner-in var(--t-beat) var(--e-pop) backwards;
+}
+@keyframes tr-banner-in { from { opacity: 0; transform: scale(2.2) rotate(-4deg); filter: blur(1.6cqh); } }
+
+/* ---------- el montaje del arsenal ----------
+
+   Un amuleto por toma y nada escrito. Antes cada arma traía su nombre, el chiste del
+   tráiler y un contador —trece tomas por tres renglones son treinta y nueve cosas para
+   leer en nueve segundos, que es exactamente lo que nadie hace—. Ahora la lista la lee
+   el narrador de corrido, que además es donde estaba el chiste: en la enumeración, no
+   en cada renglón. */
+.tr-reel {
+  position: absolute; inset: 0; z-index: 7;
+  display: grid; place-items: center;
+  padding: 13cqh 6cqi;
+  background: radial-gradient(60cqi 50cqh at 50% 50%, #2a2150 0%, transparent 70%), #0a0c18;
+}
+.tr-reel[hidden] { display: none; }
+.tr-gun-amulet {
+  width: min(44cqh, 34cqi); height: min(44cqh, 34cqi); object-fit: contain;
+  filter: drop-shadow(0 0 5cqh var(--c, #f5c542)) drop-shadow(0 1.6cqh 2cqh rgba(0, 0, 0, .7));
+  animation: tr-gun-in var(--t-micro) var(--e-pop) backwards;
+}
+@keyframes tr-gun-in { from { opacity: 0; transform: scale(.55) rotate(-8deg); filter: blur(1cqh); } }
+
+/* ---------- el final ---------- */
+
+.tr-end {
+  position: absolute; inset: 0; z-index: 8;
+  display: grid; place-items: center; align-content: center; gap: 2cqh;
+  padding: 13cqh 6cqi;
+  background: #05060d;
+}
+.tr-end[hidden] { display: none; }
+.tr-end-logo {
+  width: min(50cqi, 42cqh); height: auto;
+  filter: drop-shadow(0 0 6cqh rgba(124, 139, 255, .45));
+  animation: tr-logo-slam var(--t-hero) var(--e-pop) backwards;
+}
+@keyframes tr-logo-slam {
+  from { opacity: 0; transform: scale(2.8); filter: blur(2.4cqh); }
+  55%  { opacity: 1; }
+}
+.tr-tagline {
+  margin: 0;
+  font-family: var(--game); font-size: min(5cqh, 4.6cqi); line-height: 1.05;
+  color: #fff; text-align: center;
+  animation: tr-say-in var(--t-scene) var(--e-out) backwards;
+}
+/* La banda de clasificación, la del cartelito antes de la película. Acá clasifica al
+   jugador, no al juego. */
+.tr-rating {
+  display: grid; gap: .7cqh;
+  padding: 1.4cqh 4cqi;
+  border: .35cqh solid #56e0c0; border-radius: .6cqh;
+  background: rgba(86, 224, 192, .07);
+  text-align: center;
+  animation: tr-say-in var(--t-beat) var(--e-out) backwards;
+}
+.tr-rating b {
+  font-family: var(--game); font-size: min(4.4cqh, 3.6cqi); line-height: 1;
+  color: #56e0c0; letter-spacing: .05em; text-transform: uppercase;
+}
+.tr-rating span {
+  font-family: var(--text); font-weight: 600; font-size: min(3cqh, 2.6cqi); line-height: 1.25;
+  color: #aab3dc;
+}
+.tr-end-note {
+  margin: 0;
+  font-family: var(--text); font-weight: 600; font-size: min(3.2cqh, 2.8cqi);
+  color: #858fbd;
+  animation: tr-say-in var(--t-beat) var(--e-out) backwards;
+}
+
+/* ---------- capas de cine ---------- */
+
+/* Las barras recortan el cuadro a 2.39:1, que es lo que hace que una escena se lea como
+   una toma y no como una captura de pantalla. */
+.tr-bars { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+.tr-bars i {
+  position: absolute; left: 0; right: 0; height: 11cqh;
+  background: #05060d;
+  transform: scaleY(0);
+  transition: transform var(--t-scene) var(--e-out);
+}
+.tr-bars i:first-child { top: 0; transform-origin: top; }
+.tr-bars i:last-child  { bottom: 0; transform-origin: bottom; }
+.tr-bars[data-on="true"] i { transform: scaleY(1); }
+
+.tr-grain {
+  position: absolute; inset: 0; z-index: 10; pointer-events: none;
+  opacity: .05; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: tr-grain 1.1s steps(4) infinite;
+}
+@keyframes tr-grain {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-2%, 1%); }
+  50%  { transform: translate(1%, -2%); }
+  75%  { transform: translate(-1%, -1%); }
+  100% { transform: translate(0, 0); }
+}
+.tr-vignette {
+  position: absolute; inset: 0; z-index: 10; pointer-events: none;
+  background: radial-gradient(110cqi 80cqh at 50% 48%, transparent 45%, rgba(3, 4, 10, .7) 100%);
+}
+
+/* ---------- la tapa y los controles ---------- */
+
+.tr-start {
+  position: absolute; inset: 0; z-index: 11;
+  display: grid; place-items: center; align-content: center; gap: 2.6cqh;
+  background: radial-gradient(70cqi 60cqh at 50% 45%, #1b2247 0%, #05060d 75%);
+  transition: opacity var(--t-beat) ease, visibility var(--t-beat);
+}
+.tr-start[hidden] { display: none; }
+.tr-start[data-gone="true"] { opacity: 0; visibility: hidden; }
+.tr-start-logo { width: min(46cqi, 52cqh); height: auto; }
+.tr-play { font-family: var(--game); font-size: min(4.2cqh, 4cqi); padding: 1.2cqh 5cqi; cursor: pointer; }
+.tr-start-note { margin: 0; color: #858fbd; font-size: min(2.8cqh, 2.6cqi); }
+
+.tr-hud {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 12;
+  display: flex; align-items: center; gap: 1.6cqi;
+  padding: 2cqh 4cqi;
+  opacity: 0;
+  transition: opacity var(--t-ui) ease;
+}
+.tr-hud[hidden] { display: none; }
+.tr-frame[data-hover="true"] .tr-hud,
+.tr-frame[data-done="true"] .tr-hud { opacity: 1; }
+.tr-hud-btn { font-family: var(--game); font-size: min(2.6cqh, 2.6cqi); padding: .8cqh 2.4cqi; cursor: pointer; }
+.tr-track { flex: 1; height: .8cqh; border-radius: 999px; background: rgba(238, 241, 255, .16); overflow: hidden; }
+.tr-track i { display: block; height: 100%; width: 0; background: #56e0c0; border-radius: 999px; }
+
+/* ---------- menos movimiento ----------
+
+   Pedido el sistema menos movimiento, el tráiler cuenta lo mismo: los carteles entran,
+   las cartas caen, las vigas se dibujan y el número cambia. Lo que se saca es el viaje
+   —nada tiembla, nada se acerca, nada late— y todo lo que antes viajaba aparece puesto,
+   que es lo que pide la regla: el contenido se ve igual, el movimiento no. */
+@media (prefers-reduced-motion: reduce) {
+  .tr-world, .tr-world[data-shake] .tr-quake { transform: none; animation: none; }
+  .tr-grain, .tr-dust i, .tr-snail img,
+  .tr-gauge[data-panic="true"], .tr-danger[data-on="true"],
+  .tr-think[data-itch="true"] .tr-think-text { animation: none; }
+  .tr-flash, .tr-speed { display: none; }
+  .tr-frame[data-glitch="true"] .tr-world { animation: none; }
+  .tr-say, .tr-say[data-tone="slam"], .tr-say[data-tone="banner"],
+  .tr-end-logo, .tr-chain .card, .tr-chain .card[data-doom="true"],
+  .tr-think, .tr-link, .tr-gun-amulet,
+  .tr-swing[data-zero="true"] b, .tr-swing[data-halved="true"] b {
+    animation-duration: 1ms;
+  }
+  .tr-snail[data-crawl="true"], .tr-snail[data-leave="true"] { animation-timing-function: linear; }
+}

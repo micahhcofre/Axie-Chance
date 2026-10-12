@@ -5,10 +5,142 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Axie Chance</title>
 <link rel="icon" href="Icons/bird-crest.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Lilita+One&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caesar+Dressing&family=Lilita+One&family=Work+Sans:wght@400..600&display=swap">
 <link rel="stylesheet" href="styles.css">
+<!-- Todos los módulos que carga src/main.js, pedidos de una. Sin esto el navegador
+     descubre los imports de a un nivel por vez —main, ui, power-fx, game, adventure,
+     loadout, axies, axie-poses: ocho viajes de ida y vuelta en fila— y con 80 ms de
+     latencia el juego tardaba 1,5 s en arrancar en vez de 1. Los de más abajo en el
+     árbol van primero. La lista la vigila test/perf.test.js: un import nuevo que no
+     esté acá hace fallar la suite. -->
+<link rel="modulepreload" href="src/i18n-en.js">
+<link rel="modulepreload" href="src/i18n.js">
+<link rel="modulepreload" href="src/data.js">
+<link rel="modulepreload" href="src/axie-avatars.js">
+<link rel="modulepreload" href="src/axie-poses.js">
+<link rel="modulepreload" href="src/axies.js">
+<link rel="modulepreload" href="src/rules.js">
+<link rel="modulepreload" href="src/ai.js">
+<link rel="modulepreload" href="src/loadout.js">
+<link rel="modulepreload" href="src/backpack.js">
+<link rel="modulepreload" href="src/evolution.js">
+<link rel="modulepreload" href="src/stages.js">
+<link rel="modulepreload" href="src/adventure-levels.js">
+<link rel="modulepreload" href="src/map-art.js">
+<link rel="modulepreload" href="src/map-world.js">
+<link rel="modulepreload" href="src/adventure-map.js">
+<link rel="modulepreload" href="src/profile.js">
+<link rel="modulepreload" href="src/adventure.js">
+<link rel="modulepreload" href="src/rival-poses.js">
+<link rel="modulepreload" href="src/game.js">
+<link rel="modulepreload" href="src/payout.js">
+<link rel="modulepreload" href="src/missions.js">
+<link rel="modulepreload" href="src/missions-view.js">
+<link rel="modulepreload" href="src/axie-motion.js">
+<link rel="modulepreload" href="src/vfx-clips.js">
+<link rel="modulepreload" href="src/vfx.js">
+<link rel="modulepreload" href="src/camera.js">
+<link rel="modulepreload" href="src/scenery.js">
+<link rel="modulepreload" href="src/audio-clips.js">
+<link rel="modulepreload" href="src/audio.js">
+<link rel="modulepreload" href="src/audio-cues.js">
+<link rel="modulepreload" href="src/power-fx.js">
+<link rel="modulepreload" href="src/stage.js">
+<link rel="modulepreload" href="src/stage-kit.js">
+<link rel="modulepreload" href="src/table-fx.js">
+<link rel="modulepreload" href="src/result.js">
+<link rel="modulepreload" href="src/loading.js">
+<link rel="modulepreload" href="src/ui.js">
+<link rel="modulepreload" href="src/rooms.js">
+<link rel="modulepreload" href="src/link.js">
+<link rel="modulepreload" href="src/qr.js">
+<link rel="modulepreload" href="src/net.js">
+<link rel="modulepreload" href="src/tutorial.js">
+<link rel="modulepreload" href="src/evolve-scene.js">
+<link rel="modulepreload" href="src/evolve-view.js">
+<link rel="modulepreload" href="src/crafting.js">
+<link rel="modulepreload" href="src/card-scene.js">
+<link rel="modulepreload" href="src/workshop.js">
+<link rel="modulepreload" href="src/lobby.js">
+<link rel="modulepreload" href="src/main.js">
 </head>
 <body>
+<!-- Los íconos de las categorías de los poderes (Al robar, Al atacar, Al cortarte; ver `MOMENTS` en
+     data.js), pintados como la barra de pestañas: mate, luz cálida arriba a la
+     izquierda, sombra fría y el contorno solo en la silueta. Los pide `<use>`. -->
+<svg class="moment-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="mo-draw" viewBox="0 0 100 100" overflow="visible">
+      <g fill="#2e1a28" stroke="#2e1a28" stroke-width="7" stroke-linejoin="round">
+        <rect x="12" y="42" width="40" height="50" rx="6"/>
+        <rect x="46" y="8" width="38" height="52" rx="6" transform="rotate(16 65 34)"/>
+      </g>
+      <rect x="12" y="42" width="40" height="50" rx="6" fill="#7a4660"/>
+      <path d="M18 42 H46 C49 42 52 45 52 48 V58 C40 56 26 60 12 70 V48 C12 45 15 42 18 42Z" fill="#a8667e"/>
+      <path d="M12 82 H52 V86 C52 89 49 92 46 92 H18 C15 92 12 89 12 86Z" fill="#4e2840"/>
+      <path d="M32 55 L39 64 L32 73 L25 64Z" fill="#e0a445"/>
+      <path d="M32 55 L25 64 H32Z" fill="#ffe7a6"/>
+      <path d="M17 49 V62" stroke="#e6a2b4" stroke-width="2.4" stroke-linecap="round"/>
+      <g transform="rotate(16 65 34)">
+        <rect x="46" y="8" width="38" height="52" rx="6" fill="#efd6a0"/>
+        <path d="M52 8 H78 C81 8 84 11 84 14 V22 C70 20 58 26 46 36 V14 C46 11 49 8 52 8Z" fill="#fff1c8"/>
+        <path d="M84 40 V54 C84 57 81 60 78 60 H60 C68 54 78 48 84 40Z" fill="#c9ab8e"/>
+        <circle cx="65" cy="34" r="9" fill="#5fae6a"/>
+        <path d="M58 31 C59 27 63 25 67 25.5 C63 27.5 61 30 60.5 34Z" fill="#a8dc8a"/>
+        <circle cx="68" cy="37" r="4" fill="#3e7a60" opacity=".55"/>
+      </g>
+      <path d="M22 34 C24 22 32 14 42 11" fill="none" stroke="#2e1a28" stroke-width="8" stroke-linecap="round"/>
+      <path d="M22 34 C24 22 32 14 42 11" fill="none" stroke="#e0a445" stroke-width="4" stroke-linecap="round"/>
+      <path d="M36 6 L46 10 L39 18" fill="none" stroke="#2e1a28" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M36 6 L46 10 L39 18" fill="none" stroke="#e0a445" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <symbol id="mo-stand" viewBox="0 0 100 100" overflow="visible">
+      <g transform="translate(66 34)">
+        <path d="M0 -26 L7 -8 L26 -10 L12 3 L22 20 L3 11 L-8 26 L-8 6 L-26 2 L-10 -8Z" fill="#2e1a28" stroke="#2e1a28" stroke-width="6" stroke-linejoin="round"/>
+        <path d="M0 -26 L7 -8 L26 -10 L12 3 L22 20 L3 11 L-8 26 L-8 6 L-26 2 L-10 -8Z" fill="#e0503c"/>
+        <path d="M0 -26 L7 -8 L-3 -4 L-10 -8Z M-26 2 L-10 -8 L-4 -2 L-8 6Z" fill="#f08a52"/>
+        <path d="M0 -13 L4 -4 L13 -5 L6 2 L10 10 L1 6 L-4 13 L-4 3 L-13 1 L-5 -4Z" fill="#ffd15c"/>
+        <path d="M0 -13 L-5 -4 L-13 1 L-4 1Z" fill="#fff4dc"/>
+      </g>
+      <g transform="rotate(45 50 50) translate(0 6)">
+        <g fill="#2e1a28" stroke="#2e1a28" stroke-width="7" stroke-linejoin="round">
+          <path d="M50 2 L57 14 V62 H43 V14 Z"/><rect x="31" y="60" width="38" height="10" rx="5"/>
+          <rect x="45.5" y="68" width="9" height="17" rx="2"/><circle cx="50" cy="89" r="6.5"/>
+        </g>
+        <path d="M50 2 L57 14 V62 H43 V14 Z" fill="#cdd5df"/>
+        <path d="M50 2 L57 14 V62 H50 Z" fill="#8a93bd"/>
+        <path d="M46.5 16 V58" stroke="#fff4dc" stroke-width="2.6" stroke-linecap="round"/>
+        <rect x="31" y="60" width="38" height="10" rx="5" fill="#e0a445"/>
+        <path d="M54 68 H66" stroke="#9a5a62" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M35 63 H56" stroke="#ffe7a6" stroke-width="2.6" stroke-linecap="round"/>
+        <rect x="45.5" y="68" width="9" height="17" rx="2" fill="#7a4a3a"/>
+        <path d="M45.5 73 l9 -2.8 M45.5 79 l9 -2.8" stroke="#4a2838" stroke-width="1.9"/>
+        <circle cx="50" cy="89" r="6.5" fill="#e0a445"/><circle cx="52.2" cy="91.2" r="3.6" fill="#9a5a62" opacity=".55"/><circle cx="48.2" cy="87.2" r="2.4" fill="#ffe7a6"/>
+      </g>
+    </symbol>
+
+    <symbol id="mo-bust" viewBox="0 0 100 100" overflow="visible">
+      <path d="M50 50 L36 44 L44 38 L38 26 L50 34 L54 20 L58 36 L68 30 L62 44 L72 50 L60 56 L66 70 L54 62 L50 78 L46 62 L34 68 L40 54Z" fill="#e0503c" opacity=".9"/>
+      <g transform="rotate(-9 30 88) translate(-5 0)">
+        <path d="M30 12 H52 L45 32 L55 50 L44 68 L50 88 H30 C26 88 24 86 24 82 V18 C24 14 26 12 30 12Z" fill="#2e1a28" stroke="#2e1a28" stroke-width="7" stroke-linejoin="round"/>
+        <path d="M30 12 H52 L45 32 L55 50 L44 68 L50 88 H30 C26 88 24 86 24 82 V18 C24 14 26 12 30 12Z" fill="#efd6a0"/>
+        <path d="M30 12 H52 L48 22 C40 22 32 26 24 34 V18 C24 14 26 12 30 12Z" fill="#fff1c8"/>
+        <path d="M44 68 L50 88 H36 C41 82 43 76 44 68Z" fill="#c9ab8e"/>
+        <path d="M34 44 L40 50 L34 56 L28 50Z" fill="#e0a445"/>
+        <path d="M34 44 L28 50 H34Z" fill="#ffe7a6"/>
+      </g>
+      <g transform="rotate(9 70 88) translate(5 0)">
+        <path d="M52 12 H70 C74 12 76 14 76 18 V82 C76 86 74 88 70 88 H50 L44 68 L55 50 L45 32Z" fill="#2e1a28" stroke="#2e1a28" stroke-width="7" stroke-linejoin="round"/>
+        <path d="M52 12 H70 C74 12 76 14 76 18 V82 C76 86 74 88 70 88 H50 L44 68 L55 50 L45 32Z" fill="#efd6a0"/>
+        <path d="M52 12 H70 C74 12 76 14 76 18 V22 C68 20 58 22 49 24Z" fill="#fff1c8"/>
+        <path d="M76 50 V82 C76 86 74 88 70 88 H50 L48 82 C60 78 70 66 76 50Z" fill="#c9ab8e"/>
+        <path d="M66 44 L72 50 L66 56 L60 50Z" fill="#e0a445"/>
+        <path d="M66 56 L72 50 H66Z" fill="#9a5a62" opacity=".6"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
 <div class="app">
   <header class="topbar">
     <!-- La marca es el logo, no un rombo y una palabra: acá va la versión limpia,
@@ -99,8 +231,13 @@
   <main class="table">
     <section class="arena" id="arena">
       <!-- El terreno. Va en su propia capa y no como fondo del arena porque tiene que
-           quedar clavado a la línea donde apoyan los Axies: ver `.arena-art`. -->
-      <div class="arena-art" aria-hidden="true"><i></i></div>
+           quedar clavado a la línea donde apoyan los Axies: ver `.arena-art`. Adentro,
+           la luz que sube con la cadena y el aire del escenario (ver `scenery.js`):
+           son del lugar, así que se mueven con él. -->
+      <div class="arena-art" aria-hidden="true"><i></i><span class="arena-glow"></span><span class="arena-air"></span></div>
+      <!-- El marco de adelante del escenario (telones, pinos, columnas), más cerca que
+           el terreno: con la cámara se mueve más que él (ver `.arena-front`). -->
+      <div class="arena-front" aria-hidden="true"><i></i><i></i></div>
       <div class="fighter fighter--p1" id="fighter-p1" data-side="left">
         <!-- Tocar el bicho abre su mazo: el de fábrica y lo que fue juntando del
              centro. Es un botón transparente calzado sobre el dibujo —ver `.peek`— y
@@ -110,12 +247,20 @@
           aria-label="Ver el mazo"></button>
         <div class="plate" id="plate-p1"></div>
         <div class="board-axie" id="axie-p1"></div>
+        <!-- Su mazo, boca abajo a sus pies: de acá salen volando las cartas que roba, y
+             tocarlo abre el mazo entero (lo mismo que tocar al Axie). -->
+        <button class="pile" id="pile-p1" type="button" title="Ver el mazo"
+          aria-label="Ver el mazo"><i></i><i></i><i></i><b class="pile-n"></b></button>
       </div>
       <div class="fighter fighter--p2" id="fighter-p2" data-side="right">
         <button class="peek" id="peek-p2" title="Ver el mazo"
           aria-label="Ver el mazo"></button>
         <div class="plate" id="plate-p2"></div>
         <div class="board-axie" id="axie-p2"></div>
+        <!-- Su mazo, boca abajo a sus pies: de acá salen volando las cartas que roba, y
+             tocarlo abre el mazo entero (lo mismo que tocar al Axie). -->
+        <button class="pile" id="pile-p2" type="button" title="Ver el mazo"
+          aria-label="Ver el mazo"><i></i><i></i><i></i><b class="pile-n"></b></button>
       </div>
       <!-- Los dos instrumentos, en una sola columna adelante de la escena y del mismo
            ancho: arriba lo que vale el ataque que se está armando, abajo lo que tiene
@@ -134,8 +279,15 @@
            unas líneas escritas adentro se borrarían en medio del recorrido. -->
       <svg class="chainfx" id="chainfx" aria-hidden="true"></svg>
       <canvas class="vfx" id="vfx" aria-hidden="true"></canvas>
+      <!-- El escenario de efectos (ver `stage.js`): lo que tapa —pedazos, polvo, letras
+           grandes— y, arriba, la luz con su halo, que se suma a la página. -->
+      <canvas class="stage" id="stage" aria-hidden="true"></canvas>
+      <canvas class="stage stage--glow" id="stage-glow" aria-hidden="true"></canvas>
       <!-- El borde rojo del lado del que recibe un golpe (ver `.hurtfx`). -->
       <div class="hurtfx" id="hurtfx" aria-hidden="true"></div>
+      <!-- El piso (ver `.arena-floor`). Va último, como iba cuando era el `::after`
+           del arena: se pinta encima de lo que comparte su capa. -->
+      <div class="arena-floor" aria-hidden="true"></div>
     </section>
   </main>
 </div>
@@ -157,39 +309,30 @@
      se abren encima desde sus botones. -->
 <div class="result" id="result" role="status" hidden></div>
 
-<!-- La portada. Es lo primero que se ve y lo que hace que esto parezca un juego y no
-     una planilla: el terreno de fondo, los Axies del roster dando vueltas por ahí
-     —caminando, parándose a rascarse, cambiando de rumbo— y dos botones grandes, uno
-     en cada esquina de abajo.
+<!-- La portada: lo primero que se ve. Es un juego de celular y se maneja como uno: una
+     barra de cinco pestañas abajo, con íconos y sin palabras (ver `.lobby-nav`), y la
+     pantalla de cada una arriba. Se abre en la del medio, la Aventura: el mapa.
 
-     Son las dos cosas que se hacen desde acá, y son distintas:
+       Duelos    la vara con los banderines: el tutorial, contra la CPU y la sala.
+       Axies     tu colección, la vista previa y el inventario de cada uno.
+       Aventura  el mundo, con el nivel que toca jugar.
+       Mochila   las cartas sueltas (ver `backpack.js`).
+       Taller    el crafteo, que todavía no está: la pestaña guarda su lugar.
 
-       Jugar         a la derecha, el grande. Abre el menú —contra quién: la máquina,
-                     alguien en este mismo teclado, o alguien en otro aparato— y de ahí
-                     la partida empieza. Con qué Axie no lo pregunta: ya lo sabe.
-       Elegí tu Axie a la izquierda. Es tu bicho, no un paso del camino de jugar: se
-                     elige una vez, queda puesto, y se cambia cuando se te da la gana.
-                     Debajo del nombre del botón dice con cuál estás jugando ahora.
-
-     Que sea una puerta propia y no una escala es lo que la deja crecer: es la pantalla
-     de tu Axie, y ahí es donde más adelante van a vivir las mejoras temporales.
+     Detrás de todas está el mapa: la pantalla de la Aventura no se guarda nunca, y en
+     las otras pestañas queda desenfocada y quieta de fondo (ver `.lobby-adventure` en
+     el CSS). El mapa es el juego; lo demás se hace encima de él.
 
      La mesa de atrás está vacía hasta que empiece la partida (ver `main.js`: la
      pantalla se monta sin arrancar ninguna).
 
-     Los Axies los pone `lobby.js`; acá abajo solo está el escenario vacío.
-
-     Viene puesta y no escondida: es lo primero que se ve, y arrancar escondida sería
-     mostrar medio segundo de mesa vacía antes de taparla. La partida en red la guarda
-     al arrancar —ahí lo primero es la sala— y después usa **una** de sus pantallas: la
-     elección de Axie, abierta encima de la sala (ver `main.js`). Con qué jugás se
-     pregunta en un solo lugar del juego, y este es el lugar. -->
-<div class="lobby" id="lobby" data-view="front">
+     Viene puesta y no escondida: arrancar escondida sería mostrar medio segundo de mesa
+     vacía antes de taparla. La partida en red la guarda al arrancar —ahí lo primero es
+     la sala— y después usa **una** de sus pantallas: la elección de Axie, abierta
+     encima de la sala y sin la barra de abajo (ver `main.js`). -->
+<div class="lobby" id="lobby" data-view="adventure">
   <button id="lobby-settings-btn" class="lobby-cfg-btn" aria-label="Configuración" title="Configuración" aria-controls="hud-menu" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></button>
   <div class="lobby-art" aria-hidden="true"><i></i></div>
-  <!-- Por donde se pasean. `aria-hidden` porque es decorado puro: un lector de
-       pantalla no tiene nada que hacer con unos bichos que caminan. -->
-  <div class="lobby-cast" id="lobby-cast" aria-hidden="true"></div>
 
   <!-- El título de la portada es el logo grande, en la versión con contorno blanco:
        acá abajo hay un terreno pintado y unos bichos de colores paseándose, y sobre
@@ -200,55 +343,44 @@
       <img class="lobby-logo" src="Icons/logo-outline.png" alt="Axie Chance"
         width="520" height="388">
     </h1>
-    <p class="lobby-sub">Creado por: MikhChest</p>
   </div>
 
   <div class="lobby-panel">
-    <!-- La portada: el botón de jugar y nada más. -->
-    <div class="lobby-front" id="lobby-front">
-      <button class="lobby-play" id="lobby-play">Jugar</button>
-    </div>
-
-    <!-- El menú: contra quién. La dificultad cuelga de la opción a la que le
-         corresponde, que es la única con máquina adentro. -->
-    <div class="lobby-menu o-panel" id="lobby-menu" hidden>
-      <button class="o-x lobby-menu-x" id="lobby-menu-close" aria-label="Volver" title="Volver"></button>
+    <!-- Los duelos: las partidas sueltas. Una vara de madera con su cartel y, colgados,
+         tres banderines del kit (las telas del cartel de PvP, `npm run menu-art`): cada
+         una con su color, una ventana al escenario donde se pelea, los Axies que se
+         cruzan ahí (los pinta `paintModes` en `lobby.js`) y el medallón de etapa del
+         mapa de PvE. La Aventura no cuelga de acá: tiene su pestaña. La dificultad
+         cuelga del de la CPU, que es el único con máquina adentro. -->
+    <div class="lobby-menu" id="lobby-menu" hidden>
+      <div class="lobby-rod" aria-hidden="true"></div>
       <p class="lobby-menu-label o-banner">Modo de juego</p>
       <div class="lobby-modes">
-        <div class="lobby-mode">
-          <button class="lobby-pick lobby-pick--adventure" data-play="adventure">
-            <span class="mode-icon-frame" aria-hidden="true">
-              <svg class="mode-icon" viewBox="0 0 24 24" fill="none">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="#ffd15c" stroke="#8c581a" stroke-width="1.5" stroke-linejoin="round"/>
-              </svg>
+        <div class="lobby-mode lobby-mode--tutorial">
+          <button class="lobby-pick lobby-pick--tutorial" id="lobby-tutorial" data-play="tutorial">
+            <img class="mode-flag" src="Icons/menu-flag-green.png" alt="" width="220" height="380">
+            <span class="mode-scene" id="mode-scene-tutorial" data-stage="otono" aria-hidden="true"></span>
+            <img class="mode-medal" src="Icons/menu-medal-boss.png" alt="" width="168" height="183">
+            <span class="mode-content">
+              <b>Tutorial</b>
+              <span class="mode-desc">Aprendé a jugar en cinco rondas</span>
             </span>
-            <div class="mode-content">
-              <b>Modo Aventura</b>
-              <span class="mode-desc">Avanzá nivel a nivel desbloqueando los 12 poderes</span>
-            </div>
-            <span class="mode-arrow" aria-hidden="true">›</span>
           </button>
         </div>
 
         <div class="lobby-mode lobby-mode--cpu">
           <button class="lobby-pick lobby-pick--cpu" data-play="cpu">
-            <span class="mode-icon-frame" aria-hidden="true">
-              <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14.5 17.5L3 6V3h3l11.5 11.5" stroke="#ffd1a4" stroke-width="2"/>
-                <path d="M13 19l6 2 2-6-4.5-4.5" stroke="#ff9b4e" stroke-width="1.8"/>
-                <path d="M9.5 17.5L21 6V3h-3L6.5 14.5" stroke="#ffd1a4" stroke-width="2"/>
-                <path d="M11 19l-6 2-2-6 4.5-4.5" stroke="#ff9b4e" stroke-width="1.8"/>
-              </svg>
-            </span>
-            <div class="mode-content">
+            <img class="mode-flag" src="Icons/menu-flag-red.png" alt="" width="220" height="380">
+            <span class="mode-scene" id="mode-scene-cpu" data-stage="coliseo" aria-hidden="true"></span>
+            <img class="mode-medal" src="Icons/menu-medal-normal.png" alt="" width="115" height="104">
+            <span class="mode-content">
               <b>Vs CPU</b>
               <span class="mode-desc">Vos contra la máquina, partida libre</span>
-            </div>
-            <span class="mode-arrow" aria-hidden="true">›</span>
+            </span>
           </button>
 
-          <!-- La dificultad es de este modo y de ningún otro: va colgada de su cartel. Un
-               solo control; el elegido queda en `data-value` (ver `lobby.js`). -->
+          <!-- La dificultad es de este modo y de ningún otro: va colgada de su banderín.
+               Un solo control; el elegido queda en `data-value` (ver `lobby.js`). -->
           <div class="difficulty-shelf" id="difficulty-shelf">
             <span class="difficulty-title" id="difficulty-title">Dificultad</span>
             <div class="diff-pills" id="difficulty" role="radiogroup" aria-labelledby="difficulty-title" data-value="normal">
@@ -260,22 +392,18 @@
         </div>
 
         <!-- Se prende sola si la página la sirvió el servidor del juego: abierta como
-             archivo suelto no hay sala a la que entrar. Ver `net.js`. -->
-        <div class="lobby-mode">
+             archivo suelto no hay sala a la que entrar. Ver `net.js`. Apagado, el
+             banderín es el gris del mismo kit. -->
+        <div class="lobby-mode lobby-mode--net">
           <button class="lobby-pick lobby-pick--net" id="lobby-net" data-play="net" disabled>
-            <span class="mode-icon-frame" aria-hidden="true">
-              <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="7" cy="8" r="3.5" fill="#75d3ff" stroke="#00527c" stroke-width="1.5"/>
-                <path d="M2.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="#75d3ff" stroke-width="2"/>
-                <circle cx="17" cy="8" r="3.5" fill="#ffd15c" stroke="#8c581a" stroke-width="1.5"/>
-                <path d="M12.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="#ffd15c" stroke-width="2"/>
-              </svg>
-            </span>
-            <div class="mode-content">
+            <img class="mode-flag" src="Icons/menu-flag-teal.png" alt="" width="220" height="380">
+            <img class="mode-flag mode-flag--off" src="Icons/menu-flag-grey.png" alt="" width="220" height="380">
+            <span class="mode-scene" id="mode-scene-net" data-stage="plaza" aria-hidden="true"></span>
+            <img class="mode-medal" src="Icons/menu-medal-elite.png" alt="" width="175" height="156">
+            <span class="mode-content">
               <b>Multijugador</b>
               <span class="mode-desc" id="lobby-net-note">Contra otra persona, en una sala</span>
-            </div>
-            <span class="mode-arrow" aria-hidden="true">›</span>
+            </span>
           </button>
         </div>
       </div>
@@ -283,109 +411,488 @@
 
   </div>
 
-  <!-- Tu Axie, en la esquina de enfrente. Es el mismo botón que el de jugar con menos
-       cuerpo —uno es la puerta y el otro es el ropero—, y lleva colgado el nombre del
-       que tenés puesto: sin eso, el que abre el juego no sabe con qué está jugando
-       hasta que empieza la partida y ve salir al bicho.
-
-       Se guarda solo cuando la portada deja de estar en la tapa: adentro del menú y de
-       la elección no pinta nada (ver `.lobby-aside` en el CSS). -->
-  <div class="lobby-aside" id="lobby-aside">
-    <button class="lobby-play lobby-play--alt" id="lobby-loadout">
-      <span class="loadout-cta">AXIES</span>
-      <span class="loadout-now" id="lobby-loadout-now"></span>
-    </button>
-  </div>
-
-  <!-- La letra chica de la portada. No es una tercera puerta: las puertas son dos y
-       están en las dos esquinas de abajo. Esto se lee una vez, la primera, y después
-       nunca más, así que va chico y en el medio — abajo de las dos y entre las dos.
-
-       Estaba colgado del botón de jugar, apilado debajo, y eso le hacía dos cosas: lo
-       ponía a la altura de una puerta, y **levantaba a jugar del piso** lo que mide un
-       botón, así que las dos esquinas dejaban de estar a la misma altura. -->
+  <!-- La letra chica, al pie de los duelos: se lee una vez, la primera, y después
+       nunca más, así que va chica y en el medio, encima de la barra. -->
   <div class="lobby-foot" id="lobby-foot">
-    <button class="btn btn-ghost lobby-help" id="lobby-tutorial">Tutorial</button>
     <button class="btn btn-ghost lobby-help" id="lobby-vision">Visión del producto</button>
+    <p class="lobby-sub">Creado por: MikhChest</p>
   </div>
 
-  <!-- Con quién. Es la última pregunta antes del combate y la que hace que la partida
-       sea tuya: elegir un Axie es elegir el mazo con el que vas a jugar —la clase es el
-       mazo—, así que no es un paso más entre dos botones. Es una pantalla entera, con
-       el bicho grande, su nombre, su clase, **las diez cartas con las que arranca** y
-       la cuenta de cada símbolo que hay adentro de esas diez.
+  <!-- Con quién. Elegir un Axie es elegir el mazo con el que vas a jugar, así que es una
+       pantalla entera, en dos mitades: la colección y la vista previa.
 
-       Que se vean las cartas es todo el punto: sin eso, elegir un Axie es elegir un
-       dibujo. Con las cartas a la vista se ve lo único que de verdad cambia entre uno y
-       otro —cinco pares del color propio, uno solo, y cuatro cartas ajenas—, y la
-       cuenta de abajo lo dice en un número.
+       La colección muestra a los Axies como Axies —el dibujo y el nombre, todos sobre el
+       mismo prado del lobby del kit— y no como clases: la clase se descubre al tocarlo,
+       en la vista previa, junto a su nivel. Con cuarenta bichos se buscan por nombre.
 
-       Se llega de dos lados y por eso la pantalla es la misma con dos carteles. Desde la
-       portada, con el botón de la izquierda: ahí elegís **el tuyo**, el que te queda
-       puesto para todas las partidas que juegues. Y desde el camino de jugar cuando son
-       dos en el mismo teclado, para el **Jugador 2** —que no tiene portada donde
-       elegir—, con la clase del primero fuera de la vuelta porque la clase es el mazo y
-       dos mazos iguales no tendrían gracia. Contra la CPU no se pregunta nada: jugás con
-       el tuyo y el de la máquina se sortea. Lo llena `lobby.js`.
-
-       Va afuera del panel de abajo a la derecha y no adentro: los otros dos son
-       carteles apoyados en una esquina de la escena, y este ocupa la escena.
-
-       Son dos mitades: la colección y la ficha. Con seis bichos alcanzaba una flecha de
-       cada lado, pero los Axies van a ser los de cada jugador —pueden ser cuarenta— y
-       cuarenta no se recorren de a uno: se miran todos juntos, se filtran por clase y
-       se buscan por nombre. La ficha es la del que tocaste, con el mazo a la vista. -->
+       La vista previa es la vitrina: el Axie grande en su terreno, su clase, su nivel,
+       de qué está hecho el mazo en un renglón, y tres puertas: su **inventario** (las
+       cartas, la rueda de símbolos y los espacios para cartas de la mochila), su
+       **evolución** (las cartas favorables, de a una, ver `evolve-view.js`) y elegirlo.
+       Lo llena `lobby.js`. -->
   <div class="lobby-choose" id="lobby-choose" hidden>
     <div class="choose-bar">
       <button class="btn btn-ghost" id="lobby-choose-back">← Volver</button>
       <p class="choose-step o-title" id="lobby-choose-title">Elegí tu Axie</p>
+      <span class="moon-purse" id="choose-purse" title="Moonshards">
+        <svg class="moon-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-moon"/></svg>
+        <b id="choose-shards">0</b>
+      </span>
     </div>
 
-    <!-- La colección: los filtros por clase, el buscador (solo con muchos) y la
-         grilla. La llena `lobby.js`. -->
+    <!-- La colección: el buscador (solo con muchos) y la grilla. -->
     <div class="choose-roster o-panel">
       <div class="choose-tools">
-        <div class="choose-filters" id="lobby-choose-filters"></div>
         <input class="choose-search" id="lobby-choose-search" type="search"
                autocomplete="off" spellcheck="false" hidden>
       </div>
       <div class="choose-grid" id="lobby-choose-roster"></div>
     </div>
 
-    <!-- La ficha: el bicho, su nombre, su clase y la cuenta de símbolos arriba; el
-         mazo con el que arranca en el mismo formato que en la mesa, y el botón. -->
+    <!-- La vista previa del Axie tocado. -->
     <div class="choose-sheet o-panel">
-      <div class="choose-head">
-        <div class="choose-art" id="lobby-choose-art"></div>
-        <div class="choose-info">
-          <div class="choose-id" id="lobby-choose-id"></div>
-          <div class="choose-tally" id="lobby-choose-tally"></div>
-        </div>
+      <div class="choose-art" id="lobby-choose-art"></div>
+      <div class="choose-id" id="lobby-choose-id"></div>
+      <p class="choose-deckline" id="lobby-choose-deckline"></p>
+      <div class="choose-actions">
+        <button class="inv-btn" id="lobby-inventory">
+          <i class="inv-ico" aria-hidden="true"></i><span>Inventario</span>
+        </button>
+        <button class="inv-btn evolve-btn" id="lobby-evolve-open">
+          <svg class="evolve-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-evolve"/></svg><span>Evolucionar</span>
+          <b class="evolve-ready" id="lobby-evolve-ready" hidden title="¡Evolución disponible!"></b>
+        </button>
+        <button class="lobby-play choose-go" id="lobby-start">Elegir Axie</button>
       </div>
-      <div class="choose-cards">
-        <p class="choose-label" id="lobby-choose-deck-label">Mazo inicial · 10 cartas</p>
-        <div class="choose-deck" id="lobby-choose-deck"></div>
-      </div>
-      <button class="lobby-play choose-go" id="lobby-start">Elegir Axie</button>
     </div>
   </div>
 
-  <!-- El Modo Aventura. Es la misma pantalla que la elección de Axie con otra
-       pregunta: a la izquierda el mapa —un naipe por nivel, con el rival que te espera
-       dibujado adentro— y a la derecha la ficha del que tocaste, con el rival vivo
-       sobre su terreno, los poderes que se estrenan y el botón. Parada, el mapa es una
-       fila arriba y la ficha se queda con el resto. Lo llena `lobby.js`. -->
-  <div class="lobby-adventure" id="lobby-adventure" hidden>
+  <!-- El inventario de un Axie: adentro del bicho. A la izquierda él, con su clase, su
+       nivel y la rueda de símbolos de su mazo; a la derecha sus cartas: las 8 de fábrica
+       y los espacios para cartas de la mochila (ver `backpack.js`). Un espacio vacío
+       abre la mochila para elegir qué ponerle; la × de una carta puesta la devuelve. -->
+  <div class="lobby-inv" id="lobby-inv" hidden>
     <div class="choose-bar">
-      <button class="btn btn-ghost" id="lobby-adventure-back">← Volver</button>
-      <p class="choose-step o-title" id="lobby-adventure-title">Modo Aventura</p>
+      <button class="btn btn-ghost" id="lobby-inv-back">← Volver</button>
+      <p class="choose-step o-title">Inventario</p>
+      <span class="moon-purse" id="inv-purse" title="Moonshards">
+        <svg class="moon-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-moon"/></svg>
+        <b id="inv-shards">0</b>
+      </span>
+    </div>
+    <div class="inv-hero o-panel">
+      <div class="choose-art inv-art" id="lobby-inv-art"></div>
+      <div class="choose-id" id="lobby-inv-id"></div>
+      <div class="choose-tally" id="lobby-inv-tally"></div>
+    </div>
+    <div class="inv-cards o-panel">
+      <p class="choose-label" id="lobby-inv-base-label">Mazo</p>
+      <div class="choose-deck inv-deck" id="lobby-inv-base"></div>
+      <p class="choose-label" id="lobby-inv-extra-label">Mochila</p>
+      <div class="choose-deck inv-deck inv-slots" id="lobby-inv-extras"></div>
+    </div>
+  </div>
+
+  <!-- La evolución de un Axie (ver `evolve-view.js` y `evolution.js`): se abre desde su
+       vista previa. Arriba los Moonshards; a la izquierda —parado, arriba— él, con su
+       nivel, su experiencia, las seis evoluciones que abre de a diez niveles y la rueda
+       de símbolos de su mazo; a la derecha sus seis cartas favorables, y debajo la
+       elegida: cómo queda y el botón de evolucionar con lo que cuesta. Con una carta
+       elegida, la rueda muestra el mazo como quedaría y cuánto cambia cada símbolo. -->
+  <div class="lobby-evolve" id="lobby-evolve" hidden>
+    <div class="choose-bar">
+      <button class="btn btn-ghost" id="lobby-evolve-back">← Volver</button>
+      <p class="choose-step o-title">Evolución</p>
+      <span class="moon-purse" id="evolve-purse" title="Moonshards">
+        <svg class="moon-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-moon"/></svg>
+        <b id="evolve-shards">0</b>
+      </span>
+    </div>
+    <div class="evolve-hero o-panel">
+      <div class="choose-art evolve-art" id="evolve-art"></div>
+      <div class="choose-id" id="evolve-id"></div>
+      <div class="evolve-xp" id="evolve-xp" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <i class="evolve-xp-fill" id="evolve-xp-fill"></i>
+        <small class="evolve-xp-text" id="evolve-xp-text"></small>
+      </div>
+      <ol class="evolve-track" id="evolve-track" aria-label="Evoluciones"></ol>
+      <p class="evolve-next" id="evolve-next"></p>
+      <p class="choose-label evolve-mix-label" id="evolve-mix-label">Símbolos del mazo</p>
+      <div class="choose-tally evolve-mix" id="evolve-mix"></div>
+    </div>
+    <div class="evolve-cards o-panel">
+      <p class="choose-label" id="evolve-cards-label">Cartas favorables</p>
+      <div class="evolve-deck" id="evolve-deck"></div>
+      <div class="evolve-pick o-well" id="evolve-pick"></div>
+    </div>
+  </div>
+
+  <!-- La mochila: tu colección de cartas sueltas (ver `backpack.js`). Se abre de dos
+       maneras: para mirar, desde su pestaña, o para elegir una carta para el Axie del
+       inventario, desde uno de sus espacios vacíos (y ahí lleva "Volver"). Una pila por
+       carta distinta, con la gema de su rareza, cuántas hay y sus tres casilleros hacia
+       la fusión; arriba, el filtro (cada rareza por su gema y las listas para fusionar);
+       tocar una abre su ficha encima, con fusionar y reciclar (ver `paintBag` en
+       `lobby.js`). -->
+  <div class="lobby-bag" id="lobby-bag" hidden>
+    <div class="choose-bar">
+      <button class="btn btn-ghost" id="lobby-bag-back">← Volver</button>
+      <p class="choose-step o-title" id="lobby-bag-title">Mochila</p>
+      <span class="moon-purse" id="bag-purse" title="Moonshards">
+        <svg class="moon-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-moon"/></svg>
+        <b id="bag-shards">0</b>
+      </span>
+    </div>
+    <div class="bag-panel o-panel">
+      <p class="bag-hint" id="lobby-bag-hint"></p>
+      <div class="bag-tools" id="lobby-bag-tools"></div>
+      <div class="bag-grid" id="lobby-bag-grid"></div>
+    </div>
+  </div>
+
+  <!-- El Modo Aventura: el mundo. La pantalla entera es un solo mapa dibujado en código
+       con un camino que cruza las cinco tierras (lo arman `map-world.js` y `map-art.js`,
+       y lo pone en pantalla `adventure-map.js`); arriba, tu perfil —tu Axie en el aro del
+       kit, tu nivel y la barra de experiencia (ver `profile.js`)— y las estrellas, y abajo,
+       el panel del nivel elegido con su único botón de pelear. Lo maneja `lobby.js`. -->
+  <div class="lobby-adventure" id="lobby-adventure">
+    <div class="adv-world" id="adventure-levels"></div>
+    <div class="choose-bar adv-bar">
+      <button type="button" class="adv-profile" id="adventure-profile" aria-haspopup="dialog" aria-label="Tu perfil">
+        <span class="adv-profile-ring" aria-hidden="true"><span class="adv-profile-axie" id="adventure-profile-axie"></span></span>
+        <b class="adv-profile-lvl" id="adventure-profile-level" aria-hidden="true">1</b>
+        <span class="adv-profile-main">
+          <span class="adv-profile-name" id="adventure-profile-name">Nivel 1</span>
+          <span class="adv-profile-bar" id="adventure-profile-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <i class="adv-profile-fill" id="adventure-profile-fill"></i>
+            <small class="adv-profile-xp" id="adventure-profile-xp">0/100</small>
+          </span>
+        </span>
+      </button>
+      <span class="moon-purse" id="adventure-purse" title="Moonshards">
+        <svg class="moon-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-moon"/></svg>
+        <b id="adventure-shards">0</b>
+      </span>
       <span class="adv-progress" id="adventure-progress"></span>
     </div>
-    <div class="adventure-map o-panel">
-      <div class="adventure-levels" id="adventure-levels"></div>
-    </div>
+    <!-- Las misiones (ver `missions-view.js`): en una pantalla ancha, una tabla a la
+         izquierda debajo de tu perfil, que se pliega al botón; en un teléfono, solo el
+         botón, que abre `#quests-modal`. -->
+    <aside class="adv-quests o-panel" id="adventure-quests" aria-labelledby="adventure-quests-title">
+      <div class="qb-head">
+        <svg class="quest-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-quest"/></svg>
+        <h2 class="qb-title" id="adventure-quests-title">Misiones</h2>
+        <button type="button" class="qb-fold" id="adventure-quests-fold" aria-controls="adventure-quests" aria-expanded="true" aria-label="Ocultar misiones"></button>
+      </div>
+      <div class="qb-body" id="adventure-quests-body"></div>
+    </aside>
+    <button type="button" class="adv-quests-btn" id="adventure-quests-btn" aria-haspopup="dialog" aria-label="Misiones" title="Misiones">
+      <svg class="quest-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-quest"/></svg>
+      <b class="nav-count" id="adventure-quests-count"></b>
+    </button>
     <div class="adventure-card o-panel" id="adventure-card"></div>
   </div>
+
+  <!-- El Taller: la forja de cartas para la mochila (ver `workshop.js` y `crafting.js`).
+       Arriba tus llaves y los Moonshards; a la izquierda —parado, arriba— un mazo de
+       dorsos, la barra de la carta con poder asegurada y los botones (crear una, crear
+       diez, la llave de oro con su legendaria asegurada). A la derecha, siempre, las
+       chances de cada rareza: con Moonshards o la llave común, y con la de oro. Lo que sale se cuenta en grande, en
+       `#card-scene` (ver `playCraft` en `card-scene.js`). -->
+  <div class="lobby-craft" id="lobby-craft" hidden>
+    <div class="choose-bar">
+      <p class="choose-step o-title">Taller</p>
+      <span class="key-purse" id="craft-keys" hidden></span>
+      <span class="moon-purse" id="craft-purse" title="Moonshards">
+        <svg class="moon-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#ic-moon"/></svg>
+        <b id="craft-shards">0</b>
+      </span>
+    </div>
+    <div class="forge-hero o-panel">
+      <div class="forge-stack" id="forge-stack" aria-hidden="true"></div>
+      <div class="forge-head">
+        <p class="forge-title">Crear cartas</p>
+        <p class="forge-lead">Cartas sueltas para tu mochila, con símbolos al azar.</p>
+      </div>
+      <div class="forge-pity" id="forge-pity" role="progressbar" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0">
+        <i class="forge-pity-fill" id="forge-pity-fill"></i>
+        <small class="forge-pity-text" id="forge-pity-text"></small>
+      </div>
+      <div class="forge-acts" id="forge-acts"></div>
+    </div>
+    <div class="forge-cards o-panel">
+      <p class="choose-label forge-odds-top">Probabilidades<span class="forge-odds-head" id="forge-odds-head"></span></p>
+      <ul class="forge-odds" id="forge-odds"></ul>
+      <p class="forge-rule" id="forge-rule"></p>
+    </div>
+  </div>
+
+  <!-- La evolución, en grande: el Axie se carga y cambia, y la carta suma su símbolo
+       (ver `evolve-scene.js`). Tapa la portada entera mientras dura. -->
+  <div class="evolve-scene" id="evolve-scene" hidden></div>
+
+  <!-- Fusionar y crear, en grande (ver `card-scene.js`): el altar con las tres copias y
+       la que sale, o los martillazos del Taller y las cartas que se dan vuelta. Tapa la
+       portada entera mientras dura, como la evolución. -->
+  <div class="evolve-scene card-scene" id="card-scene" hidden></div>
+
+  <!-- La ficha de la carta tocada en la mochila (ver `paintBagDetail` en `lobby.js`):
+       encima de todo, también de la barra de pestañas, y solo con la mochila a la vista. -->
+  <div class="bag-detail" id="lobby-bag-detail" hidden></div>
+
+  <!-- La barra de abajo: cinco pestañas, un ícono cada una y ninguna palabra (el nombre
+       va en `aria-label` y `title`). La del medio, la Aventura, es la grande y es con la
+       que se abre el juego. La encendida lleva `aria-current` (ver `view` en
+       `lobby.js`). Sobre una sala no está: ahí la portada es solo la elección.
+
+       Los íconos están pintados como el mapa (ver `map-art.js`): pintura mate, la luz
+       es un plano cálido arriba a la izquierda y la sombra otro color, frío, abajo a la
+       derecha, con un borde oscuro solo en la silueta para despegarlos de la madera.
+       Espadas sobre un escudo, un mapa desplegado, una mochila de viaje con su manta y
+       un yunque con el martillo. El de los Axies no es un dibujo: es tu Axie (lo pone
+       `paintYours`). El sprite no va con `display: none`: los recortes de adentro no se
+       pintarían. -->
+  <nav class="lobby-nav" id="lobby-nav" aria-label="Secciones">
+    <svg class="nav-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="nv-sword" viewBox="0 0 100 100" overflow="visible">
+          <g fill="#2e1a28" stroke="#2e1a28" stroke-width="6" stroke-linejoin="round">
+            <path d="M50 5 L55.5 15 V62 H44.5 V15 Z"/><rect x="34" y="60.5" width="32" height="9" rx="4.5"/>
+            <rect x="46.2" y="68" width="7.6" height="15" rx="2"/><circle cx="50" cy="87" r="5.8"/>
+          </g>
+          <path d="M50 5 L55.5 15 V62 H44.5 V15 Z" fill="#cdd5df"/>
+          <path d="M50 5 L55.5 15 V62 H50 Z" fill="#8a93bd"/>
+          <path d="M47.2 17 V58" stroke="#fff4dc" stroke-width="2.2" stroke-linecap="round"/>
+          <rect x="34" y="60.5" width="32" height="9" rx="4.5" fill="#e0a445"/>
+          <path d="M53 67.5 H63" stroke="#9a5a62" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M38 63.3 H56" stroke="#ffe7a6" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="46.2" y="68" width="7.6" height="15" rx="2" fill="#7a4a3a"/>
+          <path d="M46.2 72.5 l7.6 -2.4 M46.2 78 l7.6 -2.4" stroke="#4a2838" stroke-width="1.7"/>
+          <circle cx="50" cy="87" r="5.8" fill="#e0a445"/><circle cx="52" cy="89" r="3.2" fill="#9a5a62" opacity=".55"/><circle cx="48.4" cy="85.3" r="2.2" fill="#ffe7a6"/>
+        </symbol>
+        <clipPath id="nv-shield-c"><circle cx="50" cy="52" r="29"/></clipPath>
+        <symbol id="nv-duel" viewBox="0 0 100 100" overflow="visible">
+          <circle cx="50" cy="52" r="32" fill="#2e1a28"/>
+          <g clip-path="url(#nv-shield-c)">
+            <rect x="0" y="0" width="100" height="100" fill="#6e4058"/>
+            <circle cx="45" cy="47" r="28" fill="#b8703f"/>
+            <path d="M24 38 C28 26 40 21 52 23 C44 28 38 36 36 46 C31 46 27 43 24 38Z" fill="#eaa96a"/>
+            <path d="M38 22 V84 M50 22 V84 M62 22 V84" stroke="#6e4058" stroke-width="2" opacity=".45"/>
+          </g>
+          <circle cx="50" cy="52" r="28" fill="none" stroke="#e0a445" stroke-width="4.5"/>
+          <path d="M26 42 A27 27 0 0 1 46 25" fill="none" stroke="#ffe7a6" stroke-width="2.6" stroke-linecap="round"/>
+          <path d="M72 64 A27 27 0 0 1 56 78.5" fill="none" stroke="#9a5a62" stroke-width="2.6" stroke-linecap="round"/>
+          <use href="#nv-sword" x="0" y="0" width="100" height="100" transform="rotate(-40 50 52)"/>
+          <use href="#nv-sword" x="0" y="0" width="100" height="100" transform="rotate(40 50 52)"/>
+        </symbol>
+        <clipPath id="nv-sheet-c"><path d="M20 21 C36 16 64 26 80 21 V80 C64 85 36 75 20 80 Z"/></clipPath>
+        <symbol id="nv-map" viewBox="0 0 100 100" overflow="visible">
+          <g fill="#2e1a28" stroke="#2e1a28" stroke-width="6" stroke-linejoin="round">
+            <path d="M20 21 C36 16 64 26 80 21 V80 C64 85 36 75 20 80 Z"/>
+            <rect x="11" y="16" width="13" height="70" rx="6.5"/><rect x="76" y="16" width="13" height="70" rx="6.5"/>
+          </g>
+          <g clip-path="url(#nv-sheet-c)">
+            <rect x="0" y="0" width="100" height="100" fill="#efd6a0"/>
+            <path d="M20 21 C36 16 64 26 80 21 V44 C62 40 44 30 20 36Z" fill="#fff1c8"/>
+            <path d="M80 56 C66 60 56 72 52 90 H90Z" fill="#c9ab8e" opacity=".75"/>
+            <path d="M20 48 C30 42 42 48 47 58 C51 68 44 78 20 86 Z" fill="#8fb25a"/>
+            <path d="M20 54 C28 49 36 51 40 56" stroke="#c9dc7a" stroke-width="3" stroke-linecap="round" fill="none"/>
+            <path d="M22 76 C30 74 38 70 42 66" stroke="#5f7d68" stroke-width="3" stroke-linecap="round" fill="none" opacity=".7"/>
+            <path d="M60 14 C56 30 70 40 64 56 C60 68 70 78 68 92" stroke="#5a7cb0" stroke-width="7" stroke-linecap="round" fill="none"/>
+            <path d="M60 14 C56 30 70 40 64 56 C60 68 70 78 68 92" stroke="#7ec3dc" stroke-width="4" stroke-linecap="round" fill="none"/>
+            <path d="M58.5 26 C58 32 61 36 63 40" stroke="#d6f2f6" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+            <path d="M25 44 L33 30 L41 44Z" fill="#8f90b8"/><path d="M33 30 L25 44 H31 Z" fill="#f2e0c4"/>
+            <path d="M36 44 L42 35 L48 44Z" fill="#7d80ab"/><path d="M42 35 L36 44 H40.5Z" fill="#e8d4b6"/>
+            <circle cx="72" cy="64" r="3.6" fill="#6f9a52"/><circle cx="76.5" cy="68.5" r="3" fill="#5f8a4a"/>
+            <path d="M28 71 C37 66 43 63 50 58 C55 54 58 50 66 42" stroke="#b5462c" stroke-width="3" stroke-dasharray=".1 5.2" stroke-linecap="round" fill="none"/>
+            <path d="M40 21 V80 M60 21 V84" stroke="#b9956e" stroke-width="1.6" opacity=".45"/>
+          </g>
+          <path d="M66 32 L74 40 M74 32 L66 40" stroke="#2e1a28" stroke-width="7" stroke-linecap="round"/>
+          <path d="M66 32 L74 40 M74 32 L66 40" stroke="#e0503c" stroke-width="3.8" stroke-linecap="round"/>
+          <g>
+            <rect x="11" y="16" width="13" height="70" rx="6.5" fill="#e3c184"/>
+            <rect x="17.5" y="16" width="6.5" height="70" rx="3.2" fill="#b58d7c"/>
+            <path d="M14.5 22 V80" stroke="#fff0c4" stroke-width="2.4" stroke-linecap="round"/>
+            <rect x="76" y="16" width="13" height="70" rx="6.5" fill="#e3c184"/>
+            <rect x="82.5" y="16" width="6.5" height="70" rx="3.2" fill="#b58d7c"/>
+            <path d="M79.5 22 V80" stroke="#fff0c4" stroke-width="2.4" stroke-linecap="round"/>
+          </g>
+        </symbol>
+        <clipPath id="nv-pack-c"><path d="M24 36 C24 30 30 28 36 28 H64 C70 28 76 30 76 36 V85 C76 90 72 93 67 93 H33 C28 93 24 90 24 85Z"/></clipPath>
+        <symbol id="nv-bag" viewBox="0 0 100 100" overflow="visible">
+          <g fill="#2e1a28" stroke="#2e1a28" stroke-width="6" stroke-linejoin="round">
+            <path d="M40 24 C40 12 60 12 60 24" fill="none" stroke-width="12"/>
+            <rect x="15" y="54" width="14" height="28" rx="5"/><rect x="71" y="54" width="14" height="28" rx="5"/>
+            <path d="M24 36 C24 30 30 28 36 28 H64 C70 28 76 30 76 36 V85 C76 90 72 93 67 93 H33 C28 93 24 90 24 85Z"/>
+            <rect x="16" y="17" width="68" height="17" rx="8.5"/>
+          </g>
+          <path d="M40 24 C40 12 60 12 60 24" fill="none" stroke="#7a4a3a" stroke-width="4.5" stroke-linecap="round"/>
+          <rect x="15" y="54" width="14" height="28" rx="5" fill="#a95f35"/><rect x="15" y="54" width="7" height="28" rx="3.5" fill="#d98f52"/>
+          <rect x="71" y="54" width="14" height="28" rx="5" fill="#7a4660"/>
+          <g clip-path="url(#nv-pack-c)">
+            <rect x="0" y="0" width="100" height="100" fill="#c77a3e"/>
+            <path d="M62 28 H80 V96 H56 C64 80 66 50 62 28Z" fill="#7a4660" opacity=".7"/>
+            <path d="M24 60 C30 56 32 44 30 30 H20 V62Z" fill="#f0b070"/>
+            <path d="M24 34 C24 28 30 26 36 26 H64 C70 26 76 28 76 34 V52 C66 61 34 61 24 52Z" fill="#a95f35"/>
+            <path d="M24 34 C26 28 34 27 46 27 C38 32 34 40 32 55 C28 54 26 53 24 52Z" fill="#d98f52"/>
+            <path d="M27 53.5 C38 61 62 61 73 53.5" stroke="#f3c48a" stroke-width="1.8" stroke-dasharray="3 3" fill="none"/>
+            <path d="M32 67 H68 V83 C68 87 65 89 61 89 H39 C35 89 32 87 32 83Z" fill="#d98f52"/>
+            <path d="M56 67 H68 V83 C68 87 65 89 61 89 H54 C58 84 58 74 56 67Z" fill="#a95f35"/>
+            <path d="M32 67 H68 V72 C58 76 42 76 32 72Z" fill="#a95f35"/>
+          </g>
+          <rect x="46" y="50" width="8" height="20" rx="2" fill="#6e3e32"/>
+          <rect x="43.5" y="56" width="13" height="10" rx="2.4" fill="none" stroke="#2e1a28" stroke-width="5"/>
+          <rect x="43.5" y="56" width="13" height="10" rx="2.4" fill="none" stroke="#e0a445" stroke-width="2.8"/>
+          <rect x="16" y="17" width="68" height="17" rx="8.5" fill="#6f8fb8"/>
+          <path d="M20 29 C40 33 60 33 80 29 V30 C80 32 78 34 75.5 34 H24.5 C22 34 20 32 20 30Z" fill="#4f5f98"/>
+          <path d="M22 22 C40 19 60 19 78 22" stroke="#b8d2e6" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+          <path d="M27 17 V34 M73 17 V34" stroke="#c85a4a" stroke-width="3.4"/>
+          <rect x="34" y="15" width="6" height="21" rx="1.5" fill="#6e3e32"/><rect x="60" y="15" width="6" height="21" rx="1.5" fill="#6e3e32"/>
+        </symbol>
+        <clipPath id="nv-anvil-c"><path d="M8 44 C20 44 27 41 29 38 H90 V50 H76 L69 60 L80 70 V82 H28 V70 L39 60 L35 53 C20 53 11 50 8 44 Z"/></clipPath>
+        <symbol id="nv-craft" viewBox="0 0 100 100" overflow="visible">
+          <g fill="#2e1a28" stroke="#2e1a28" stroke-width="6" stroke-linejoin="round">
+            <path d="M8 44 C20 44 27 41 29 38 H90 V50 H76 L69 60 L80 70 V82 H28 V70 L39 60 L35 53 C20 53 11 50 8 44 Z"/>
+            <g transform="rotate(34 55 22)"><rect x="41" y="15" width="28" height="13" rx="3"/><rect x="51.5" y="-14" width="7" height="30" rx="3"/></g>
+          </g>
+          <g clip-path="url(#nv-anvil-c)">
+            <rect x="0" y="0" width="100" height="100" fill="#8a94ad"/>
+            <path d="M8 44 C20 44 27 41 29 38 H90 V43 H30 C24 46 16 47 8 44Z" fill="#ece6da"/>
+            <path d="M62 50 H92 V90 H60 L72 70 L62 60Z" fill="#555d8c"/>
+            <path d="M24 70 H90 V90 H24Z" fill="#4d5480"/>
+            <path d="M28 70 H56 V74 H28Z" fill="#8a94ad"/>
+          </g>
+          <circle cx="50" cy="34" r="15" fill="#ffb347" opacity=".35"/>
+          <rect x="38" y="31" width="24" height="6.5" rx="3.2" fill="#2e1a28" stroke="#2e1a28" stroke-width="3"/>
+          <rect x="38" y="31" width="24" height="6.5" rx="3.2" fill="#ff8a3a"/><path d="M41 33.2 H57" stroke="#ffe08a" stroke-width="2" stroke-linecap="round"/>
+          <g transform="rotate(34 55 22)">
+            <rect x="51.5" y="-14" width="7" height="30" rx="3" fill="#b8703f"/><rect x="55" y="-14" width="3.5" height="30" rx="1.7" fill="#7a4660"/>
+            <rect x="41" y="15" width="28" height="13" rx="3" fill="#9aa4bb"/>
+            <path d="M41 15 H69 V19 H41Z" fill="#ece6da"/><path d="M56 23.5 H69 V28 H56Z" fill="#555d8c"/>
+          </g>
+          <g fill="#ffd66b"><path d="M26 16 L28 22 L34 24 L28 26 L26 32 L24 26 L18 24 L24 22Z"/><path d="M38 8 L39.2 11.6 L42.8 12.8 L39.2 14 L38 17.6 L36.8 14 L33.2 12.8 L36.8 11.6Z"/></g>
+          <g fill="#fff3c4"><circle cx="26" cy="24" r="1.6"/><circle cx="34" cy="30" r="1.8"/><circle cx="18" cy="34" r="1.4"/></g>
+        </symbol>
+        <!-- El Moonshard, la moneda (ver `evolution.js`): una medialuna de cristal tallada
+             en caras. La luz de arriba a la izquierda aclara la punta de arriba y la sombra
+             fría oscurece la de abajo; las caras se separan con una arista clara. -->
+        <!-- Evolucionar: una flecha para arriba, verde como la evolución abierta del riel,
+             con la luz cálida en la cara de arriba a la izquierda, la sombra fría abajo a
+             la derecha y una chispa dorada. -->
+        <clipPath id="ic-evolve-c"><path d="M50 8 L87 47 H65 V90 H35 V47 H13 Z"/></clipPath>
+        <symbol id="ic-evolve" viewBox="0 0 100 100" overflow="visible">
+          <path d="M50 8 L87 47 H65 V90 H35 V47 H13 Z" fill="#2e1a28" stroke="#2e1a28" stroke-width="7" stroke-linejoin="round"/>
+          <g clip-path="url(#ic-evolve-c)">
+            <rect x="0" y="0" width="100" height="100" fill="#3fb983"/>
+            <path d="M13 47 L50 8 L57 16 C45 25 41 35 39 47 V92 H35 V47Z" fill="#bfeb86"/>
+            <path d="M57 47 H88 L70 27 C67 35 63 41 57 47Z" fill="#23707a"/>
+            <path d="M56 47 H66 V92 H53 C56 78 57 62 56 47Z" fill="#23707a"/>
+          </g>
+          <path d="M20 44 L48 15" stroke="#f4ffd6" stroke-width="3.2" stroke-linecap="round"/>
+          <path d="M82 10 L84.2 16.4 L90.6 18.6 L84.2 20.8 L82 27.2 L79.8 20.8 L73.4 18.6 L79.8 16.4Z" fill="#ffd66b"/>
+          <circle cx="90" cy="32" r="1.8" fill="#fff3c4"/>
+        </symbol>
+        <clipPath id="ic-moon-c"><path d="M47 14 A38 38 0 1 0 85.4 58.8 A30 30 0 1 1 47 14Z"/></clipPath>
+        <symbol id="ic-moon" viewBox="0 0 100 100" overflow="visible">
+          <path d="M47 14 A38 38 0 1 0 85.4 58.8 A30 30 0 1 1 47 14Z" fill="#2e1a28" stroke="#2e1a28" stroke-width="7" stroke-linejoin="round"/>
+          <g clip-path="url(#ic-moon-c)">
+            <rect x="0" y="0" width="100" height="100" fill="#8e9be6"/>
+            <path d="M0 0 H62 L33.8 29.7 L12.3 39 L0 40Z" fill="#eef0ff"/>
+            <path d="M0 40 L12.3 39 L33.8 29.7 L36 55 L15.1 71 L0 72Z" fill="#c3cdfb"/>
+            <path d="M56.8 69.5 L41.4 89.4 L50 100 H100 V45Z" fill="#5a5bab"/>
+            <path d="M33.8 29.7 L12.3 39 M36 55 L15.1 71 M56.8 69.5 L41.4 89.4" stroke="#f6f4ff" stroke-width="2" opacity=".85"/>
+            <path d="M44 18 C26 22 14 38 13 56" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round" fill="none" opacity=".9"/>
+          </g>
+          <path d="M80 18 L82.2 24.4 L88.6 26.6 L82.2 28.8 L80 35.2 L77.8 28.8 L71.4 26.6 L77.8 24.4Z" fill="#ffd66b"/>
+          <circle cx="68" cy="40" r="2.2" fill="#fff3c4"/><circle cx="90" cy="40" r="1.6" fill="#fff3c4"/>
+        </symbol>
+        <!-- La gema de la rareza (ver `gemHtml` en `card-scene.js`): un brillante visto de
+             costado, pintado como el mapa —la luz cálida arriba a la izquierda, la sombra
+             fría abajo a la derecha, borde oscuro solo en la silueta—. Los colores salen
+             del `--t` de la rareza (`.gem` en el CSS). -->
+        <symbol id="ic-gem" viewBox="0 0 24 24" overflow="visible">
+          <path d="M7 3 H17 L22.5 9 L12 22 L1.5 9Z" fill="#2b1809" stroke="#2b1809" stroke-width="2.6" stroke-linejoin="round"/>
+          <path d="M1.5 9 L7 3 L9.4 9Z" style="fill:var(--gem-lt)"/>
+          <path d="M7 3 H17 L14.6 9 H9.4Z" style="fill:var(--gem-hi)"/>
+          <path d="M17 3 L22.5 9 H14.6Z" style="fill:var(--gem-md)"/>
+          <path d="M1.5 9 H9.4 L12 22Z" style="fill:var(--gem-md)"/>
+          <path d="M9.4 9 H14.6 L12 22Z" style="fill:var(--gem-lt)"/>
+          <path d="M14.6 9 H22.5 L12 22Z" style="fill:var(--gem-dk)"/>
+          <path d="M8.6 5.2 L10.6 4.6" stroke="#fffbe8" stroke-width="1.3" stroke-linecap="round" opacity=".8"/>
+        </symbol>
+        <!-- Lista para fusionar: la flecha gruesa para arriba, verde mate. -->
+        <symbol id="ic-up" viewBox="0 0 24 24" overflow="visible">
+          <path d="M12 1.5 L22.5 12 H16.5 V22.5 H7.5 V12 H1.5Z" fill="#123d24" stroke="#123d24" stroke-width="2.6" stroke-linejoin="round"/>
+          <path d="M12 1.5 L1.5 12 H7.5 V22.5 H12Z" fill="#7fdc76"/>
+          <path d="M12 1.5 L22.5 12 H16.5 V22.5 H12Z" fill="#2c9a6c"/>
+          <path d="M12 1.5 L4.5 9 H9.5 L12 6Z" fill="#c4f5a8"/>
+        </symbol>
+        <!-- La llave del pase (ver `keyIcon` en `missions-view.js`): el ojo abajo a la
+             izquierda y los dientes arriba a la derecha, con la luz cálida en el canto de
+             arriba y la sombra fría en el de abajo. El color es de su clase (`--key-*`
+             en `.key-ico`): hierro u oro. -->
+        <clipPath id="ic-key-c"><path d="M10 50 A20 20 0 1 1 50 50 A20 20 0 1 1 10 50Z M22.5 50 A7.5 7.5 0 1 0 37.5 50 A7.5 7.5 0 1 0 22.5 50Z M46 44 H90 V56 H84 V70 H76 V56 H70 V65 H62 V56 H46Z"/></clipPath>
+        <symbol id="ic-key" viewBox="0 0 100 100" overflow="visible">
+          <g transform="rotate(-45 50 50)">
+            <path d="M10 50 A20 20 0 1 1 50 50 A20 20 0 1 1 10 50Z M22.5 50 A7.5 7.5 0 1 0 37.5 50 A7.5 7.5 0 1 0 22.5 50Z M46 44 H90 V56 H84 V70 H76 V56 H70 V65 H62 V56 H46Z" fill="#2b1809" stroke="#2b1809" stroke-width="7" stroke-linejoin="round"/>
+            <g clip-path="url(#ic-key-c)">
+              <rect x="0" y="0" width="100" height="100" style="fill:var(--key-md, #c79a5e)"/>
+              <path d="M0 0 H100 V48 H50 C42 40 36 37 30 37 C22 37 15 42 12 50 H0Z" style="fill:var(--key-lt, #f1dcb2)"/>
+              <path d="M0 100 V54 H8 C12 64 20 70 30 70 C40 70 46 63 49 56 H100 V100Z" style="fill:var(--key-dk, #6b4f5e)"/>
+            </g>
+            <path d="M15 43 C19 33 28 29 37 32" stroke="#fffbe8" stroke-width="3.2" stroke-linecap="round" fill="none" opacity=".85"/>
+            <path d="M56 46.5 H86" stroke="#fffbe8" stroke-width="2.4" stroke-linecap="round" opacity=".7"/>
+          </g>
+          <path d="M84 8 L86 13.8 L91.8 15.8 L86 17.8 L84 23.6 L82 17.8 L76.2 15.8 L82 13.8Z" fill="#ffd66b"/>
+        </symbol>
+        <!-- Las misiones: un pergamino desenrollado con dos renglones y una tilde verde,
+             entre sus dos rollos. La luz cálida a la izquierda, la sombra fría a la
+             derecha y abajo. -->
+        <clipPath id="ic-quest-c"><path d="M24 20 H76 V80 H24Z M16 10 H84 A9 9 0 0 1 84 28 H16 A9 9 0 0 1 16 10Z M16 72 H84 A9 9 0 0 1 84 90 H16 A9 9 0 0 1 16 72Z"/></clipPath>
+        <symbol id="ic-quest" viewBox="0 0 100 100" overflow="visible">
+          <path d="M24 20 H76 V80 H24Z M16 10 H84 A9 9 0 0 1 84 28 H16 A9 9 0 0 1 16 10Z M16 72 H84 A9 9 0 0 1 84 90 H16 A9 9 0 0 1 16 72Z" fill="#2b1809" stroke="#2b1809" stroke-width="7" stroke-linejoin="round"/>
+          <g clip-path="url(#ic-quest-c)">
+            <rect x="0" y="0" width="100" height="100" fill="#ead2a0"/>
+            <rect x="0" y="0" width="44" height="100" fill="#f7e8c4"/>
+            <path d="M62 28 H100 V72 H62 C66 58 66 42 62 28Z" fill="#bfa58f"/>
+            <rect x="0" y="10" width="100" height="18" fill="#d4a86a"/>
+            <rect x="0" y="10" width="100" height="7" fill="#efcb8c"/>
+            <rect x="0" y="22" width="100" height="6" fill="#8f7486"/>
+            <rect x="0" y="72" width="100" height="18" fill="#d4a86a"/>
+            <rect x="0" y="72" width="100" height="7" fill="#efcb8c"/>
+            <rect x="0" y="84" width="100" height="6" fill="#8f7486"/>
+          </g>
+          <path d="M33 39 H58 M33 50 H52" stroke="#8a5a34" stroke-width="5" stroke-linecap="round"/>
+          <path d="M36 62 L43 69 L63 52" fill="none" stroke="#123d24" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M36 62 L43 69 L63 52" fill="none" stroke="#5fc46b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        </symbol>
+        <!-- Recién llegada: el destello de cuatro puntas de la luna, dorado. -->
+        <symbol id="ic-new" viewBox="0 0 24 24" overflow="visible">
+          <path d="M12 1 L14.6 9.4 L23 12 L14.6 14.6 L12 23 L9.4 14.6 L1 12 L9.4 9.4Z" fill="#5a3510" stroke="#5a3510" stroke-width="2.4" stroke-linejoin="round"/>
+          <path d="M12 1 L14.6 9.4 L23 12 L14.6 14.6 L12 23 L9.4 14.6 L1 12 L9.4 9.4Z" fill="#ffc94a"/>
+          <path d="M12 1 L9.4 9.4 L1 12 H12Z" fill="#fff1b8"/>
+          <path d="M23 12 L14.6 14.6 L12 23 V12Z" fill="#df9a2a"/>
+        </symbol>
+      </defs>
+    </svg>
+    <button class="nav-tab" data-tab="duel" aria-label="Duelos" title="Duelos">
+      <svg class="nav-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#nv-duel"/></svg>
+    </button>
+    <button class="nav-tab" data-tab="axies" aria-label="Axies" title="Axies">
+      <span class="nav-ico nav-axie" id="lobby-nav-axie" aria-hidden="true"></span>
+    </button>
+    <button class="nav-tab nav-tab--main" data-tab="adventure" aria-label="Aventura" title="Aventura" aria-current="page">
+      <svg class="nav-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#nv-map"/></svg>
+      <b class="nav-count" id="lobby-quests-count"></b>
+    </button>
+    <button class="nav-tab" data-tab="bag" aria-label="Mochila" title="Mochila">
+      <svg class="nav-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#nv-bag"/></svg>
+      <b class="nav-count" id="lobby-bag-count"></b>
+    </button>
+    <button class="nav-tab" data-tab="craft" aria-label="Taller" title="Taller">
+      <svg class="nav-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#nv-craft"/></svg>
+    </button>
+  </nav>
 </div>
 
 <!-- Las salas de la red y la sala propia. Se ven mientras no haya partida que mostrar:
@@ -502,11 +1009,31 @@
   </form>
 </dialog>
 
+<!-- Tu perfil, que se abre tocando tu Axie y tu nivel arriba del mapa: el nivel con su
+     barra y lo que falta, lo juntado (niveles, estrellas, Moonshards, cartas), cada
+     capítulo de la Aventura y tus Axies con su nivel. Lo pinta `paintProfilePanel` en
+     `lobby.js`; tocar un Axie lo abre en su pestaña. -->
+<dialog class="modal modal--sheet modal--profile o-panel" id="profile-modal">
+  <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
+  <h2 class="o-banner">Tu perfil</h2>
+  <div id="profile-body"></div>
+  <form method="dialog"><button class="btn btn-primary">Cerrar</button></form>
+</dialog>
+
+<!-- Las misiones en una hoja: las del día, las de la semana y el pase entero. Se abre
+     del botón de las misiones en un teléfono y de la tira del pase en el panel (ver
+     `missions-view.js`). -->
+<dialog class="modal modal--sheet modal--quests o-panel" id="quests-modal">
+  <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
+  <h2 class="o-banner">Misiones</h2>
+  <div class="qb-body qb-body--sheet" id="quests-body"></div>
+</dialog>
+
 <dialog class="modal o-panel" id="rules-modal">
   <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
   <h2 class="o-banner">Cómo se juega</h2>
   <p>Es un combate de cartas táctico <i>push-your-luck</i>. Elegís uno de los <b>seis Axies</b> —uno por clase— y peleás con su
-     <b>mazo personal</b> contra el rival. Los dos arrancan con <b>100 de vida</b>.</p>
+     <b>mazo personal</b> contra el rival. Los dos arrancan con <b>150 de vida</b>.</p>
   <p>En <b>Vs CPU</b> jugás contra la máquina, que compite con un Axie sorteado.
      En <b>Multijugador</b> jugás en red con otra persona en salas privadas con código.
      <b>Quién abre se sortea</b> al empezar la partida: cerrar el intercambio —ver el
@@ -540,8 +1067,8 @@
   </div>
 
   <h3>Tu mazo y mejoras</h3>
-  <p class="muted"><b>Tocá un Axie</b> —el tuyo o el del rival— para ver su mazo entero: las diez de fábrica y todo lo que fue sumando del centro.</p>
-  <p>Cada jugador roba de su <b>mazo inicial de 10 cartas</b>, construido alrededor de su clase: 5 pares con su símbolo, 1 carta solitaria de su símbolo y 4 cartas ajenas. Los mazos iniciales no traen poderes.</p>
+  <p class="muted"><b>Tocá un Axie</b> —el tuyo o el del rival— para ver su mazo entero: las ocho de fábrica y todo lo que fue sumando del centro.</p>
+  <p>Cada jugador roba de su <b>mazo inicial de 8 cartas</b>, construido alrededor de su clase: 5 pares con su símbolo, 1 carta solitaria de su símbolo y 2 cartas ajenas. Los mazos iniciales no traen poderes.</p>
   <p><b>Mejoras (+):</b> En la pantalla de elección de tu Axie podés añadir un símbolo extra a cada carta:
      las de tu clase admiten el tuyo; las ajenas, uno de sus dos símbolos. El símbolo repetido <b>cuenta cada aparición</b>, acelerando la racha al cuadrado.</p>
   <p><b>Sin descarte:</b> Al inicio de cada intercambio se rebaraja el mazo completo (lo jugado y lo sumado). Las cartas que salieron no se repiten dentro de la misma ronda.</p>
@@ -557,25 +1084,13 @@
   </div>
 
   <h3>Los poderes de combate</h3>
-  <p>Al inicio de cada partida se sortea <b>un poder activo por clase</b> (de entre los dos posibles para esa clase). Cada poder viaja siempre con su símbolo entre los tres de su carta:</p>
-  <div class="example">
-    <div class="muted"><b>«Al pegar»</b> es plantarte con un ataque que haga daño. Si te cortás, esos poderes no salen.</div>
-    <hr>
-    <div><img class="power power--sm" src="Icons/power-strength.png" alt=""> <b>Charm of Power</b> (Bestia) — Al aparecer, +1 de daño permanente.</div>
-    <div><img class="power power--sm" src="Icons/power-brutal.png" alt=""> <b>Energy Drink M</b> (Bestia) — Al pegar, +3 de daño por cada símbolo de tu racha más larga.</div>
-    <div><img class="power power--sm" src="Icons/power-octopus.png" alt=""> <b>Sticky Octopus</b> (Pez) — Al plantarte (aunque pegues 0), elegís 1 carta extra del mercado para tu mazo.</div>
-    <div><img class="power power--sm" src="Icons/power-bubble.png" alt=""> <b>Bubble Paste</b> (Pez) — Al plantarte, la carta que elijas del mercado abre tu próxima ronda.</div>
-    <div><img class="power power--sm" src="Icons/power-egg.png" alt=""> <b>Secret Egg</b> (Pájaro) — Al pegar, sumás un escudo de un tercio del golpe (mínimo 1); si el rival lo rompe, recibe 8 de daño por cada huevo.</div>
-    <div><img class="power power--sm" src="Icons/power-feather.png" alt=""> <b>Feather Earring</b> (Pájaro) — Apenas la robás, 5 de daño directo al rival, aunque después te cortes.</div>
-    <div><img class="power power--sm" src="Icons/power-pot.png" alt=""> <b>Leafy Pot</b> (Planta) — Al pegar, te curás lo mismo que pegaste.</div>
-    <div><img class="power power--sm" src="Icons/power-leaf.png" alt=""> <b>Spring Leaf</b> (Planta) — Al pegar, +2 hojas (hasta 5); al inicio de cada turno tuyo, cada hoja te cura 4 y se gasta 1.</div>
-    <div><img class="power power--sm" src="Icons/power-snail.png" alt=""> <b>Lazy Snail</b> (Bicho) — Al pegar, el próximo ataque del rival hace la mitad de daño.</div>
-    <div><img class="power power--sm" src="Icons/power-leech.png" alt=""> <b>Mantis Dagger</b> (Bicho) — En un ataque exitoso, robás 5 de vida al rival por cada Mantis Dagger en tu cadena.</div>
-    <div><img class="power power--sm" src="Icons/power-poison.png" alt=""> <b>Poison Vial</b> (Reptil) — Al plantarte, le ponés 6 de veneno al rival (se suma); al final de cada turno suyo le saca eso sin importar su escudo, y se reduce a la mitad.</div>
-    <div><img class="power power--sm" src="Icons/power-steelskin.png" alt=""> <b>Gecko Mask</b> (Reptil) — Al pegar, sumás 2 de escudo y el próximo golpe del rival te saca 12 de vida como máximo.</div>
-    <hr>
-    <div><img class="power power--sm" src="Icons/power-freegame.png" alt=""> <b>Rocket Stamp</b> (Comodín) — Si comparte un símbolo con tu cadena, tu próximo robo se monta sobre una carta de la mesa y le suma sus símbolos.</div>
+  <p>Algunas cartas traen un poder. No cuenta para la cadena: se activa en uno de tres momentos, y su etiqueta te dice cuál.</p>
+  <div class="example moment-legend">
+    <div><span class="moment-tag" data-moment="draw" style="--m:#7ec3dc"><svg class="moment-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#mo-draw"/></svg><span class="moment-word">Al robar</span></span> <span>Se activa apenas la robás, aunque después te cortes.</span></div>
+    <div><span class="moment-tag" data-moment="stand" style="--m:#e0a445"><svg class="moment-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#mo-stand"/></svg><span class="moment-word">Al atacar</span></span> <span>Se activa cuando te plantás sin cortarte, aunque el golpe haga 0.</span></div>
+    <div><span class="moment-tag" data-moment="bust" style="--m:#e0503c"><svg class="moment-ico" viewBox="0 0 100 100" aria-hidden="true"><use href="#mo-bust"/></svg><span class="moment-word">Al cortarte</span></span> <span>Se activa solo si se corta tu cadena.</span></div>
   </div>
+  <p>Todos los poderes, con lo que hace cada uno, están en Símbolos especiales.</p>
 
   <h3>Modo Aventura</h3>
   <p>Campaña de 6 niveles progresivos donde se desbloquean 2 nuevos poderes de clase por nivel. En el <b>Nivel 1: Primeros Pasos</b> ya están activos <b>Charm of Power</b> (Bestia), <b>Leafy Pot</b> (Planta) y las 15 cartas comodín neutrales <b>Rocket Stamp</b>.</p>
@@ -621,10 +1136,10 @@
   </div>
 
   <h3>4 · Tu Axie es tu mazo</h3>
-  <p>La integración con Axie Core no es un skin ni una ventaja comprada: es matemática de consistencia. Cada Axie entra a la arena con un mazo de 10 cartas derivado de su genética:</p>
+  <p>La integración con Axie Core no es un skin ni una ventaja comprada: es matemática de consistencia. Cada Axie entra a la arena con un mazo de 8 cartas derivado de su genética:</p>
   <div class="example">
     <div><b>6 cartas favorables</b>, una por cada parte anatómica —Ojos, Orejas, Cuernos, Boca, Espalda, Cola—, todas con el símbolo de su clase base más un símbolo secundario que depende de la parte.</div>
-    <div><b>4 cartas desfavorables</b> derivadas de la tríada piedra-papel-tijera del Axie: aliado y presas aparecen dos veces cada uno, los counters apenas una. El mazo está sesgado a tu favor por diseño, no por azar.</div>
+    <div><b>2 cartas desfavorables</b>, una por cada tríada rival de piedra-papel-tijera: la que vencés y la que te vence. No comparten ningún símbolo, así que ninguno te asegura la cadena: aunque evoluciones todas tus partes, siempre queda una carta que te corta.</div>
   </div>
   <div class="vision-beats">
     <p><b>Part Evolution como reductor de varianza.</b> Evolucionar una parte on-chain agrega un tercer símbolo a la carta de esa parte. Eso no sube el daño directamente: multiplica las formas de conectar. Más conexiones significan menos cortes, cadenas más largas y la libertad de jugar más agresivo. La evolución no necesariamente te hace pegar más fuerte; te hace animarte más.</p>
@@ -692,9 +1207,7 @@
   <form method="dialog" class="modal-close"><button class="o-x" aria-label="Cerrar modal"></button></form>
   <div class="symbols-header">
     <h2 class="o-banner">Símbolos especiales</h2>
-    <p class="symbols-subtitle">
-      Las cartas del mercado pueden incluir <b>poderes especiales</b>. No forman cadenas por sí mismos, pero activan <b>habilidades tácticas</b> durante el combate.
-    </p>
+    <p class="symbols-subtitle">Algunas cartas traen un poder. No cuenta para la cadena: su etiqueta dice cuándo se activa.</p>
   </div>
 
   <!-- Barra de Filtros interactiva -->
@@ -723,374 +1236,8 @@
     </button>
   </div>
 
-  <!-- Contenedor de cartas de símbolos -->
-  <div class="symbols-grid">
-    <!-- FUERZA -->
-    <article class="symbol-card" data-sym-class="beast" style="--sym-color: #f5b53d; --sym-glow: rgba(245, 181, 61, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-strength.png" alt="Charm of Power" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/beast-crest.png" alt="Bestia" class="crest crest--sm"> Bestia
-          </div>
-          <h3 class="symbol-name">Charm of Power</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">+1 de daño permanente en todos tus ataques</div>
-      <p class="symbol-desc">
-        Aumenta tu estadística de daño de forma permanente. Cada carta jugada añade <b>+1 de daño</b> a este ataque y a todos los que hagas en el resto de la partida.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Activación:</b> Al aparecer en mesa al robarla o montarla.</li>
-        <li><b>Permanente:</b> Se conserva para toda la partida (no se pierde si te cortás después).</li>
-        <li><b>Acumulable:</b> Cada carta suma otro +1 permanente.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip sym-chip--perm">Permanente</span>
-        <span class="sym-chip sym-chip--stack">Acumulable</span>
-      </div>
-    </article>
-
-    <!-- ENERGY DRINK M -->
-    <article class="symbol-card" data-sym-class="beast" style="--sym-color: #f5b53d; --sym-glow: rgba(245, 181, 61, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-brutal.png" alt="Energy Drink M" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/beast-crest.png" alt="Bestia" class="crest crest--sm"> Bestia
-          </div>
-          <h3 class="symbol-name">Energy Drink M</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">+3 de daño por cada símbolo de tu cadena más larga</div>
-      <p class="symbol-desc">
-        Potencia tu golpe según el tamaño de tu mejor racha. Al atacar, suma <b>+3 de daño adicional</b> por cada símbolo que tenga tu cadena más larga.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Activación:</b> Se activa siempre que conectes el ataque (daño &gt; 0).</li>
-        <li><b>Cadena más larga:</b> Cuenta los símbolos de tu racha más extendida (de cualquier clase).</li>
-        <li><b>Acumulable:</b> Con más de una carta, el bonus se multiplica.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Rematador</span>
-        <span class="sym-chip sym-chip--stack">Acumulable</span>
-      </div>
-    </article>
-
-    <!-- STICKY OCTOPUS -->
-    <article class="symbol-card" data-sym-class="aquatic" style="--sym-color: #4bb8f0; --sym-glow: rgba(75, 184, 240, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-octopus.png" alt="Sticky Octopus" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/aquatic-crest.png" alt="Pez" class="crest crest--sm"> Pez
-          </div>
-          <h3 class="symbol-name">Sticky Octopus</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">+1 carta extra del mercado para tu mazo</div>
-      <p class="symbol-desc">
-        Te permite llevarte una <b>carta adicional de regalo</b> del mercado central para sumar a tu mazo.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Activación:</b> Al plantarte (incluso si tu ataque hizo 0 de daño).</li>
-        <li><b>Elección libre:</b> Podés elegir cualquier carta disponible, con o sin poder.</li>
-        <li><b>Acumulable:</b> Cada pulpo en tu cadena te otorga un pick adicional.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Draft extra</span>
-        <span class="sym-chip sym-chip--stack">Acumulable</span>
-      </div>
-    </article>
-
-    <!-- BUBBLE PASTE -->
-    <article class="symbol-card" data-sym-class="aquatic" style="--sym-color: #4bb8f0; --sym-glow: rgba(75, 184, 240, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-bubble.png" alt="Bubble Paste" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/aquatic-crest.png" alt="Pez" class="crest crest--sm"> Pez
-          </div>
-          <h3 class="symbol-name">Bubble Paste</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">La carta que elijas del mercado abrirá tu próxima ronda</div>
-      <p class="symbol-desc">
-        La carta que tomes del centro no va al mazo barajado: queda <b>atrapada en una burbuja</b> y saldrá asegurada como tu <b>primera carta</b> de la próxima ronda.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Apertura asegurada:</b> Arrancás la próxima ronda con los símbolos que elijas.</li>
-        <li><b>Carta Gigante:</b> Con varias burbujas, fusiona cartas de tu mazo en una supercarta.</li>
-        <li><b>Si te cortás:</b> La burbuja no se activa.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Control de mazo</span>
-        <span class="sym-chip">Carta Gigante</span>
-      </div>
-    </article>
-
-    <!-- SECRET EGG -->
-    <article class="symbol-card" data-sym-class="bird" style="--sym-color: #ff7bac; --sym-glow: rgba(255, 123, 172, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-egg.png" alt="Secret Egg" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/bird-crest.png" alt="Pájaro" class="crest crest--sm"> Pájaro
-          </div>
-          <h3 class="symbol-name">Secret Egg</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">Escudo de un tercio del golpe; al romperse devuelve 8 de daño por huevo</div>
-      <p class="symbol-desc">
-        Genera un <b>escudo protector</b> equivalente a un tercio del golpe infligido (mínimo 1). Dura hasta que se rompa absorbiendo daño rival y, al romperse, contraataca.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Protección acumulable:</b> Absorbe daño entrante; cada huevo suma su escudo al que ya tenés (también el de la Gecko Mask).</li>
-        <li><b>Contraataque acumulable:</b> Cada huevo obtenido acumula +8 de daño fijo para cuando se rompa el escudo.</li>
-        <li><b>Activación:</b> Requiere conectar daño al atacar (daño &gt; 0).</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Escudo</span>
-        <span class="sym-chip">Contraataque</span>
-      </div>
-    </article>
-
-    <!-- FEATHER EARRING -->
-    <article class="symbol-card" data-sym-class="bird" style="--sym-color: #ff7bac; --sym-glow: rgba(255, 123, 172, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-feather.png" alt="Feather Earring" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/bird-crest.png" alt="Pájaro" class="crest crest--sm"> Pájaro
-          </div>
-          <h3 class="symbol-name">Feather Earring</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">5 de daño directo al salir (¡incluso si te cortás!)</div>
-      <p class="symbol-desc">
-        Inflige <b>5 de daño directo instantáneo</b> al oponente en el mismo momento en que la carta es robada, sin necesidad de esperar a plantarte.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Inmune al corte:</b> Es el único poder que funciona aunque la cadena se corte luego.</li>
-        <li><b>Daño puro:</b> Ignora escudos de huevo y efectos defensivos.</li>
-        <li><b>Instantáneo:</b> Puede derrotar al rival en medio de tu turno.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip sym-chip--perm">Instantáneo</span>
-        <span class="sym-chip sym-chip--safe">No se pierde</span>
-      </div>
-    </article>
-
-    <!-- LEAFY POT -->
-    <article class="symbol-card" data-sym-class="plant" style="--sym-color: #54cf8b; --sym-glow: rgba(84, 207, 139, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-pot.png" alt="Leafy Pot" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/plant-crest.png" alt="Planta" class="crest crest--sm"> Planta
-          </div>
-          <h3 class="symbol-name">Leafy Pot</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">Te curás todo el daño que pegaste</div>
-      <p class="symbol-desc">
-        Al soltar el golpe, tu Axie <b>recupera en vida el 100% del daño infligido</b> en ese turno (hasta el tope de 100 HP).
-      </p>
-      <ul class="symbol-points">
-        <li><b>Curación directa:</b> Si pegás 25 de daño, te curás 25 de vida al instante.</li>
-        <li><b>Requisito:</b> Requiere conectar el ataque (daño &gt; 0).</li>
-        <li><b>Si te cortás:</b> Al hacer 0 de daño, no hay curación.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Curación</span>
-        <span class="sym-chip">Supervivencia</span>
-      </div>
-    </article>
-
-    <!-- HOJA (LEAF) -->
-    <article class="symbol-card" data-sym-class="plant" style="--sym-color: #54cf8b; --sym-glow: rgba(84, 207, 139, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-leaf.png" alt="Hoja" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/plant-crest.png" alt="Planta" class="crest crest--sm"> Planta
-          </div>
-          <h3 class="symbol-name">Spring Leaf</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">+2 hojas (hasta 5). Cada hoja te cura 4 de vida al inicio de tu turno</div>
-      <p class="symbol-desc">
-        Al atacar con éxito ganás <b>2 hojas</b> (acumulables hasta 5). Al inicio de cada uno de tus turnos, antes de robar, <b>cada hoja te cura 4 de vida y luego se consume una hoja</b>.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Acumulable:</b> Podés acumular hasta un máximo de 5 hojas.</li>
-        <li><b>Regeneración segura:</b> Curan al inicio del turno, aunque ese turno después se corte.</li>
-        <li><b>Activación:</b> Requiere conectar daño (daño &gt; 0) para ganar hojas nuevas.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Regeneración</span>
-        <span class="sym-chip">Máx. 5 hojas</span>
-        <span class="sym-chip sym-chip--stack">Acumulable</span>
-      </div>
-    </article>
-
-    <!-- LAZY SNAIL -->
-    <article class="symbol-card" data-sym-class="bug" style="--sym-color: #ff6a5c; --sym-glow: rgba(255, 106, 92, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-snail.png" alt="Lazy Snail" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/bug-crest.png" alt="Bicho" class="crest crest--sm"> Bicho
-          </div>
-          <h3 class="symbol-name">Lazy Snail</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">El próximo ataque del rival hace la mitad de daño</div>
-      <p class="symbol-desc">
-        Aplica <b>debilidad</b> al rival: su próximo ataque con daño se divide por 2 (redondeando hacia arriba).
-      </p>
-      <ul class="symbol-points">
-        <li><b>Acumulable por ataques:</b> Dos caracoles debilitan los dos próximos ataques con daño del rival.</li>
-        <li><b>Consumo inteligente:</b> Solo se gasta una carga cuando el rival conecta un ataque con daño.</li>
-        <li><b>Activación:</b> Requiere conectar daño al plantarte (daño &gt; 0).</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Debilidad</span>
-        <span class="sym-chip sym-chip--stack">Acumulable</span>
-      </div>
-    </article>
-
-    <!-- MANTIS DAGGER -->
-    <article class="symbol-card" data-sym-class="bug" style="--sym-color: #ff6a5c; --sym-glow: rgba(255, 106, 92, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-leech.png" alt="Mantis Dagger" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/bug-crest.png" alt="Bicho" class="crest crest--sm"> Bicho
-          </div>
-          <h3 class="symbol-name">Mantis Dagger</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">Robás 5 de vida al rival por cada Mantis Dagger en tu cadena</div>
-      <p class="symbol-desc">
-        En un ataque exitoso, <b>le roba 5 de vida al rival y te los cura a vos</b> por cada carta de Mantis Dagger en tu cadena (por ejemplo, con 2 robás 10).
-      </p>
-      <ul class="symbol-points">
-        <li><b>Drenaje de vida:</b> Le resta 5 de vida al oponente y cura a tu Axie en la misma cantidad por cada Mantis Dagger.</li>
-        <li><b>Acumulable:</b> Cada carta de Mantis Dagger en la cadena roba 5 (2 en cadena roban 10).</li>
-        <li><b>Activación:</b> Requiere conectar un ataque con éxito (daño &gt; 0).</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Drenaje de vida</span>
-        <span class="sym-chip sym-chip--stack">Acumulable</span>
-      </div>
-    </article>
-
-    <!-- POISON VIAL -->
-    <article class="symbol-card" data-sym-class="reptile" style="--sym-color: #a97cff; --sym-glow: rgba(169, 124, 255, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-poison.png" alt="Poison Vial" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/reptile-crest.png" alt="Reptil" class="crest crest--sm"> Reptil
-          </div>
-          <h3 class="symbol-name">Poison Vial</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">6 de veneno por frasco; atraviesa el escudo, daña cada turno y se reduce a la mitad</div>
-      <p class="symbol-desc">
-        Cada frasco le pone <b>6 de veneno</b> al oponente, pegues lo que pegues. Al final del turno del rival, el veneno le resta vida sin pasar por su escudo y luego se parte a la mitad.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Daño al final de su turno:</b> Muerde restando vida, se divide a la mitad y se disipa si queda en 2 o menos.</li>
-        <li><b>Acumulable:</b> Cada frasco suma 6 al veneno que ya tenga encima el rival.</li>
-        <li><b>Activación:</b> Se aplica siempre que te plantes; si te cortás, no.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Daño continuo</span>
-        <span class="sym-chip sym-chip--stack">Acumulable</span>
-      </div>
-    </article>
-
-    <!-- GECKO MASK -->
-    <article class="symbol-card" data-sym-class="reptile" style="--sym-color: #a97cff; --sym-glow: rgba(169, 124, 255, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-steelskin.png" alt="Gecko Mask" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/reptile-crest.png" alt="Reptil" class="crest crest--sm"> Reptil
-          </div>
-          <h3 class="symbol-name">Gecko Mask</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">+2 de escudo y el próximo ataque rival te saca 12 de vida como máximo</div>
-      <p class="symbol-desc">
-        Suma <b>2 de escudo</b> y cubre a tu Axie con un blindaje: lo que el próximo ataque rival deje pasar después del escudo te saca <b>12 de vida como máximo</b>.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Blindaje anti-remates:</b> Aunque el rival conecte un golpe de 40 puntos, solo perderás 12 de vida.</li>
-        <li><b>Acumulable:</b> Cada máscara extra suma 2 de escudo y baja el tope en -2 puntos (hasta un piso mínimo de 6).</li>
-        <li><b>Consumo:</b> El tope se gasta cuando un ataque rival pasa el escudo; el escudo dura hasta romperse.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip">Escudo</span>
-        <span class="sym-chip">Tope de daño</span>
-        <span class="sym-chip sym-chip--stack">Acumulable (piso 6)</span>
-      </div>
-    </article>
-
-    <!-- ROCKET STAMP (FREE GAME) -->
-    <article class="symbol-card symbol-card--special" data-sym-class="special" style="--sym-color: #ffd15c; --sym-glow: rgba(255, 209, 92, 0.25);">
-      <div class="symbol-card-head">
-        <div class="symbol-avatar">
-          <img src="Icons/power-freegame.png" alt="Rocket Stamp" class="power">
-        </div>
-        <div class="symbol-title-box">
-          <div class="symbol-class-badge">
-            <img src="Icons/power-freegame.png" alt="" class="power power--sm"> Especial Neutral
-          </div>
-          <h3 class="symbol-name">Rocket Stamp (Free Game)</h3>
-        </div>
-      </div>
-      <div class="symbol-highlight">Al entrar en mesa, alarga una carta existente</div>
-      <p class="symbol-desc">
-        Carta comodín neutral con 2 símbolos. Si al salir de tu mazo no coincide con tus cadenas vivas, <b>te cortás como con cualquier carta</b>. Al entrar en mesa con éxito, tu próximo robo alarga una carta existente sumando sus símbolos.
-      </p>
-      <ul class="symbol-points">
-        <li><b>Al salir del mazo:</b> Debe compartir al menos un símbolo vivo para no cortarte.</li>
-        <li><b>Efecto comodín:</b> Tu siguiente robo se monta sobre una columna que elijas de la mesa.</li>
-        <li><b>Salva cadenas:</b> Suma sus símbolos a esa carta para continuar o abrir rachas.</li>
-      </ul>
-      <div class="symbol-chips">
-        <span class="sym-chip sym-chip--safe">Comodín neutral</span>
-        <span class="sym-chip">Alarga carta</span>
-      </div>
-    </article>
-  </div>
+  <!-- Los poderes, agrupados por categoría: los arma `openSymbols` en ui.js desde POWERS -->
+  <div class="symbols-grid" id="symbols-grid"></div>
 
   <!-- Resumen de Estados de Combate y Símbolos Base -->
   <div class="symbols-footer-section">
@@ -1128,6 +1275,10 @@
     <button class="btn btn-primary">Entendido</button>
   </form>
 </dialog>
+
+<!-- La entrada a un nivel de la Aventura: el muro de cartas y la previa que espera a que
+     la pelea esté cargada. Va encima de todo, portada incluida (ver `loading.js`). -->
+<div class="loading" id="loading" hidden></div>
 
 <script type="module" src="src/main.js"></script>
 </body>

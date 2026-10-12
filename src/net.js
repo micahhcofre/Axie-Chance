@@ -17,12 +17,12 @@
 // tenemos: no hace falta ir a preguntar por el cable ni escribirlas de nuevo.
 import { mount } from './ui.js';
 import {
-  actingOf, canRenewFor, draftableFor, draftingSeat, drafterOf, unseenOf,
+  actingOf, canRenewFor, draftableFor, draftingSeat, drafterOf, trickTargetsFor, unseenOf,
 } from './game.js';
-import { AXIES, axie, axieArt } from './axies.js';
+import { AXIES, axie, axieArt, evolvedId } from './axies.js';
 import { createMotion } from './axie-motion.js';
 import { SYMBOLS, crest } from './data.js';
-import { readLoadout } from './loadout.js';
+import { readLoadout, withFree } from './loadout.js';
 import { createRoom } from './rooms.js';
 import { openLink, packMessage } from './link.js';
 import { qrSvg } from './qr.js';
@@ -163,6 +163,10 @@ function createRemoteGame(send) {
       const player = drafterOf(state);
       return player ? draftableFor(state, player) : [];
     },
+    trickTargets: () => {
+      const player = drafterOf(state);
+      return player && state?.draft?.step === 'trick' ? trickTargetsFor(state, player) : [];
+    },
 
     // ---- acciones ----
     newMatch: () => send('newMatch'),
@@ -170,8 +174,10 @@ function createRemoteGame(send) {
     stand: () => send('stand'),
     takeCard: (uid) => send('takeCard', uid),
     chooseStackTarget: (col) => send('chooseStackTarget', col),
+    chooseSpell: (kind) => send('chooseSpell', kind),
     skipDraft: () => send('skipDraft'),
     renewMarket: () => send('renewMarket'),
+    stealCard: (uid) => send('stealCard', uid),
     ready: () => send('ready'),
     // Con qué Axie entrás a la sala. No es una jugada —la partida todavía no existe—:
     // es lo que elegiste en la portada, que la sala guarda hasta repartir (ver
@@ -226,7 +232,9 @@ export function relayUrl(ws, where = globalThis.location) {
 
 /** Lo que cuenta una sala de sí misma viene de otro navegador: se recorta a lo que se dibuja. */
 function cleanRoom(r) {
-  const known = (id) => (typeof id === 'string' && Object.hasOwn(AXIES, id) ? id : null);
+  // Un Axie del roster, con sus partes evolucionadas si trae (`'buba~horn'`): lo que no
+  // se entienda de ellas se cae (ver `axie`).
+  const known = (id) => (typeof id === 'string' && Object.hasOwn(AXIES, id.split('~')[0]) ? axie(id).id : null);
   const pair = (o) => ({ p1: Boolean(o?.p1), p2: Boolean(o?.p2) });
   return {
     code: String(r?.code ?? '').replace(/[^A-Z0-9]/g, '').slice(0, 8),
@@ -415,7 +423,7 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
       sala = code;
       seat = null;
       room = null;
-      history.replaceState(null, '', `${location.pathname}?red&sala=${encodeURIComponent(code)}`);
+      history.replaceState(null, '', `${location.pathname}${withFree(`?red&sala=${encodeURIComponent(code)}`)}`);
       // Tu pantalla es una más de la sala, enganchada sin cable.
       hosted.attach(id, receive);
     } else {
@@ -541,7 +549,7 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
     sala = code;
     // La sala queda en la dirección: recargar vuelve a la misma en vez de al lobby, y
     // el link se le puede pasar al otro ya apuntando adentro.
-    history.replaceState(null, '', `${location.pathname}?red&sala=${encodeURIComponent(code)}`);
+    history.replaceState(null, '', `${location.pathname}${withFree(`?red&sala=${encodeURIComponent(code)}`)}`);
     everLive = false;
     if (link?.open) joinRoom();
   }
@@ -560,7 +568,7 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
     sala = null;
     painted = null;
     note = message;
-    history.replaceState(null, '', `${location.pathname}?red`);
+    history.replaceState(null, '', `${location.pathname}${withFree('?red')}`);
     refresh();
     paint();
   }
@@ -594,7 +602,7 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
     await game.leave();
     await closeRoom();
     if (!table) {
-      location.href = `${location.pathname}?red`;
+      location.href = `${location.pathname}${withFree('?red')}`;
       return;
     }
     table.detach();
@@ -734,8 +742,8 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
     // ocupados, mira.
     btn.hidden = !chooseAxie || (Boolean(sala) && !seat);
     if (btn.hidden) return;
-    const id = mine && AXIES[mine.axie] ? mine.axie : null;
-    const a = id ? AXIES[id] : null;
+    const id = mine && AXIES[mine.axie] ? evolvedId(mine.axie, mine.evolved) : null;
+    const a = id ? axie(id) : null;
     byId('net-axie-now').innerHTML = a
       ? `<b>${a.name}</b><span class="choose-class" style="--c:${SYMBOLS[a.class].color}"
           >${crest(a.class)}${SYMBOLS[a.class].name}</span>`
@@ -824,7 +832,7 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
       byId('net-title').textContent = tr('Salas');
       byId('net-create').disabled = !link?.open;
       byId('net-note').textContent = note
-        || (reachable === false ? tr('Hace falta abrir el juego con npm start') : '')
+        || (reachable === false ? tr('No disponible en esta versión') : '')
         || (link && !link.open ? tr('Conectando con el servidor de salas…') : '')
         || tr('Creá una sala y pasale el QR o el link al otro, esté donde esté.');
       // Se repinta solo si cambió algo. La lista se vuelve a pedir cada segundo y pico
@@ -962,7 +970,7 @@ export function connect({ chooseAxie = null, audio = null, table = null, onExit 
     show() {
       visible = true;
       note = '';
-      history.replaceState(null, '', `${location.pathname}?red`);
+      history.replaceState(null, '', `${location.pathname}${withFree('?red')}`);
       startLink();
       paint();
     },

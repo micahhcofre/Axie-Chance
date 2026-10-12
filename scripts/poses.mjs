@@ -21,12 +21,14 @@
 // exactamente sobre el manifiesto de `axie-avatars.js`. El script lo verifica antes de
 // escribir nada: si algún día el mixer cambia de cuentas, esto falla en vez de
 // producir Axies torcidos.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadStarter, restLayers } from './starters.mjs';
+import { keyOf, comboOf, mixedAxies, variantOf } from './mixed.mjs';
+import { mergeEvolved } from './evolved.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(root, '.cache');
@@ -34,6 +36,8 @@ const PKG = join(CACHE, 'package');
 const VERSION = '1.4.9';
 const TARBALL = `https://registry.npmjs.org/@axieinfinity/mixer/-/mixer-${VERSION}.tgz`;
 const POSES_FILE = join(root, 'src', 'axie-poses.js');
+/** Las poses de los rivales de cada capítulo desde el segundo (ver `src/rival-poses.js`). */
+const CHAPTER_DIR = join(root, 'src', 'poses');
 
 /**
  * Los clips que se hornean, con el nombre corto que usa el juego. De los 46 del kit
@@ -89,6 +93,10 @@ const CLIPS = {
   // El final.
   win: { from: 'activity/victory-pose-back-flip', loop: true, fps: 14 },
   ko: { from: 'activity/sleep', loop: true, fps: 6, rate: 0.5 },
+  // Evolucionar una carta en el Taller (ver `evolve-scene.js`): se carga, parpadea, abre
+  // la boca y termina apretando los dientes. Solo los del roster (`roster`), que son
+  // los únicos que evolucionan: a los rivales no les hace falta.
+  evolve: { from: 'activity/evolve', fps: 14, roster: true },
 };
 
 /**
@@ -289,6 +297,11 @@ function baseOf(skeleton, slotName) {
  * escala con el dibujo y sirve igual en el tablero que en el selector.
  */
 function frameOf(mixer, built, skeleton) {
+  return frameFrom(mixerBoxes(mixer, built, skeleton));
+}
+
+/** Las cajas de reposo de un Axie del mixer, `{slot, src, x, y, w, h}`, en su orden. */
+function mixerBoxes(mixer, built, skeleton) {
   const slots = [];
   const spy = (slotName, path, variantKey, shift) => {
     slots.push(slotName);
@@ -303,13 +316,12 @@ function frameOf(mixer, built, skeleton) {
     { width: 0, height: 0, offsetX: 0, offsetY: 0, scale: 1 },
   );
   const attachments = skeleton.skins[0].attachments;
-  const boxes = raw.map((layer, i) => {
+  return raw.map((layer, i) => {
     const slotName = slots[i];
     const bag = attachments[slotName];
     const att = slotName in bag ? bag[slotName] : bag[Object.keys(bag)[0]];
-    return { slot: slotName, x: layer.px, y: layer.py, w: att.width ?? 0, h: att.height ?? 0 };
+    return { slot: slotName, src: layer.imagePath, x: layer.px, y: layer.py, w: att.width ?? 0, h: att.height ?? 0 };
   });
-  return frameFrom(boxes);
 }
 
 /**
@@ -501,7 +513,7 @@ function bakeVariants(skeleton, frame, setup, srcOf) {
 // ---------- correrlo ----------
 
 const { AXIES, STARTERS } = await import(pathToFileURL(join(root, 'src', 'axies.js')).href);
-const { AVATARS } = await import(pathToFileURL(join(root, 'src', 'axie-avatars.js')).href);
+const { AVATARS, EVOLVED } = await import(pathToFileURL(join(root, 'src', 'axie-avatars.js')).href);
 const mixer = await loadMixer();
 
 const poses = {};
@@ -547,6 +559,7 @@ function bake(id, skeleton, frame, srcOf) {
   poses[id] = {};
   const shown = [];
   for (const [name, clip] of Object.entries(CLIPS)) {
+    if (clip.roster && !AXIES[id]) continue;
     const baked = bakeClip(skeleton, clip, frame, setup, rest);
     poses[id][name] = baked;
     shown.push(`${name}:${Object.keys(baked.parts).join('+') || '—'}`);
@@ -554,32 +567,138 @@ function bake(id, skeleton, frame, srcOf) {
   console.log(`  ${id.padEnd(8)} ${shown.join('  ')}`);
 }
 
-for (const axie of Object.values(AXIES)) {
-  const combo = new Map([
-    ['body', axie.body ?? 'body-normal'],
-    ['body-class', axie.class],
-    ['back', axie.parts.back],
-    ['ears', axie.parts.ears],
-    ['eyes', axie.parts.eyes],
-    ['horn', axie.parts.horn],
-    ['mouth', axie.parts.mouth],
-    ['tail', axie.parts.tail],
-  ]);
-  const variantIdx = mixer.genesStuff.getAxieColorsVariant(axie.color ?? 0, 0, axie.class);
+/** El reposo del pivote `@axie` del que cuelga todo un esqueleto. */
+function restOf(skeleton) {
+  const home = poseAt(skeleton, null, 0).get('@axie');
+  return { axieX: home.x, axieY: home.y, axieRot: Math.atan2(home.c, home.a) / RAD };
+}
+
+/** El nombre de un dibujo o de un slot evolucionado: `horn@2`. Así conviven con los de siempre. */
+const lv2Name = (name) => `${name}@2`;
+
+/**
+ * Hornea un Axie del roster evolucionado (`<id>@evo`), en el marco que envuelve sus dos
+ * pilas (ver `scripts/evolved.mjs` y `EVOLVED` en `axie-avatars.js`).
+ *
+ * `base` y `lv2` son sus dos esqueletos, con sus cajas de reposo y de dónde sale cada
+ * PNG. Se guarda **lo que cambia** respecto de la entrada de siempre, y el resto lo
+ * hereda `axie-motion.js`:
+ *
+ *   root   el cuerpo, medido de nuevo: es en porcentaje del marco, y el marco es otro.
+ *   parts  las pistas de los dibujos evolucionados, con su nombre `@2`. Las de los de
+ *          siempre son las mismas —van en porcentaje de su propio tamaño, no del
+ *          marco— y no se repiten.
+ *   swaps  los cambios de dibujo de los slots evolucionados, como `eyes@2`.
+ *
+ * Los dibujos alternativos sí van todos (en `VARIANTS`): su lugar es en fracciones del
+ * marco, así que los de siempre también se mueven de lugar.
+ */
+function bakeEvolved(id, base, lv2) {
+  const key = `${id}@evo`;
+  const { layers, box } = mergeEvolved(base.boxes, lv2.boxes);
+  const manifest = EVOLVED[id];
+  if (!manifest) throw new Error(`${id}: no está en EVOLVED — falta correr \`npm run axies\``);
+  if (Math.abs(round(box.width / box.height, 5) - manifest.ratio) > 1e-4) {
+    throw new Error(`${key}: marco distinto al de EVOLVED — falta correr \`npm run axies\``);
+  }
+  const evolvedSlots = new Set(layers.filter((l) => l.lv2).map((l) => l.slot));
+  const center = { x: box.x0 + box.width / 2, y: -(box.y0 + box.height / 2) };
+  const frameFor = (boxes) => ({ ...box, center, boxes: Object.fromEntries(boxes.map((b) => [b.slot, b])) });
+  const frameBase = frameFor(base.boxes);
+  const frameLv2 = frameFor(lv2.boxes.filter((b) => evolvedSlots.has(b.slot)));
+  const setupBase = layersAt(base.skeleton, null, 0);
+  const setupLv2 = layersAt(lv2.skeleton, null, 0);
+
+  // El control, como en `bake`: cada capa del manifiesto cae donde la pone el horno.
+  for (const l of manifest.layers) {
+    const sk = l.lv2 ? lv2.skeleton : base.skeleton;
+    const home = (l.lv2 ? setupLv2 : setupBase)[baseOf(sk, l.slot)];
+    if (!home) throw new Error(`${key}: al horno le falta la capa ${l.slot}`);
+    const x = (home.x - home.w / 2 - box.x0) / box.width;
+    const y = (-home.y - home.h / 2 - box.y0) / box.height;
+    if (Math.abs(x - l.x) > 1e-4 || Math.abs(y - l.y) > 1e-4) {
+      throw new Error(`${key}/${l.slot}${l.lv2 ? ' (lv2)' : ''}: el reposo del horno no coincide con EVOLVED`);
+    }
+  }
+
+  const ofLv2Slot = (name) => evolvedSlots.has(setupLv2[name]?.slot);
+  const renamed = (bag) => Object.fromEntries(
+    Object.entries(bag).map(([name, v]) => [lv2Name(name), { ...v, slot: lv2Name(v.slot) }]),
+  );
+  variants[key] = {
+    ...bakeVariants(base.skeleton, frameBase, setupBase, base.srcOf),
+    ...renamed(bakeVariants(lv2.skeleton, frameLv2, setupLv2, lv2.srcOf)),
+  };
+
+  const restBase = restOf(base.skeleton);
+  const restLv2 = restOf(lv2.skeleton);
+  poses[key] = {};
+  for (const [name, clip] of Object.entries(CLIPS)) {
+    const b = bakeClip(base.skeleton, clip, frameBase, setupBase, restBase);
+    const e = bakeClip(lv2.skeleton, clip, frameLv2, setupLv2, restLv2);
+    // Los dos esqueletos tienen los mismos huesos del cuerpo: el cuerpo se mueve igual.
+    if (JSON.stringify(b.root) !== JSON.stringify(e.root)) {
+      throw new Error(`${key}/${name}: el cuerpo evolucionado se mueve distinto del de siempre`);
+    }
+    poses[key][name] = {
+      dur: b.dur,
+      root: b.root,
+      parts: Object.fromEntries(Object.entries(e.parts).filter(([n]) => ofLv2Slot(n)).map(([n, t]) => [lv2Name(n), t])),
+      swaps: Object.fromEntries(Object.entries(e.swaps).filter(([slot]) => evolvedSlots.has(slot))
+        .map(([slot, list]) => [lv2Name(slot), list.map(([t, n]) => [t, lv2Name(n)])])),
+    };
+  }
+  console.log(`  ${key.padEnd(12)} evoluciona: ${[...evolvedSlots].join(', ')}`);
+}
+
+// Los que no se pueden hornear se juntan y se dicen todos al final, no de a uno por corrida.
+const broken = [];
+for (const axie of await mixedAxies()) {
+  const combo = comboOf(axie);
+  const variantIdx = variantOf(mixer, axie);
   const built = mixer.getAxieSpineFromCombo(combo, variantIdx, false);
   if (built.error) throw new Error(`${axie.id}: ${built.error}`);
   const skeleton = built.skeletonDataAsset;
   const shift = mixer.getAxieColorPartShift(built.variant);
   // La misma resolución que hacen las capas de reposo: el color del Axie decide qué PNG
   // del CDN es, y sin esto la boca abierta saldría de otro color.
-  bake(axie.id, skeleton, frameOf(mixer, built, skeleton), (slot, att) =>
-    mixer.getVariantAttachmentPath(slot, att.path, built.variant, shift));
+  const srcOf = (slot, att) => mixer.getVariantAttachmentPath(slot, att.path, built.variant, shift);
+  try {
+    bake(axie.id, skeleton, frameOf(mixer, built, skeleton), srcOf);
+  } catch (err) {
+    broken.push(`${err.message} (partes: ${Object.entries(axie.parts ?? {}).map(([t, k]) => `${t} ${k}`).join(', ')})`);
+    continue;
+  }
+  if (!AXIES[axie.id]) continue;
+  // El del roster, además, evolucionado: el arte `-lv2` de las seis partes.
+  const all = mixer.getAxieSpineFromCombo(comboOf({ ...axie, evolved: ['eyes', 'ears', 'mouth', 'horn', 'back', 'tail'] }), variantIdx, false);
+  if (all.error) throw new Error(`${axie.id}: ${all.error}`);
+  const allShift = mixer.getAxieColorPartShift(all.variant);
+  bakeEvolved(axie.id,
+    { skeleton, boxes: mixerBoxes(mixer, built, skeleton), srcOf },
+    {
+      skeleton: all.skeletonDataAsset,
+      boxes: mixerBoxes(mixer, all, all.skeletonDataAsset),
+      srcOf: (slot, att) => mixer.getVariantAttachmentPath(slot, att.path, all.variant, allShift),
+    });
 }
 
 // Los starters traen su propio esqueleto, con cada dibujo ya cortado en `Axies/`.
 for (const axie of Object.values(STARTERS)) {
   const skeleton = await loadStarter(axie);
-  bake(axie.id, skeleton, frameFrom(restLayers(skeleton)), (slot, att) => att.path);
+  const srcOf = (slot, att) => att.path;
+  bake(axie.id, skeleton, frameFrom(restLayers(skeleton)), srcOf);
+  // Evolucionado: su cuerpo despierto, que cambia una sola parte (ver `starters.mjs`).
+  const awake = await loadStarter(axie, { awake: true });
+  bakeEvolved(axie.id,
+    { skeleton, boxes: restLayers(skeleton), srcOf },
+    { skeleton: awake, boxes: restLayers(awake), srcOf });
+}
+
+if (broken.length) {
+  console.error(`\nno se pudieron hornear ${broken.length} Axie(s):`);
+  for (const m of broken) console.error(`  ${m}`);
+  process.exit(1);
 }
 
 // Que ningún dibujo alternativo apunte a un PNG que el CDN no tiene, y que ninguno
@@ -600,11 +719,36 @@ const IMAGES = 'https://axiecdn.axieinfinity.com/mixer-stuffs/v6/';
  * de 19 px de alto, un píxel ya es un 5%.
  */
 const SKEW = 1.5;
+/**
+ * Hasta cuánto, en fracción del alto, el recorte se corrige en vez de fallar. Pasa con
+ * tres dibujos del arte evolucionado (`bird-04-lv2/mouth-bite`, de 97×84, que el
+ * esqueleto cree de 97×87): son unos píxeles, y lo que se ve es la boca un poco más
+ * aplastada. Se le da al recorte el alto que tiene el PNG, centrado donde estaba. Lo
+ * que se pasa de esto es otro dibujo, no un redondeo, y sigue fallando.
+ */
+const FIX = 0.06;
 const bad = [];
+const fixed = [];
 let checked = 0;
-await Promise.all(
-  Object.entries(variants).flatMap(([id, bag]) =>
-    Object.entries(bag).map(async ([name, v]) => {
+// Son miles de dibujos: de a `PARALLEL` pedidos a la vez, y cada uno con reintentos (con
+// todos juntos el CDN corta conexiones).
+const PARALLEL = 24;
+const fetchHead = async (url) => {
+  for (let tries = 0; ; tries++) {
+    try {
+      return await fetch(url, { headers: { Range: 'bytes=0-63' } });
+    } catch (err) {
+      if (tries >= 4) throw err;
+      await new Promise((r) => setTimeout(r, 400 * (tries + 1)));
+    }
+  }
+};
+const checks = Object.entries(variants).flatMap(([id, bag]) => Object.entries(bag).map(([name, v]) => [id, name, v]));
+let nextCheck = 0;
+await Promise.all(Array.from({ length: PARALLEL }, async () => {
+  while (nextCheck < checks.length) {
+    const [id, name, v] = checks[nextCheck++];
+    await (async () => {
       if (!v.src) return;
       checked++;
       let png;
@@ -612,28 +756,38 @@ await Promise.all(
         // Los de un starter no están en el CDN: los acaba de escribir `starters.mjs`.
         png = readFileSync(join(root, v.src));
       } else {
-        const res = await fetch(IMAGES + v.src, { headers: { Range: 'bytes=0-63' } });
+        const res = await fetchHead(IMAGES + v.src);
         if (!res.ok) return void bad.push(`${id}/${name}: falta ${v.src} (HTTP ${res.status})`);
         png = Buffer.from(await res.arrayBuffer());
       }
       const wide = png.readUInt32BE(16);
       const tall = png.readUInt32BE(20);
+      // Las gemas del cuerpo místico (`body-id-*`) miden 3 píxeles de ancho: un píxel de
+      // alto de más o de menos en eso no se ve, y el esqueleto las redondea distinto.
+      if (wide < 8) return;
       // El alto que tendría el dibujo si entrara en el recorte sin deformarse.
-      const fits = wide / ((v.w / v.h) * AVATARS[id].ratio);
-      if (Math.abs(fits - tall) > SKEW) {
+      const ratio = (AVATARS[id] ?? EVOLVED[id.replace(/@evo$/, '')]).ratio;
+      const fits = wide / ((v.w / v.h) * ratio);
+      if (Math.abs(fits - tall) > SKEW && Math.abs(fits - tall) <= FIX * tall) {
+        const h = round((v.w * ratio * tall) / wide, 5);
+        v.y = round(v.y + (v.h - h) / 2, 5);
+        v.h = h;
+        fixed.push(`${id}/${name}: ${wide}×${fits.toFixed(0)} → ${wide}×${tall}`);
+      } else if (Math.abs(fits - tall) > SKEW) {
         bad.push(
           `${id}/${name}: ${v.src} mide ${wide}×${tall} y el recorte lo quiere ${wide}×${fits.toFixed(0)}` +
             ` — el esqueleto y el CDN no dicen lo mismo, sale estirado`,
         );
       }
-    }),
-  ),
-);
+    })();
+  }
+}));
 if (bad.length) {
   console.error(`\nhay ${bad.length} dibujo(s) alternativo(s) mal:`);
   for (const m of bad) console.error(`  ${m}`);
   process.exit(1);
 }
+for (const m of fixed) console.log(`  recorte corregido al PNG: ${m}`);
 console.log(`\n  ${checked} dibujos alternativos, todos en el CDN y sin deformar`);
 
 // ---------- escribir ----------
@@ -641,11 +795,20 @@ console.log(`\n  ${checked} dibujos alternativos, todos en el CDN y sin deformar
 const num = (n) => (Object.is(n, -0) ? '0' : String(n));
 const rows = (list) => list.map((r) => `[${r.map(num).join(',')}]`).join(',');
 
+// Lo de cada capítulo de la Aventura va en su archivo (ver `src/rival-poses.js`): en la
+// base, el roster y los rivales del primer capítulo, que es lo que se ve al abrir el
+// juego; de ahí en adelante, un archivo por capítulo que se pide cuando hace falta.
+const { adventureChapters } = await import(pathToFileURL(join(root, 'src', 'adventure.js')).href);
+const chapterOf = new Map();
+for (const ch of adventureChapters()) for (const lvl of ch.levels) if (!chapterOf.has(lvl.rival)) chapterOf.set(lvl.rival, ch.n);
+const partOf = (id) => (chapterOf.get(id) ?? 1);
+
 /**
  * Las pistas repetidas se guardan una sola vez. Las patas salen todas del mismo
  * cuerpo (`body-normal`), así que las seis clases mueven exactamente las mismas: sin
  * esto el archivo guarda seis veces cada una. Cada pista queda en `TRACKS` y los
- * clips la nombran por su número.
+ * clips la nombran por su número. Las de un capítulo que no están en la base van en su
+ * archivo, con números negativos (`-1` es su primera).
  */
 const tracks = [];
 const seen = new Map();
@@ -657,6 +820,15 @@ const trackId = (list) => {
   }
   return seen.get(key);
 };
+const localTracks = (local, localSeen) => (list) => {
+  const key = rows(list);
+  if (seen.has(key)) return seen.get(key);
+  if (!localSeen.has(key)) {
+    localSeen.set(key, -1 - local.length);
+    local.push(key);
+  }
+  return localSeen.get(key);
+};
 
 const clipMeta = Object.entries(CLIPS)
   .map(
@@ -666,44 +838,49 @@ const clipMeta = Object.entries(CLIPS)
   )
   .join('\n');
 
-const posesOut = Object.entries(poses)
+const posesOf = (entries, idOf, pad = '  ') => entries
   .map(([id, clips]) => {
     const body = Object.entries(clips)
       .map(([name, c]) => {
         const parts = Object.entries(c.parts)
-          .map(([slot, list]) => `'${slot}': ${trackId(list)}`)
+          .map(([slot, list]) => `'${slot}': ${idOf(list)}`)
           .join(', ');
         const swaps = Object.entries(c.swaps)
           .map(([slot, list]) => `'${slot}': [${list.map(([t, n]) => `[${t},'${n}']`).join(',')}]`)
           .join(', ');
         return (
-          `    ${name}: { dur: ${c.dur}, root: ${trackId(c.root)},` +
-          `\n      parts: { ${parts} },` +
-          `\n      swaps: { ${swaps} } },`
+          `${pad}  ${name}: { dur: ${c.dur}, root: ${idOf(c.root)},` +
+          `\n${pad}    parts: { ${parts} },` +
+          `\n${pad}    swaps: { ${swaps} } },`
         );
       })
       .join('\n');
-    return `  ${id}: {\n${body}\n  },`;
+    return `${pad}${keyOf(id)}: {\n${body}\n${pad}},`;
   })
   .join('\n');
 
-const tracksOut = tracks.map((t, i) => `  /* ${i} */ [${t}],`).join('\n');
-
-const variantsOut = Object.entries(variants)
+const variantsOf = (entries, pad = '  ') => entries
   .map(([id, bag]) => {
     const body = Object.entries(bag)
-      .map(([name, v]) => `    '${name}': { slot: '${v.slot}', src: '${v.src}', x: ${v.x}, y: ${v.y}, w: ${v.w}, h: ${v.h} },`)
+      .map(([name, v]) => `${pad}  '${name}': { slot: '${v.slot}', src: '${v.src}', x: ${v.x}, y: ${v.y}, w: ${v.w}, h: ${v.h} },`)
       .join('\n');
-    return `  ${id}: {\n${body}\n  },`;
+    return `${pad}${keyOf(id)}: {\n${body}\n${pad}},`;
   })
   .join('\n');
+
+const inBase = ([id]) => partOf(id.replace(/@evo$/, '')) === 1;
+const posesOut = posesOf(Object.entries(poses).filter(inBase), trackId);
+const tracksOut = tracks.map((t, i) => `  /* ${i} */ [${t}],`).join('\n');
+const variantsOut = variantsOf(Object.entries(variants).filter(inBase));
 
 writeFileSync(
   POSES_FILE,
   `// GENERADO por \`npm run poses\` (@axieinfinity/mixer ${VERSION}) — no editar a mano.
 //
 // Las animaciones que ya venían hechas con los Axies, horneadas para una pila de PNG.
-// El porqué y las cuentas están en \`scripts/poses.mjs\`; acá va lo que sale.
+// El porqué y las cuentas están en \`scripts/poses.mjs\`; acá va lo que sale. Van las del
+// roster y las de los rivales del primer capítulo de la Aventura; las de los demás
+// capítulos, en \`poses/rivales-NN.js\` (ver \`rival-poses.js\`).
 //
 //   MOTIONS   qué clip del kit es cada uno, si se repite y a qué velocidad va
 //             (\`rate\`, cuando no es 1). Se llama así y no CLIPS
@@ -742,4 +919,43 @@ ${posesOut}
 };
 `,
 );
+
+// Los archivos de cada capítulo, de nuevo enteros: los de antes se borran, así un
+// capítulo que se fue no deja su archivo.
+rmSync(CHAPTER_DIR, { recursive: true, force: true });
+mkdirSync(CHAPTER_DIR, { recursive: true });
+const chapters = [...new Set(Object.keys(poses).map(partOf))].filter((n) => n > 1).sort((a, b) => a - b);
+let chapterBytes = 0;
+for (const n of chapters) {
+  const local = [];
+  const idOf = localTracks(local, new Map());
+  const mine = ([id]) => partOf(id) === n;
+  const chunkPoses = posesOf(Object.entries(poses).filter(mine), idOf, '    ');
+  const chunkVariants = variantsOf(Object.entries(variants).filter(mine), '    ');
+  const file = join(CHAPTER_DIR, `rivales-${String(n).padStart(2, '0')}.js`);
+  writeFileSync(
+    file,
+    `// GENERADO por \`npm run poses\` (@axieinfinity/mixer ${VERSION}) — no editar a mano.
+//
+// Las poses de los rivales del capítulo ${n} de la Aventura: se cargan cuando hacen falta
+// (ver \`src/rival-poses.js\`). Las pistas negativas son las de este archivo.
+import { registerRivalPoses } from '../rival-poses.js';
+
+registerRivalPoses(${n}, {
+  tracks: [
+${local.map((t) => `    [${t}],`).join('\n')}
+  ],
+  variants: {
+${chunkVariants}
+  },
+  poses: {
+${chunkPoses}
+  },
+});
+`,
+  );
+  chapterBytes += readFileSync(file).length;
+}
+
 console.log(`\nsrc/axie-poses.js · ${(readFileSync(POSES_FILE).length / 1024).toFixed(0)} KB`);
+console.log(`src/poses/ · ${chapters.length} capítulos · ${(chapterBytes / 1024).toFixed(0)} KB`);

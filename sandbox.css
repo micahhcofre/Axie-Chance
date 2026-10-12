@@ -1,0 +1,210 @@
+/* La zona de testeo (`?testeo`, ver `src/sandbox.js`). Va aparte de `styles.css`
+   porque no es del juego: solo la pide el panel. Usa los tokens de `:root`. */
+
+.sbx {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 99990;
+  width: 330px;
+  max-height: calc(100vh - 16px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(13, 16, 32, .94);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font: 400 13px/1.35 var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.sbx-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.sbx-head strong { font: 400 16px/1 var(--game); letter-spacing: .02em; color: var(--accent); }
+
+.sbx-body { overflow-y: auto; padding: 4px 10px 10px; overscroll-behavior: contain; }
+.sbx.is-folded .sbx-body { display: none; }
+
+.sbx details { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.sbx details:last-child { border-bottom: 0; }
+.sbx summary {
+  cursor: pointer;
+  font: 400 14px/1.6 var(--game);
+  color: var(--ink);
+  list-style-position: inside;
+}
+
+.sbx-label { margin: 8px 0 4px; font: 400 12px/1 var(--game); color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em; }
+.sbx-note { margin: 4px 0; color: var(--ink-faint); font-size: 12px; }
+
+.sbx-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: 400 13px/1 var(--game);
+  cursor: pointer;
+}
+.sbx-btn:hover:not(:disabled) { border-color: var(--accent-2); }
+.sbx-btn:disabled { opacity: .4; cursor: default; }
+.sbx-btn--sm { padding: 4px 7px; font-size: 12px; }
+.sbx-btn--go { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+
+.sbx-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; }
+.sbx-seg button {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-dim);
+  border-radius: 8px;
+  padding: 6px;
+  font: 400 13px/1 var(--game);
+  cursor: pointer;
+}
+.sbx-seg button[aria-pressed="true"] { background: var(--accent-2); border-color: var(--accent-2); color: var(--ink); }
+
+.sbx-syms { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.sbx-sym {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 42px;
+  border: 2px solid transparent;
+  background: var(--panel);
+  border-radius: 10px;
+  cursor: pointer;
+  opacity: .45;
+  padding: 3px;
+}
+.sbx-sym[aria-pressed="true"] { opacity: 1; border-color: var(--sym); background: var(--panel-2); }
+.sbx-sym .crest { width: 30px; height: 30px; }
+
+.sbx-pows { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.sbx-pow {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 40px;
+  border: 2px solid transparent;
+  background: var(--panel);
+  border-radius: 10px;
+  cursor: pointer;
+  padding: 2px;
+  color: var(--ink-dim);
+}
+.sbx-pow .power { width: 30px; height: 30px; }
+.sbx-pow--none { grid-column: span 2; font: 400 11px/1.1 var(--game); }
+.sbx-pow[aria-pressed="true"] { border-color: var(--accent); background: var(--panel-2); color: var(--ink); }
+
+.sbx-preview { display: flex; align-items: center; gap: 8px; min-height: 40px; margin: 8px 0 4px; }
+
+.sbx-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.sbx-card .crest,
+.sbx-card .power { width: 24px; height: 24px; }
+
+.sbx-check { display: flex; align-items: center; gap: 6px; color: var(--ink-dim); font-size: 12px; margin: 4px 0 8px; cursor: pointer; }
+
+.sbx-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.sbx-queue { margin: 0; padding: 0 0 0 18px; display: grid; gap: 4px; color: var(--ink-faint); }
+.sbx-queue li { display: flex; align-items: center; gap: 6px; }
+.sbx-queue li.sbx-note { list-style: none; margin-left: -18px; }
+.sbx-x {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font: 400 18px/1 var(--game);
+  cursor: pointer;
+}
+.sbx-x:hover { color: var(--danger); }
+
+.sbx-status { display: grid; gap: 8px; margin-top: 6px; }
+.sbx-seat {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 8px 8px;
+  margin: 0;
+}
+.sbx-seat legend { font: 400 13px/1 var(--game); color: var(--accent); padding: 0 4px; }
+.sbx-quick { grid-column: span 2; display: flex; gap: 4px; align-items: end; }
+
+.sbx-field { display: grid; gap: 2px; font-size: 11px; color: var(--ink-dim); }
+.sbx-field--wide { margin: 6px 0; font-size: 12px; }
+.sbx-field input,
+.sbx-field select {
+  width: 100%;
+  min-width: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: 400 13px/1 var(--game);
+  padding: 5px 6px;
+}
+.sbx-field--wide select { font-family: var(--text); }
+
+.sbx-fx { display: grid; gap: 6px; }
+.sbx-fxrow { display: grid; gap: 4px; }
+.sbx-fxname { display: flex; align-items: center; gap: 6px; font: 400 13px/1 var(--game); }
+.sbx-fxname .power { width: 22px; height: 22px; }
+.sbx-fxbtns { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Con el mouse en la mesa el panel se aclara: los efectos que caen sobre la CPU
+   quedan atrás de él. */
+@media (hover: hover) {
+  .sbx { transition: opacity .2s; }
+  .sbx:not(:hover) { opacity: .45; }
+}
+
+/* En un teléfono el panel es una hoja abajo, a lo ancho, que no pasa de la mitad. */
+@media (max-width: 640px) {
+  .sbx {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: auto;
+    max-height: 50vh;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+}
+
+/* El modo libre (`?libre`, ver `src/free-play.js`): una pestañita plegada en el borde
+   derecho, a media altura, lejos de la bolsa de arriba y de la barra de abajo. */
+.sbx.sbx--free {
+  top: 50%;
+  bottom: auto;
+  left: auto;
+  right: 0;
+  width: min(280px, calc(100vw - 32px));
+  max-height: 70vh;
+  transform: translateY(-50%);
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.sbx.sbx--free.is-folded { width: auto; }
+.sbx--free.is-folded .sbx-head strong { font-size: 13px; }
+.sbx--free .sbx-actions { display: grid; gap: 6px; margin-top: 8px; }
